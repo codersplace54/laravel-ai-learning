@@ -6,14 +6,14 @@ import { fileURLToPath } from 'url';
 
 export default defineConfig({
     build: {
-        outDir: '../../public/build-service',
+        outDir: '../../public/build-servicemaster',
         emptyOutDir: true,
         manifest: true,
     },
     plugins: [
         laravel({
             publicDirectory: '../../public',
-            buildDirectory: 'build-service',
+            buildDirectory: 'build-servicemaster',
             input: [
                 __dirname + '/resources/assets/sass/app.scss',
                 __dirname + '/resources/assets/js/app.js'
@@ -32,7 +32,7 @@ export default defineConfig({
 //            const filePath = join(currentPath, file);
 //            const stats = statSync(filePath);
 //            if (stats.isFile() && !file.startsWith('.')) {
-//                const relativePath = 'Modules/Service/'+relative(__dirname, filePath);
+//                const relativePath = 'Modules/ServiceMaster/'+relative(__dirname, filePath);
 //                filePaths.push(relativePath);
 //            } else if (stats.isDirectory()) {
 //                walkDirectory(filePath);
@@ -52,6 +52,6 @@ export default defineConfig({
 
 
 //export const paths = [
-//    'Modules/Service/resources/assets/sass/app.scss',
-//    'Modules/Service/resources/assets/js/app.js',
+//    'Modules/ServiceMaster/resources/assets/sass/app.scss',
+//    'Modules/ServiceMaster/resources/assets/js/app.js',
 //];

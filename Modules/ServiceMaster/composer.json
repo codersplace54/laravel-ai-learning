@@ -1,5 +1,5 @@
 {
-    "name": "nwidart/service",
+    "name": "nwidart/servicemaster",
     "description": "",
     "authors": [
         {
@@ -17,14 +17,14 @@
     },
     "autoload": {
         "psr-4": {
-            "Modules\\Service\\": "app/",
-            "Modules\\Service\\Database\\Factories\\": "database/factories/",
-            "Modules\\Service\\Database\\Seeders\\": "database/seeders/"
+            "Modules\\ServiceMaster\\": "app/",
+            "Modules\\ServiceMaster\\Database\\Factories\\": "database/factories/",
+            "Modules\\ServiceMaster\\Database\\Seeders\\": "database/seeders/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Modules\\Service\\Tests\\": "tests/"
+            "Modules\\ServiceMaster\\Tests\\": "tests/"
         }
     }
 }
