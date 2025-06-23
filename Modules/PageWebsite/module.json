@@ -1,0 +1,11 @@
+{
+    "name": "PageWebsite",
+    "alias": "pagewebsite",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\PageWebsite\\Providers\\PageWebsiteServiceProvider"
+    ],
+    "files": []
+}

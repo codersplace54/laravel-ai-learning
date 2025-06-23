@@ -1,0 +1,11 @@
+{
+    "name": "Incentive",
+    "alias": "incentive",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Incentive\\Providers\\IncentiveServiceProvider"
+    ],
+    "files": []
+}
