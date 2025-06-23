@@ -1,0 +1,11 @@
+{
+    "name": "CoreApplication",
+    "alias": "coreapplication",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\CoreApplication\\Providers\\CoreApplicationServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,8 @@
+{
+    "User": true,
+    "Service": true,
+    "Incentive": true,
+    "CoreApplication": true,
+    "PageWebsite": true,
+    "Auth": true
+}
