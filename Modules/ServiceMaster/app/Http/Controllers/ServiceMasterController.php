@@ -1,18 +1,18 @@
 <?php
 
-namespace Modules\Service\Http\Controllers;
+namespace Modules\ServiceMaster\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
-class ServiceController extends Controller
+class ServiceMasterController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
     public function index()
     {
-        return view('service::index');
+        return view('servicemaster::index');
     }
 
     /**
@@ -20,7 +20,7 @@ class ServiceController extends Controller
      */
     public function create()
     {
-        return view('service::create');
+        return view('servicemaster::create');
     }
 
     /**
@@ -33,7 +33,7 @@ class ServiceController extends Controller
      */
     public function show($id)
     {
-        return view('service::show');
+        return view('servicemaster::show');
     }
 
     /**
@@ -41,7 +41,7 @@ class ServiceController extends Controller
      */
     public function edit($id)
     {
-        return view('service::edit');
+        return view('servicemaster::edit');
     }
 
     /**

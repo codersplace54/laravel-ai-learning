@@ -1,10 +1,10 @@
 <?php
 
-namespace Modules\Service\Database\Seeders;
+namespace Modules\ServiceMaster\Database\Seeders;
 
 use Illuminate\Database\Seeder;
 
-class ServiceDatabaseSeeder extends Seeder
+class ServiceMasterDatabaseSeeder extends Seeder
 {
     /**
      * Run the database seeds.
