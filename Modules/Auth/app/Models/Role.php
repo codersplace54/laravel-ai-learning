@@ -10,16 +10,21 @@ class Role extends Model
 {
     use HasFactory;
 
-    /**
-     * The table associated with the model.
-     *
-     * @var string
-     */
+
     protected $table = 'roles';
 
-    /**
-     * The attributes that are mass assignable.
-     */
-    protected $fillable = ['id', 'code', 'role', 'created_at', 'updated_at'];
 
+    protected $fillable = [
+        'id',
+        'code',
+        'role',
+        'created_at',
+        'updated_at'
+    ];
+
+
+    protected $casts = [
+        'created_at' => 'datetime:Y-m-d H:i:s',
+        'updated_at' => 'datetime:Y-m-d H:i:s',
+    ];
 }
