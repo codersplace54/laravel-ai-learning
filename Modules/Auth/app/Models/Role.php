@@ -20,6 +20,6 @@ class Role extends Model
     /**
      * The attributes that are mass assignable.
      */
-    protected $fillable = ['code', 'role'];
+    protected $fillable = ['id', 'code', 'role', 'created_at', 'updated_at'];
 
 }

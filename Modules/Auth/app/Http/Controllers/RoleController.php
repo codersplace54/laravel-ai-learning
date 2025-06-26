@@ -14,7 +14,13 @@ class RoleController extends Controller
     {
         try {
 
+
+            $request->validate([
+                'per_page' => 'integer|min:1|max:1000',
+            ]);
+
             $per_page = $request->input('per_page', 10);
+
             $roles = Role::paginate($per_page);
 
             return response()->json([
@@ -28,22 +34,38 @@ class RoleController extends Controller
                 ],
             ]);
 
-        } catch (Exception $e) {
+
+        } 
+        catch (\Illuminate\Validation\ValidationException $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => "Validation failed",
+                'errors' => $e->errors()
+            ], 422);
+
+        } 
+        catch (Exception $e) {
+
 
             return response()->json([
                 'status' => 0,
                 'message' => 'Failed to retrieve roles.',
                 'error' => $e->getMessage(),
             ], 500);
+
         }
     }
 
 
     public function store_role(Request $request)
     {
-        DB::beginTransaction();
-
         try {
+
+
+            DB::beginTransaction();
+
             $validated = $request->validate(
                 [
                     'code' => 'required|string|unique:roles,code|max:255',
@@ -55,8 +77,8 @@ class RoleController extends Controller
             );
 
             $role = Role::create([
-                'code' => $request->code,
-                'role' => $request->role
+                'code' => $validated['code'],
+                'role' => $validated['role'],
             ]);
 
             DB::commit();
@@ -65,9 +87,9 @@ class RoleController extends Controller
                 'status' => 1,
                 'data' => $role,
             ], 201);
-
         } 
         catch (\Illuminate\Validation\ValidationException $e) {
+
 
             DB::rollBack();
 
@@ -76,8 +98,7 @@ class RoleController extends Controller
                 'message' => "Validation failed",
                 'errors' => $e->errors()
             ], 422);
-
-        }
+        } 
         catch (\Exception $e) {
 
             DB::rollBack();
@@ -86,7 +107,6 @@ class RoleController extends Controller
                 'message' => 'Failed to create role.',
                 'error' => $e->getMessage(),
             ], 500);
-
         }
     }
 
@@ -106,39 +126,42 @@ class RoleController extends Controller
 
             $role = Role::findOrFail($validated['id']);
 
-            return response()->json([
-                'status' => 1,
-                'data' => $role,
-                ]    
+            return response()->json(
+                [
+                    'status' => 1,
+                    'data' => $role,
+                ]
             );
+        } catch (\Illuminate\Validation\ValidationException $e) {
 
-        } 
-        catch (\Illuminate\Validation\ValidationException $e) {
 
             return response()->json([
                 'status' => 0,
                 'message' => "Validation failed",
                 'errors' => $e->errors()
             ], 422);
-        
-        }
-        catch (Exception $e) {
+
+
+        } catch (Exception $e) {
+
 
             return response()->json([
                 'status' => 0,
                 'message' => 'Failed to retrieve role.',
                 'error' => $e->getMessage(),
             ], 500);
-
+            
         }
     }
 
 
     public function update_role(Request $request)
     {
-        DB::beginTransaction();
-
         try {
+
+
+            DB::beginTransaction();
+
             $validated = $request->validate(
                 [
                     'id' => 'required|exists:roles,id',
@@ -152,32 +175,37 @@ class RoleController extends Controller
             );
 
             $role = Role::findOrFail($validated['id']);
-            $role->update([
-                'code' => $request->code,
-                'role' => $request->role,
-            ]
+
+            $role->update(
+                [
+                    'code' => $validated['code'],
+                    'role' => $validated['role'],
+                ]
             );
 
             DB::commit();
 
-            return response()->json([
-                'status' => 1,
-                'data' => $role,
+            return response()->json(
+                [
+                    'status' => 1,
+                    'data' => $role,
                 ]
             );
+        } catch (\Illuminate\Validation\ValidationException $e) {
 
-        }
-        catch (\Illuminate\Validation\ValidationException $e) {
+
             DB::rollBack();
+
             return response()->json([
                 'status' => 0,
                 'message' => "Validation failed",
                 'errors' => $e->errors()
             ], 422);
-        
-        } 
-        catch (Exception $e) {
+        } catch (Exception $e) {
+
+
             DB::rollBack();
+
             return response()->json([
                 'status' => 0,
                 'message' => 'Failed to update role.',
@@ -188,10 +216,11 @@ class RoleController extends Controller
 
     public function destroy_role(Request $request)
     {
-        DB::beginTransaction();
-
         try {
-            
+
+
+            DB::beginTransaction();
+
             $validated = $request->validate(
                 [
                     'id' => 'required|exists:roles,id',
@@ -202,6 +231,7 @@ class RoleController extends Controller
             );
 
             $role = Role::findOrFail($validated['id']);
+
             $role->delete();
 
             DB::commit();
@@ -210,9 +240,7 @@ class RoleController extends Controller
                 'status' => 1,
                 'message' => 'Role deleted successfully.',
             ], 200);
-        }
-
-        catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (\Illuminate\Validation\ValidationException $e) {
 
             DB::rollBack();
 
@@ -221,10 +249,7 @@ class RoleController extends Controller
                 'message' => "Validation failed",
                 'errors' => $e->errors()
             ], 422);
-        
-        } 
-        
-        catch (Exception $e) {
+        } catch (Exception $e) {
 
             DB::rollBack();
 
