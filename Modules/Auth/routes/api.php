@@ -9,3 +9,4 @@ Route::post('auth-store-role', [RoleController::class, 'store_role'])->name('rol
 Route::post('auth-show-role', [RoleController::class, 'show_role'])->name('roles.show_role');
 Route::post('auth-update-role', [RoleController::class, 'update_role'])->name('roles.update_role');
 Route::post('auth-destroy-role', [RoleController::class, 'destroy_role'])->name('roles.destroy_role');
+
