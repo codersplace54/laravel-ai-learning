@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/servicemaster",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\ServiceMaster\\": "app/",
+            "Modules\\ServiceMaster\\Database\\Factories\\": "database/factories/",
+            "Modules\\ServiceMaster\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\ServiceMaster\\Tests\\": "tests/"
+        }
+    }
+}

@@ -4,5 +4,6 @@
     "Incentive": true,
     "CoreApplication": true,
     "PageWebsite": true,
-    "Auth": true
+    "Auth": true,
+    "ServiceMaster": true
 }
