@@ -142,7 +142,7 @@ class RoleController extends Controller
     {
         try {
 
-            
+
             DB::beginTransaction();
 
             $request->validate(
@@ -241,7 +241,7 @@ class RoleController extends Controller
             ], 422);
         } catch (Exception $e) {
 
-            
+
             DB::rollBack();
 
             return response()->json([
