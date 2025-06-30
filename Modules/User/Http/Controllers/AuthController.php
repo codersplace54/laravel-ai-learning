@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
 use Exception;
+use Modules\Auth\App\Models\JWTToken;
 
 class AuthController extends Controller
 {
@@ -28,19 +29,25 @@ class AuthController extends Controller
 
             $user = JWTAuth::setToken($token)->toUser();
 
-            if ($user->current_token) {
+            $oldTokenRow = JWTToken::where('user_id', $user->id)->first();
+
+            if ($oldTokenRow) {
                 try {
-
-                    JWTAuth::setToken($user->current_token)->invalidate();
-
-                } catch (JWTException $e) {
-
-                   Log::warning('Could not invalidate old token: ' . $e->getMessage());
+                    JWTAuth::setToken($oldTokenRow->token)->invalidate();
+                } catch (\Tymon\JWTAuth\Exceptions\JWTException $e) {
+                    Log::warning('Could not invalidate old token: ' . $e->getMessage());
                 }
-           }
 
-            $user->current_token = $token;
-            $user->save();
+                $oldTokenRow->delete();
+            }
+
+            JWTToken::create([
+                'user_id' => $user->id,
+                'token' => $token,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->header('User-Agent'),
+                'expires_at' => now()->addMinutes(JWTAuth::factory()->getTTL()),
+            ]);
 
             return response()->json([
                 'status' => 1,

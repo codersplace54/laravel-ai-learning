@@ -13,8 +13,8 @@ Route::prefix('user')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
 
     Route::middleware('auth:api')->group(function () {
-    Route::post('profile-update', [UserController::class, 'updateProfile']);
-    Route::post('profile-delete', [UserController::class, 'deleteProfile']);
+    Route::post('profile-update', [UserController::class, 'update_profile']);
+    Route::post('profile-delete', [UserController::class, 'delete_profile']);
     });
 
 });
