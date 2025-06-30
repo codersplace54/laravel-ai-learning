@@ -17,7 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })->create();
 
-     $app->singleton(
+    $app->singleton(
         Illuminate\Contracts\Http\Kernel::class,
         App\Http\Kernel::class
     );
