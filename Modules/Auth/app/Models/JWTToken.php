@@ -11,11 +11,14 @@ class JWTToken extends Model
     use HasFactory;
 
     protected $fillable = [
+        'id',
         'user_id',
         'token',
         'ip_address',
         'user_agent',
         'expires_at',
+        'created_at',
+        'updated_at',
     ];
 
     public function user()

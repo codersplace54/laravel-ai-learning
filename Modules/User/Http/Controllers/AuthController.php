@@ -29,16 +29,16 @@ class AuthController extends Controller
 
             $user = JWTAuth::setToken($token)->toUser();
 
-            $oldTokenRow = JWTToken::where('user_id', $user->id)->first();
+            $old_token_row = JWTToken::where('user_id', $user->id)->first();
 
-            if ($oldTokenRow) {
+            if ($old_token_row) {
                 try {
-                    JWTAuth::setToken($oldTokenRow->token)->invalidate();
+                    JWTAuth::setToken($old_token_row->token)->invalidate();
                 } catch (\Tymon\JWTAuth\Exceptions\JWTException $e) {
                     Log::warning('Could not invalidate old token: ' . $e->getMessage());
                 }
 
-                $oldTokenRow->delete();
+                $old_token_row->delete();
             }
 
             JWTToken::create([
