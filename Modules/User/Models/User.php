@@ -6,16 +6,29 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Tymon\JWTAuth\Contracts\JWTSubject;
-// use Modules\User\Database\Factories\UserFactory;
 
 class User extends Authenticatable implements JWTSubject
 {
     use HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     */
-    protected $guarded = [];
+    protected $fillable = [
+        'id',
+        'name_of_enterprise',
+        'authorized_person_name',
+        'email_id',
+        'pan',
+        'mobile_no',
+        'user_name',
+        'bin',
+        'registered_enterprise_address',
+        'registered_enterprise_city',
+        'user_type',
+        'password',
+        'status',
+        'current_token',
+        'created_at',
+        'updated_at'
+    ];
 
     protected $hidden = [
         'password',

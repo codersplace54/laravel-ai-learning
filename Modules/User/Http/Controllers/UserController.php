@@ -110,7 +110,7 @@ class UserController extends Controller
     }
 
 
-    public function update(Request $request)
+    public function updateProfile(Request $request)
     {
         try {
 
@@ -237,7 +237,7 @@ class UserController extends Controller
 
 
 
-    public function destroy(Request $request)
+    public function deleteProfile(Request $request)
     {
         try {
 
