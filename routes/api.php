@@ -1,9 +1,10 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\RoleController;
+use App\Http\Controllers\User\UserController;
+use App\Http\Controllers\Auth\DepartmentController;
 
 
 Route::prefix('user')->group(function () {
@@ -24,4 +25,12 @@ Route::middleware('auth:api')->group(function () {
     Route::post('auth-show-role', [RoleController::class, 'show_role'])->name('roles.show_role');
     Route::post('auth-update-role', [RoleController::class, 'update_role'])->name('roles.update_role');
     Route::post('auth-destroy-role', [RoleController::class, 'destroy_role'])->name('roles.destroy_role');
+
+
+
+    Route::post('auth-get-all-departments', [DepartmentController::class, 'all_departments'])->name('departments.all_departments');
+    Route::post('auth-store-department', [DepartmentController::class, 'store_department'])->name('departments.store_department');
+    Route::post('auth-show-department', [DepartmentController::class, 'show_department'])->name('departments.show_department');
+    Route::post('auth-update-department', [DepartmentController::class, 'update_department'])->name('departments.update_department');
+    Route::post('auth-destroy-department', [DepartmentController::class, 'destroy_department'])->name('departments.destroy_department');
 });
