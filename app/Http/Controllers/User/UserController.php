@@ -79,14 +79,14 @@ class UserController extends Controller
 
             AclRule::create([
                 'user_id' => $user->id,
-                'department_id' => $request->input('department_id'),
-                'service_id' => $request->input('service_id'),
-                'role_id' => $request->input('role_id'),
-                'role_code' => $request->input('role_code', 'Industrialist'),
-                'district' => $request->input('district'),
-                'sub_division' => $request->input('sub_division'),
-                'ulb' => $request->input('ulb'),
-                'gp_vc_mc' => $request->input('gp_vc_mc'),
+                'department_id' => null,
+                'service_id' => null,
+                'role_id' => 3,
+                'role_code' => "Industrialist",
+                'district' => null,
+                'sub_division' => null,
+                'ulb' => null,
+                'gp_vc_mc' => null,
             ]);
 
 

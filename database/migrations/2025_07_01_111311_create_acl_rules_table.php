@@ -14,9 +14,9 @@ return new class extends Migration
         Schema::create('acl_rules', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id')->nullable();
-            $table->unsignedBigInteger('department_id')->nullable();
-            $table->unsignedBigInteger('service_id')->nullable();
-            $table->unsignedBigInteger('role_id')->nullable();
+            $table->string('department_id')->nullable();
+            $table->string('service_id')->nullable();
+            $table->string('role_id')->nullable();
             $table->string('role_code')->nullable();
             $table->string('district')->nullable();
             $table->string('sub_division')->nullable();
