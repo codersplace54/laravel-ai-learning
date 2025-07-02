@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use App\Models\User;
+use App\Models\AclRule;
 use Exception;
 use Carbon\Carbon;
 
@@ -75,6 +76,18 @@ class UserController extends Controller
 
             $user->bin = $bin;
             $user->save();
+
+            AclRule::create([
+                'user_id' => $user->id,
+                'department_id' => $request->input('department_id'),
+                'service_id' => $request->input('service_id'),
+                'role_id' => $request->input('role_id'),
+                'role_code' => $request->input('role_code', 'Industrialist'),
+                'district' => $request->input('district'),
+                'sub_division' => $request->input('sub_division'),
+                'ulb' => $request->input('ulb'),
+                'gp_vc_mc' => $request->input('gp_vc_mc'),
+            ]);
 
 
             DB::commit();
