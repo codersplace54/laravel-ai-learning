@@ -15,7 +15,7 @@ use Carbon\Carbon;
 
 class UserController extends Controller
 {
-        public function register(Request $request)
+    public function register(Request $request)
     {
 
         try {
@@ -186,31 +186,31 @@ class UserController extends Controller
             $update_data = [];
 
             if ($request->name_of_enterprise !== null) {
-               $update_data['name_of_enterprise'] = $request->name_of_enterprise;
+                $update_data['name_of_enterprise'] = $request->name_of_enterprise;
             }
             if ($request->authorized_person_name !== null) {
-               $update_data['authorized_person_name'] = $request->authorized_person_name;
+                $update_data['authorized_person_name'] = $request->authorized_person_name;
             }
             if ($request->email_id !== null) {
-               $update_data['email_id'] = $request->email_id;
+                $update_data['email_id'] = $request->email_id;
             }
             if ($request->mobile_no !== null) {
-               $update_data['mobile_no'] = $request->mobile_no;
+                $update_data['mobile_no'] = $request->mobile_no;
             }
             if ($request->user_name !== null) {
-               $update_data['user_name'] = $request->user_name;
+                $update_data['user_name'] = $request->user_name;
             }
             if ($request->registered_enterprise_address !== null) {
-               $update_data['registered_enterprise_address'] = $request->registered_enterprise_address;
+                $update_data['registered_enterprise_address'] = $request->registered_enterprise_address;
             }
             if ($request->registered_enterprise_city !== null) {
-               $update_data['registered_enterprise_city'] = $request->registered_enterprise_city;
+                $update_data['registered_enterprise_city'] = $request->registered_enterprise_city;
             }
             if ($request->user_type !== null) {
-               $update_data['user_type'] = $request->user_type;
+                $update_data['user_type'] = $request->user_type;
             }
             if ($request->password !== null) {
-               $update_data['password'] = Hash::make($request->password);
+                $update_data['password'] = Hash::make($request->password);
             }
 
             $user->update($update_data);
@@ -222,7 +222,6 @@ class UserController extends Controller
                 'data' => $user,
                 'message' => 'User updated successfully',
             ], 200);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
 
 
@@ -309,6 +308,47 @@ class UserController extends Controller
             return response()->json([
                 'status' => 0,
                 'message' => 'Failed to delete user.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function get_profile(Request $request)
+    {
+        try {
+
+
+            $user = JWTAuth::parseToken()->authenticate();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized.'
+                ], 401);
+            }
+
+            $data = [
+                'name_of_enterprise' => $user->name_of_enterprise,
+                'authorized_person_name' => $user->authorized_person_name,
+                'email_id' => $user->email_id,
+                'mobile_no' => $user->mobile_no,
+                'pan' => $user->pan,
+                'bin' => $user->bin,
+                'registered_enterprise_address' => $user->registered_enterprise_address,
+                'registered_enterprise_city' => $user->registered_enterprise_city,
+
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $data
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong.',
                 'error' => $e->getMessage()
             ], 500);
         }
