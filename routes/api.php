@@ -18,6 +18,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('profile-update', [UserController::class, 'update_profile']);
         Route::post('profile-delete', [UserController::class, 'delete_profile']);
         Route::post('logout', [AuthController::class, 'logout']);
+        Route::post('get-profile', [UserController::class, 'get_profile']);
     });
 
     Route::post('auth-get-all-roles', [RoleController::class, 'all_roles'])->name('roles.all_roles');
