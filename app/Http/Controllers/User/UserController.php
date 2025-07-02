@@ -329,13 +329,15 @@ class UserController extends Controller
             }
 
             $data = [
-                'id' => $user->id,
-                'name' => $user->authorized_person_name,
-                'email' => $user->email_id,
-                'mobile' => $user->mobile_no,
-                'address' => $user->registered_enterprise_address,
-                'district_id' => $user->district_id ?? null,
-                'subdivision_id' => $user->subdivision_id ?? null
+                'name_of_enterprise' => $user->name_of_enterprise,
+                'authorized_person_name' => $user->authorized_person_name,
+                'email_id' => $user->email_id,
+                'mobile_no' => $user->mobile_no,
+                'pan' => $user->pan,
+                'bin' => $user->bin,
+                'registered_enterprise_address' => $user->registered_enterprise_address,
+                'registered_enterprise_city' => $user->registered_enterprise_city,
+
             ];
 
             return response()->json([
