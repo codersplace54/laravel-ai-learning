@@ -1,16 +1,16 @@
 <?php
 
-namespace App\Http\Controllers\Auth;
+namespace App\Http\Controllers\Department;
 
-use App\Models\Department;
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Http\Controllers\Controller;
 use Exception;
+use App\Models\Department;
 
 class DepartmentController extends Controller
 {
-    public function all_departments(Request $request)
+     public function all_departments(Request $request)
     {
         try {
 
