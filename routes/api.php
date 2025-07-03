@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Role\RoleController;
 use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\Department\DepartmentController;
+use App\Http\Controllers\CoreApplication\CommonApplicationForm\UnitDetailsController;
 
 
 Route::prefix('user')->group(function () {
@@ -22,6 +23,9 @@ Route::middleware('auth:api')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::post('change-password', [AuthController::class, 'change_password']);
     });
+
+    Route::post('unit-details', [UnitDetailsController::class, 'unit_details_store']);
+
 
     Route::post('auth-get-all-roles', [RoleController::class, 'all_roles'])->name('roles.all_roles');
     Route::post('auth-store-role', [RoleController::class, 'store_role'])->name('roles.store_role');
