@@ -2,9 +2,9 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthController;
-use App\Http\Controllers\Auth\RoleController;
+use App\Http\Controllers\Role\RoleController;
 use App\Http\Controllers\User\UserController;
-use App\Http\Controllers\Auth\DepartmentController;
+use App\Http\Controllers\Department\DepartmentController;
 
 
 Route::prefix('user')->group(function () {
