@@ -11,7 +11,7 @@ return new class extends Migration
     {
         Schema::create('unit_details', function (Blueprint $table) {
             $table->id();
-            $table->bigInteger('user_id')->nullable();
+            $table->bigInteger('user_id')->unique()->nullable();
             $table->string('unit_name');
             $table->string('unit_address');
             $table->string('district');

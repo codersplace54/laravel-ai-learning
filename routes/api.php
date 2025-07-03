@@ -24,7 +24,8 @@ Route::middleware('auth:api')->group(function () {
         Route::post('change-password', [AuthController::class, 'change_password']);
     });
 
-    Route::post('unit-details', [UnitDetailsController::class, 'unit_details_store']);
+    Route::post('unit-details', [UnitDetailsController::class, 'unit_details_store_or_update']);
+    Route::post('unit-details-view', [UnitDetailsController::class, 'unit_details_view']);
 
 
     Route::post('auth-get-all-roles', [RoleController::class, 'all_roles'])->name('roles.all_roles');

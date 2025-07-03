@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Illuminate\Support\Facades\Auth;
 use App\Models\User;
 use App\Models\AclRule;
 use Exception;
@@ -263,7 +263,7 @@ class UserController extends Controller
             );
 
 
-            $user = JWTAuth::parseToken()->authenticate();
+           $user = Auth::user();
 
             if (!$user) {
                 return response()->json([
@@ -319,7 +319,7 @@ class UserController extends Controller
         try {
 
 
-            $user = JWTAuth::parseToken()->authenticate();
+            $user = Auth::user();
 
             if (!$user) {
                 return response()->json([
