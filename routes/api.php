@@ -7,6 +7,7 @@ use App\Http\Controllers\Role\RoleController;
 use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\Department\DepartmentController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\UnitDetailsController;
+use App\Http\Controllers\CoreApplication\CommonApplicationForm\ManagementDetailsController;
 
 
 Route::prefix('user')->group(function () {
@@ -27,6 +28,9 @@ Route::middleware('auth:api')->group(function () {
 
     Route::post('unit-details', [UnitDetailsController::class, 'unit_details_store_or_update']);
     Route::post('unit-details-view', [UnitDetailsController::class, 'unit_details_view']);
+
+    Route::post('management-details', [ManagementDetailsController::class, 'management_details_store_or_update']);
+    Route::post('management-details-view', [ManagementDetailsController::class, 'management_details_view']);
 
 
     Route::post('auth-get-all-roles', [RoleController::class, 'all_roles'])->name('roles.all_roles');
