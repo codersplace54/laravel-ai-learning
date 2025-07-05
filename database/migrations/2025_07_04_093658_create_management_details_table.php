@@ -39,10 +39,24 @@ return new class extends Migration
             ]);
             $table->string('owner_details_email');
             $table->date('owner_details_dob');
-            $table->enum('owner_details_social_status', ['General', 'SC', 'ST', 'OBC']);
-            $table->enum('owner_details_is_differently_abled', ['YES', 'NO']);
-            $table->enum('owner_details_is_women_entrepreneur', ['YES', 'NO']);
-            $table->enum('owner_details_is_minority', ['YES', 'NO']);
+            $table->enum('owner_details_social_status', [
+                'General',
+                'SC',
+                'ST',
+                'OBC'
+            ]);
+            $table->enum('owner_details_is_differently_abled', [
+                'YES',
+                 'NO'
+            ]);
+            $table->enum('owner_details_is_women_entrepreneur', [
+                'YES',
+                'NO'
+            ]);
+            $table->enum('owner_details_is_minority', [
+                'YES',
+                'NO'
+            ]);
             $table->string('owner_details_photo');
 
             $table->string('manager_details_name');
