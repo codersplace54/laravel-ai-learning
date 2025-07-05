@@ -212,10 +212,12 @@ class ManagementDetailsController extends Controller
 
             DB::commit();
 
+            $management_details_array = $this->transform_management_details($management_details);
+
             return response()->json([
                 'status' => 1,
                 'message' => 'Management details saved successfully.',
-                'data' => $management_details
+                'data' => $management_details_array
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -256,7 +258,6 @@ class ManagementDetailsController extends Controller
                 ], 401);
             }
 
-
             $management_details = ManagementDetails::where('user_id', $user->id)->first();
 
             if (! $management_details) {
@@ -266,9 +267,11 @@ class ManagementDetailsController extends Controller
                 ], 404);
             }
 
+            $management_details_array = $this->transform_management_details($management_details);
+
             return response()->json([
-                'status' => 0,
-                'data' =>  $management_details,
+                'status' => 1,
+                'data' =>  $management_details_array,
             ], 200);
         } catch (\Exception $e) {
 
@@ -280,5 +283,28 @@ class ManagementDetailsController extends Controller
                 'message' => 'Something went wrong.',
             ], 500);
         }
+    }
+
+    private function transform_management_details($management_details)
+    {
+
+        $array = $management_details->toArray();
+
+        foreach (
+            [
+                'owner_details_photo',
+                'manager_details_photo',
+                'signature_authorization_of_owner',
+                'factory_occupiers_signature',
+                'factory_managers_signature'
+            ] as $field
+        )
+        {
+            if ($array[$field]) {
+                $array[$field] = asset('storage/' . $array[$field]);
+            }
+        }
+
+        return $array;
     }
 }
