@@ -43,7 +43,7 @@ return new class extends Migration
             $table->enum('owner_details_is_differently_abled', ['YES', 'NO']);
             $table->enum('owner_details_is_women_entrepreneur', ['YES', 'NO']);
             $table->enum('owner_details_is_minority', ['YES', 'NO']);
-            $table->string('owner_details_photo')->nullable();
+            $table->string('owner_details_photo');
 
             $table->string('manager_details_name');
             $table->string('manager_details_fathers_name');
@@ -53,11 +53,11 @@ return new class extends Migration
             $table->string('manager_details_mobile');
             $table->string('manager_details_aadhar_no');
             $table->date('manager_details_dob');
-            $table->string('manager_details_photo')->nullable();
+            $table->string('manager_details_photo');
 
-            $table->string('signature_authorization_of_owner')->nullable();
-            $table->string('factory_occupiers_signature')->nullable();
-            $table->string('factory_managers_signature')->nullable();
+            $table->string('signature_authorization_of_owner');
+            $table->string('factory_occupiers_signature');
+            $table->string('factory_managers_signature');
 
             $table->timestamps();
         });
