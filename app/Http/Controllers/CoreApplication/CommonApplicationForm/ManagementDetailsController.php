@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use App\Models\ManagementDetails;
 
 class ManagementDetailsController extends Controller
@@ -57,7 +58,7 @@ class ManagementDetailsController extends Controller
             $user = Auth::user();
 
             if (!$user) {
-                return response()->json(['success' => false, 'message' => 'Unauthenticated user.'], 401);
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
 
@@ -67,27 +68,48 @@ class ManagementDetailsController extends Controller
             $signature_occupier = null;
             $signature_manager = null;
 
+            $management_details = ManagementDetails::where('user_id', $user->id)->first();
+
             if ($request->hasFile('owner_details_photo')) {
-                $owner_photo = $request->file('owner_details_photo')->store('uploads/owner_details_photo', 'public');
+                if ($management_details && $management_details->owner_details_photo) {
+                    Storage::disk('public')->delete($management_details->owner_details_photo);
+                }
+                $filename = 'owner_photo.' . $request->file('owner_details_photo')->getClientOriginalExtension();
+                $owner_photo = $request->file('owner_details_photo')->storeAs("uploads/$user->id/owner_details_photo", $filename, 'public');
             }
 
             if ($request->hasFile('manager_details_photo')) {
-                $manager_photo = $request->file('manager_details_photo')->store('uploads/manager_details_photo', 'public');
+                if ($management_details && $management_details->manager_details_photo) {
+                    Storage::disk('public')->delete($management_details->manager_details_photo);
+                }
+                $filename = 'manager_photo.' . $request->file('manager_details_photo')->getClientOriginalExtension();
+                $manager_photo = $request->file('manager_details_photo')->storeAs("uploads/$user->id/manager_details_photo", $filename, 'public');
             }
 
             if ($request->hasFile('signature_authorization_of_owner')) {
-                $signature_owner = $request->file('signature_authorization_of_owner')->store('uploads/signature_authorization_of_owner', 'public');
+                if ($management_details && $management_details->signature_authorization_of_owner) {
+                    Storage::disk('public')->delete($management_details->signature_authorization_of_owner);
+                }
+                $filename = 'signature_owner.' . $request->file('signature_authorization_of_owner')->getClientOriginalExtension();
+                $signature_owner = $request->file('signature_authorization_of_owner')->storeAs("uploads/$user->id/signature_authorization_of_owner", $filename, 'public');
             }
 
             if ($request->hasFile('factory_occupiers_signature')) {
-                $signature_occupier = $request->file('factory_occupiers_signature')->store('uploads/factory_occupiers_signature', 'public');
+                if ($management_details && $management_details->factory_occupiers_signature) {
+                    Storage::disk('public')->delete($management_details->factory_occupiers_signature);
+                }
+                $filename = 'signature_occupier.' . $request->file('factory_occupiers_signature')->getClientOriginalExtension();
+                $signature_occupier = $request->file('factory_occupiers_signature')->storeAs("uploads/$user->id/factory_occupiers_signature", $filename, 'public');
             }
 
             if ($request->hasFile('factory_managers_signature')) {
-                $signature_manager = $request->file('factory_managers_signature')->store('uploads/factory_managers_signature', 'public');
+                if ($management_details && $management_details->factory_managers_signature) {
+                    Storage::disk('public')->delete($management_details->factory_managers_signature);
+                }
+                $filename = 'signature_manager.' . $request->file('factory_managers_signature')->getClientOriginalExtension();
+                $signature_manager = $request->file('factory_managers_signature')->storeAs("uploads/$user->id/factory_managers_signature", $filename, 'public');
             }
 
-            $management_details = ManagementDetails::where('user_id', $user->id)->first();
 
             $data = [
                 'user_id' => $user->id,
@@ -134,7 +156,7 @@ class ManagementDetailsController extends Controller
             DB::commit();
 
             return response()->json([
-                'success' => true,
+                'status' => 1,
                 'message' => 'Management details saved successfully.',
                 'data' => $management_details
             ], 201);
@@ -144,7 +166,7 @@ class ManagementDetailsController extends Controller
             DB::rollBack();
 
             return response()->json([
-                'success' => false,
+                'status' => 0,
                 'message' => 'Validation failed.',
                 'errors' => $e->errors(),
             ], 422);
@@ -156,7 +178,7 @@ class ManagementDetailsController extends Controller
             Log::error('Error saving management details: ' . $e->getMessage());
 
             return response()->json([
-                'success' => false,
+                'status' => 0,
                 'message' => 'Something went wrong while saving management details.',
             ], 500);
         }
@@ -172,7 +194,7 @@ class ManagementDetailsController extends Controller
 
             if (!$user) {
                 return response()->json([
-                    'success' => false,
+                    'status' => 0,
                     'message' => 'Unauthenticated.',
                 ], 401);
             }
@@ -182,28 +204,13 @@ class ManagementDetailsController extends Controller
 
             if (!$managementDetails) {
                 return response()->json([
-                    'success' => false,
+                    'status' => 0,
                     'message' => 'Management details not found.',
                 ], 404);
             }
 
-            foreach (
-                [
-                    'owner_details_photo',
-                    'manager_details_photo',
-                    'signature_authorization_of_owner',
-                    'factory_occupiers_signature',
-                    'factory_managers_signature',
-                ] as $field
-            ) {
-                if ($managementDetails->{$field}) {
-                    $managementDetails->{$field} = asset('storage/' . $managementDetails->{$field});
-                }
-            }
-
-
             return response()->json([
-                'success' => true,
+                'status' => 0,
                 'data' => $managementDetails,
             ], 200);
         } catch (\Exception $e) {
@@ -212,7 +219,7 @@ class ManagementDetailsController extends Controller
             Log::error('Error fetching management details: ' . $e->getMessage());
 
             return response()->json([
-                'success' => false,
+                'status' => 0,
                 'message' => 'Something went wrong.',
             ], 500);
         }

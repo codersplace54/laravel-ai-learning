@@ -45,4 +45,25 @@ class ManagementDetails extends Model
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    public function toArray()
+    {
+        $array = parent::toArray();
+
+        foreach (
+            [
+                'owner_details_photo',
+                'manager_details_photo',
+                'signature_authorization_of_owner',
+                'factory_occupiers_signature',
+                'factory_managers_signature',
+            ] as $field
+        ) {
+            if ($this->{$field}) {
+                $array[$field] = asset('storage/' . $this->{$field});
+            }
+        }
+
+        return $array;
+    }
 }
