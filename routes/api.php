@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\CoreApplication\EnterpriseDetailController;
 use App\Http\Controllers\Role\RoleController;
 use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\Department\DepartmentController;
@@ -36,9 +37,14 @@ Route::middleware('auth:api')->group(function () {
 
 
 
-    Route::post('auth-get-all-departments', [DepartmentController::class, 'all_departments'])->name('departments.all_departments');
-    Route::post('auth-store-department', [DepartmentController::class, 'store_department'])->name('departments.store_department');
-    Route::post('auth-show-department', [DepartmentController::class, 'show_department'])->name('departments.show_department');
-    Route::post('auth-update-department', [DepartmentController::class, 'update_department'])->name('departments.update_department');
-    Route::post('auth-destroy-department', [DepartmentController::class, 'destroy_department'])->name('departments.destroy_department');
+    Route::post('department-get-all-departments', [DepartmentController::class, 'all_departments'])->name('department.all_departments');
+    Route::post('department-store-department', [DepartmentController::class, 'store_department'])->name('department.store_department');
+    Route::post('department-show-department', [DepartmentController::class, 'show_department'])->name('department.show_department');
+    Route::post('department-update-department', [DepartmentController::class, 'update_department'])->name('department.update_department');
+    Route::post('department-destroy-department', [DepartmentController::class, 'destroy_department'])->name('department.destroy_department');
+
+
+
+    Route::post('core-application-store-enterprise-detail', [EnterpriseDetailController::class, 'enterprise_details_store_or_update'])->name('core_application.store_enterprise_detail');
+    Route::post('core-application-show-enterprise-detail', [EnterpriseDetailController::class, 'show_enterprise_details'])->name('core_application.show_enterprise_detail');
 });
