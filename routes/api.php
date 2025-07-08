@@ -32,7 +32,6 @@ Route::middleware('auth:api')->group(function () {
     Route::post('management-details', [ManagementDetailsController::class, 'management_details_store_or_update']);
     Route::post('management-details-view', [ManagementDetailsController::class, 'management_details_view']);
 
-
     Route::post('auth-get-all-roles', [RoleController::class, 'all_roles'])->name('roles.all_roles');
     Route::post('auth-store-role', [RoleController::class, 'store_role'])->name('roles.store_role');
     Route::post('auth-show-role', [RoleController::class, 'show_role'])->name('roles.show_role');

@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Models\ManagementDetails;
+use App\Models\PartnerSharePresidentOrSecretaryDetail;
+use App\Models\BoardOfDirector;
+use App\Models\ChiefAdministrativeHead;
 
 class ManagementDetailsController extends Controller
 {
@@ -85,6 +88,30 @@ class ManagementDetailsController extends Controller
                     'mimes:jpg,jpeg,png',
                     'max:2048'
                 ],
+
+                'partner_details' => 'required|array',
+                'partner_details.*.name' => 'required|string|max:255',
+                'partner_details.*.fathers_name' => 'required|string|max:255',
+                'partner_details.*.age' => 'nullable|integer',
+                'partner_details.*.sex' => 'nullable|string',
+                'partner_details.*.social_status' => 'nullable|string',
+                'partner_details.*.profession' => 'nullable|string',
+                'partner_details.*.permanent_address' => 'nullable|string',
+                'partner_details.*.mobile_no' => 'required|string',
+                'partner_details.*.date_of_birth' => 'required|date',
+                'partner_details.*.date_of_joining' => 'nullable|date',
+                'partner_details.*.id_proof_doc' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+                'partner_details.*.signature_image' => 'nullable|file|mimes:jpg,jpeg,png|max:2048',
+
+                'board_of_directors' => 'nullable|array',
+                'board_of_directors.*.name' => 'required|string|max:255',
+                'board_of_directors.*.permanent_address' => 'nullable|string|max:255',
+                'board_of_directors.*.mobile_number' => 'required|string',
+
+                'chief_administrative_heads' => 'nullable|array',
+                'chief_administrative_heads.*.name' => 'required|string|max:255',
+                'chief_administrative_heads.*.permanent_address' => 'nullable|string|max:255',
+                'chief_administrative_heads.*.mobile_number' => 'required|string',
             ]);
 
 
@@ -210,14 +237,96 @@ class ManagementDetailsController extends Controller
                 ]);
             }
 
-            DB::commit();
 
-            $management_details_array = $this->transform_management_details($management_details);
+
+            $management_details_array = $this->get_file_urls(
+                $management_details,
+                [
+                    'owner_details_photo',
+                    'manager_details_photo',
+                    'signature_authorization_of_owner',
+                    'factory_occupiers_signature',
+                    'factory_managers_signature'
+                ]
+            );
+
+            $partner_details_array = [];
+            foreach ($request->partner_details as $index => $partner) {
+
+                $id_proof_doc = null;
+                $signature_image = null;
+
+                if ($request->hasFile("partner_details.$index.id_proof_doc")) {
+                    $file = $request->file("partner_details.$index.id_proof_doc");
+                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                    $id_proof_doc = $file->storeAs("uploads/$user->id/partner_id_proof", $filename, 'public');
+                }
+
+                if ($request->hasFile("partner_details.$index.signature_image")) {
+                    $file = $request->file("partner_details.$index.signature_image");
+                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                    $signature_image = $file->storeAs("uploads/$user->id/partner_signature", $filename, 'public');
+                }
+
+                $partner_record = PartnerSharePresidentOrSecretaryDetail::create([
+                    'user_id' => $user->id,
+                    'name' => $partner['name'],
+                    'fathers_name' => $partner['fathers_name'],
+                    'age' => $partner['age'],
+                    'sex' => $partner['sex'],
+                    'social_status' => $partner['social_status'],
+                    'profession' => $partner['profession'],
+                    'permanent_address' => $partner['permanent_address'],
+                    'mobile_no' => $partner['mobile_no'],
+                    'date_of_birth' => $partner['date_of_birth'],
+                    'date_of_joining' => $partner['date_of_joining'],
+                    'id_proof_doc' => $id_proof_doc,
+                    'signature_image' => $signature_image,
+                ]);
+
+                $partner_array = $this->get_file_urls(
+                    $partner_record,
+                    ['id_proof_doc', 'signature_image']
+                );
+
+                $partner_details_array[] = $partner_array;
+            }
+
+            $board_directors = [];
+            if ($request->has('board_of_directors')) {
+                foreach ($request->board_of_directors as $director) {
+                    $director_record = BoardOfDirector::create([
+                        'user_id' => $user->id,
+                        'name' => $director['name'],
+                        'permanent_address' => $director['permanent_address'] ?? null,
+                        'mobile_number' => $director['mobile_number'],
+                    ]);
+                    $board_directors[] = $director_record->toArray();
+                }
+            }
+
+            $chief_administrative_heads = [];
+            if ($request->has('chief_administrative_heads')) {
+                foreach ($request->chief_administrative_heads as $head) {
+                    $head_record = ChiefAdministrativeHead::create([
+                        'user_id' => $user->id,
+                        'name' => $head['name'],
+                        'permanent_address' => $head['permanent_address'] ?? null,
+                        'mobile_number' => $director['mobile_number'],
+                    ]);
+                    $chief_administrative_heads[] = $head_record->toArray();
+                }
+            }
+
+            DB::commit();
 
             return response()->json([
                 'status' => 1,
                 'message' => 'Management details saved successfully.',
-                'data' => $management_details_array
+                'management_details' => $management_details_array,
+                'partner_details' => $partner_details_array,
+                'board_of_directors' => $board_directors,
+                'chief_administrative_heads' => $chief_administrative_heads,
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -259,6 +368,9 @@ class ManagementDetailsController extends Controller
             }
 
             $management_details = ManagementDetails::where('user_id', $user->id)->first();
+            $partnerDetails = PartnerSharePresidentOrSecretaryDetail::where('user_id', $user->id)->get();
+            $boardDirectors = BoardOfDirector::where('user_id', $user->id)->get();
+            $chiefHeads = ChiefAdministrativeHead::where('user_id', $user->id)->get();
 
             if (! $management_details) {
                 return response()->json([
@@ -267,11 +379,28 @@ class ManagementDetailsController extends Controller
                 ], 404);
             }
 
-            $management_details_array = $this->transform_management_details($management_details);
+            $management_details_array = $this->get_file_urls(
+                $management_details,
+                [
+                    'owner_details_photo',
+                    'manager_details_photo',
+                    'signature_authorization_of_owner',
+                    'factory_occupiers_signature',
+                    'factory_managers_signature'
+                ]
+            );
+
+            $partnerDetails_array = $this->get_file_urls(
+                $partnerDetails,
+                ['id_proof_doc', 'signature_image']
+            );
 
             return response()->json([
                 'status' => 1,
-                'data' =>  $management_details_array,
+                'management_details' =>  $management_details_array,
+                'partner_details' => $partnerDetails_array,
+                'board_of_directors' => $boardDirectors,
+                'chief_administrative_heads' => $chiefHeads,
             ], 200);
         } catch (\Exception $e) {
 
@@ -285,26 +414,21 @@ class ManagementDetailsController extends Controller
         }
     }
 
-    private function transform_management_details($management_details)
+
+    private function get_file_urls($data, $fields)
     {
+        if ($data instanceof \Illuminate\Support\Collection) {
+            return $data->map(function ($item) use ($fields) {
+                return $this->get_file_urls($item, $fields);
+            });
+        }
 
-        $array = $management_details->toArray();
-
-        foreach (
-            [
-                'owner_details_photo',
-                'manager_details_photo',
-                'signature_authorization_of_owner',
-                'factory_occupiers_signature',
-                'factory_managers_signature'
-            ] as $field
-        )
-        {
-            if ($array[$field]) {
+        $array = $data->toArray();
+        foreach ($fields as $field) {
+            if (!empty($array[$field])) {
                 $array[$field] = asset('storage/' . $array[$field]);
             }
         }
-
         return $array;
     }
 }
