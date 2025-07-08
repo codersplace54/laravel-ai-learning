@@ -107,7 +107,7 @@ class EnterpriseDetailController extends Controller
 
             DB::beginTransaction();
 
-            $user = Auth::guard('api')->user();
+            $user = Auth::user();;
 
             if (!$user) {
 
@@ -158,7 +158,7 @@ class EnterpriseDetailController extends Controller
             } else {
 
                 
-                $newEnterprise = EnterpriseDetail::create([
+                $new_enterprise = EnterpriseDetail::create([
                     'user_id' => $user->id,
                     'constitution_of_enterprise' => $request->constitution_of_enterprise,
                     'enterprise_name' => $request->enterprise_name,
@@ -188,7 +188,7 @@ class EnterpriseDetailController extends Controller
 
                     'status' => 1,
                     'message' => 'Enterprise details created successfully',
-                    'enterprise_id' => $newEnterprise->id
+                    'enterprise_id' => $new_enterprise->id
                 ], 201);
             }
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -206,7 +206,7 @@ class EnterpriseDetailController extends Controller
             DB::rollBack();
             return response()->json([
                 'status' => 0,
-                'message' => 'Failed to process enterprise details',
+                'message' => 'Something went wrong.',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -219,7 +219,7 @@ class EnterpriseDetailController extends Controller
         try {
            
 
-            $user = Auth::guard('api')->user();
+            $user = Auth::user();
 
             if (!$user) {
 
@@ -229,11 +229,11 @@ class EnterpriseDetailController extends Controller
                 ], 401);
             }
 
-            $userId= $user->id;
+            $user_id= $user->id;
 
-            $enterpriseDetail = EnterpriseDetail::where('user_id', $userId)->first();
+            $enterprise_detail = EnterpriseDetail::where('user_id', $user_id)->first();
 
-            if (!$enterpriseDetail) {
+            if (!$enterprise_detail) {
                 return response()->json([
                     'status' => 0,
                     'message' => 'Enterprise details not found for this user.',
@@ -245,7 +245,7 @@ class EnterpriseDetailController extends Controller
 
                 'status' => 1,
                 'message' => 'Enterprise details fetched successfully.',
-                'data' => $enterpriseDetail,
+                'data' => $enterprise_detail,
             ], 200);
         } catch (\Exception $e) {
 

@@ -6,7 +6,7 @@ use App\Http\Controllers\CoreApplication\EnterpriseDetailController;
 use App\Http\Controllers\Role\RoleController;
 use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\Department\DepartmentController;
-use App\Http\Controllers\CoreApplication\CommonApplicationForm\UnitDetailsController;
+use App\Http\Controllers\CoreApplication\CommonApplicationForm\UnitDetailController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\ManagementDetailsController;
 
 
@@ -26,8 +26,8 @@ Route::middleware('auth:api')->group(function () {
         Route::post('change-password', [AuthController::class, 'change_password']);
     });
 
-    Route::post('unit-details', [UnitDetailsController::class, 'unit_details_store_or_update']);
-    Route::post('unit-details-view', [UnitDetailsController::class, 'unit_details_view']);
+    Route::post('unit-details', [UnitDetailController::class, 'unit_details_store_or_update']);
+    Route::post('unit-details-view', [UnitDetailController::class, 'unit_details_view']);
 
     Route::post('management-details', [ManagementDetailsController::class, 'management_details_store_or_update']);
     Route::post('management-details-view', [ManagementDetailsController::class, 'management_details_view']);
