@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class NicCode extends Model
 {
-       protected $fillable = [
+    protected $fillable = [
         'id',
         'nic_2_digit_code',
         'nic_2_digit_code_description',
@@ -17,5 +17,10 @@ class NicCode extends Model
         'added_by',
         'created_at',
         'updated_at',
+    ];
+
+    protected $casts = [
+        'created_at' => 'datetime:Y-m-d H:i:s',
+        'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 }

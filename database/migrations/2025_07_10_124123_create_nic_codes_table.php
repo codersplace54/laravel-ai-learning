@@ -11,13 +11,13 @@ return new class extends Migration
     {
         Schema::create('nic_codes', function (Blueprint $table) {
             $table->id();
-            $table->string('nic_2_digit_code')->nullable();
-            $table->string('nic_2_digit_code_description')->nullable();
-            $table->string('nic_4_digit_code')->nullable();
-            $table->string('nic_4_digit_code_description')->nullable();
-            $table->string('nic_5_digit_code')->nullable();
-            $table->string('nic_5_digit_code_description')->nullable();
-            $table->bigInteger('added_by')->nullable();
+            $table->string('nic_2_digit_code');
+            $table->string('nic_2_digit_code_description');
+            $table->string('nic_4_digit_code');
+            $table->string('nic_4_digit_code_description');
+            $table->string('nic_5_digit_code')->unique();
+            $table->string('nic_5_digit_code_description');
+            $table->bigInteger('added_by');
             $table->timestamps();
         });
     }
