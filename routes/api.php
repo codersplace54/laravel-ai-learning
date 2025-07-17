@@ -8,6 +8,7 @@ use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\Department\DepartmentController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\UnitDetailController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\ManagementDetailsController;
+use App\Http\Controllers\CoreApplication\NicCode\NicCodeController;
 
 
 Route::prefix('user')->group(function () {
@@ -50,4 +51,9 @@ Route::middleware('auth:api')->group(function () {
 
     Route::post('core-application-store-enterprise-detail', [EnterpriseDetailController::class, 'enterprise_details_store_or_update'])->name('core_application.store_enterprise_detail');
     Route::post('core-application-show-enterprise-detail', [EnterpriseDetailController::class, 'show_enterprise_details'])->name('core_application.show_enterprise_detail');
+
+    Route::post('nic-digit-code', [NicCodeController::class, 'nic_code_store']);
+    Route::post('nic-digit-code-update', [NicCodeController::class, 'nic_code_update']);
+    Route::post('nic-digit-code-view', [NicCodeController::class, 'nic_code_view']);
+    Route::post('nic-digit-code-delete', [NicCodeController::class, 'nic_code_delete']);
 });
