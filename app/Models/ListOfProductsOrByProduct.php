@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class ListOfProductsOrByProduct extends Model
 {
+    protected $table = 'list_of_products_or_byproducts';
+
     protected $fillable = [
         'id',
         'user_id',
@@ -15,5 +17,10 @@ class ListOfProductsOrByProduct extends Model
         'unit',
         'created_at',
         'updated_at'
+    ];
+
+    protected $casts = [
+        'created_at' => 'datetime:Y-m-d H:i:s',
+        'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 }

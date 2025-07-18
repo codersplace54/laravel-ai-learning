@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class RawMaterialToBeUsed extends Model
 {
+
+    protected $table = 'raw_materials_to_be_used';
+
     protected $fillable = [
         'id',
         'user_id',
@@ -14,5 +17,10 @@ class RawMaterialToBeUsed extends Model
         'raw_material_unit',
         'created_at',
         'updated_at'
+    ];
+
+    protected $casts = [
+        'created_at' => 'datetime:Y-m-d H:i:s',
+        'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 }
