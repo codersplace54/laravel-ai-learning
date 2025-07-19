@@ -9,7 +9,7 @@ return new class extends Migration
 
     public function up(): void
     {
-        Schema::create('list_of_products_or_by_products', function (Blueprint $table) {
+        Schema::create('list_of_products_or_byproducts', function (Blueprint $table) {
             $table->id();
             $table->bigInteger('user_id');
             $table->string('product_name');
@@ -34,6 +34,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('list_of_products_or_by_products');
+        Schema::dropIfExists('list_of_products_or_byproducts');
     }
 };
