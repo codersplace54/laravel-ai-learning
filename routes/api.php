@@ -10,6 +10,7 @@ use App\Http\Controllers\CoreApplication\CommonApplicationForm\UnitDetailControl
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\ManagementDetailsController;
 use App\Http\Controllers\CoreApplication\NicCode\NicCodeController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\LineOfActivity\LineOfActivityDetailsController;
+use App\Http\Controllers\CoreApplication\CommonApplicationForm\GeneralAttachmentsController;
 
 
 Route::prefix('user')->group(function () {
@@ -61,4 +62,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('line-of-activity-store', [LineOfActivityDetailsController::class, 'line_of_activity_store']);
     Route::post('line-of-activity-delete', [LineOfActivityDetailsController::class, 'line_of_activity_delete']);
     Route::post('line-of-activity-view', [LineOfActivityDetailsController::class, 'line_of_activity_view']);
+
+    Route::post('general-attachment-store', [GeneralAttachmentsController::class, 'general_attachment_store']);
+    Route::post('general-attachment-view', [GeneralAttachmentsController::class, 'general_attachment_view']);
 });
