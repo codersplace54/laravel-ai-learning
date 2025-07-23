@@ -67,6 +67,19 @@ class GeneralAttachmentsController extends Controller
                 'unit_process_flow_chart_diagram_or_write_up_pdf' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
                 'detailed_project_report_pdf' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
                 'other_supporting_docuement1_pdf' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+
+                'remove_self_certificate_format_3A' => 'nullable|in:delete',
+                'remove_tree_registration_certificate' => 'nullable|in:delete',
+                'remove_owner_aadhar_pdf' => 'nullable|in:delete',
+                'remove_udyog_aadhar' => 'nullable|in:delete',
+                'remove_gst_certificate_pdf' => 'nullable|in:delete',
+                'remove_combined_plan_document' => 'nullable|in:delete',
+                'remove_unit_land_details_pdf' => 'nullable|in:delete',
+                'remove_unit_registaration_details_pdf' => 'nullable|in:delete',
+                'remove_unit_property_tax_clearance_certificate_pdf' => 'nullable|in:delete',
+                'remove_unit_process_flow_chart_diagram_or_write_up_pdf' => 'nullable|in:delete',
+                'remove_detailed_project_report_pdf' => 'nullable|in:delete',
+                'remove_other_supporting_docuement1_pdf' => 'nullable|in:delete'
             ];
 
             $request->validate($rules);
@@ -88,6 +101,27 @@ class GeneralAttachmentsController extends Controller
                 'unit_process_flow_chart_diagram_or_write_up_pdf',
                 'detailed_project_report_pdf',
                 'other_supporting_docuement1_pdf',
+            ];
+
+            $delete_fields = [
+                'self_certificate_format_3A',
+                'tree_registration_certificate',
+                'owner_aadhar_pdf',
+                'udyog_aadhar',
+                'gst_certificate_pdf',
+                'combined_plan_document',
+                'unit_land_details_pdf',
+                'unit_registaration_details_pdf',
+                'unit_property_tax_clearance_certificate_pdf',
+                'unit_process_flow_chart_diagram_or_write_up_pdf',
+                'detailed_project_report_pdf',
+                'other_supporting_docuement1_pdf',
+            ];
+
+            $related_fields = [
+                'owner_aadhar_pdf' => ['owner_aadhar_number'],
+                'udyog_aadhar' => ['udyog_aadhar_number', 'udyog_aadhar_registration_date'],
+                'gst_certificate_pdf' => ['gst_number'],
             ];
 
             $paths = [];
@@ -136,6 +170,22 @@ class GeneralAttachmentsController extends Controller
                 if ($request->filled('udyog_aadhar_registration_date')) {
                     $update_data['udyog_aadhar_registration_date'] = $request->udyog_aadhar_registration_date;
                 }
+
+                foreach ($delete_fields as $field) {
+                    if ($request->input("remove_$field") === 'delete' && !$request->hasFile($field)) {
+                        if ($attachment->$field) {
+                            Storage::disk('public')->delete($attachment->$field);
+                        }
+                        $update_data[$field] = null;
+
+                        if (isset($related_fields[$field])) {
+                            foreach ($related_fields[$field] as $related) {
+                                $update_data[$related] = null;
+                            }
+                        }
+                    }
+                }
+
 
                 $attachment->update($update_data);
             } else {
