@@ -30,10 +30,10 @@ Route::middleware('auth:api')->group(function () {
         Route::post('change-password', [AuthController::class, 'change_password']);
     });
 
-    Route::post('unit-details', [UnitDetailController::class, 'unit_details_store_or_update']);
+    Route::post('unit-details-store', [UnitDetailController::class, 'unit_details_store_or_update']);
     Route::post('unit-details-view', [UnitDetailController::class, 'unit_details_view']);
 
-    Route::post('management-details', [ManagementDetailsController::class, 'management_details_store_or_update']);
+    Route::post('management-details-store', [ManagementDetailsController::class, 'management_details_store_or_update']);
     Route::post('management-details-view', [ManagementDetailsController::class, 'management_details_view']);
 
     Route::post('auth-get-all-roles', [RoleController::class, 'all_roles'])->name('roles.all_roles');
@@ -55,18 +55,18 @@ Route::middleware('auth:api')->group(function () {
     Route::post('core-application-store-enterprise-detail', [EnterpriseDetailController::class, 'enterprise_details_store_or_update'])->name('core_application.store_enterprise_detail');
     Route::post('core-application-show-enterprise-detail', [EnterpriseDetailController::class, 'show_enterprise_details'])->name('core_application.show_enterprise_detail');
 
-    Route::post('nic-digit-code', [NicCodeController::class, 'nic_code_store']);
+    Route::post('nic-digit-code-store', [NicCodeController::class, 'nic_code_store']);
     Route::post('nic-digit-code-update', [NicCodeController::class, 'nic_code_update']);
     Route::post('nic-digit-code-view', [NicCodeController::class, 'nic_code_view']);
     Route::post('nic-digit-code-delete', [NicCodeController::class, 'nic_code_delete']);
 
-    Route::post('line-of-activity-store', [LineOfActivityDetailsController::class, 'line_of_activity_store']);
+    Route::post('line-of-activity-store', [LineOfActivityDetailsController::class, 'line_of_activity_store_or_update']);
     Route::post('line-of-activity-delete', [LineOfActivityDetailsController::class, 'line_of_activity_delete']);
     Route::post('line-of-activity-view', [LineOfActivityDetailsController::class, 'line_of_activity_view']);
 
-    Route::post('general-attachment-store', [GeneralAttachmentsController::class, 'general_attachment_store']);
+    Route::post('general-attachment-store', [GeneralAttachmentsController::class, 'general_attachment_store_or_update']);
     Route::post('general-attachment-view', [GeneralAttachmentsController::class, 'general_attachment_view']);
 
-    Route::post('bank-detail', [BankDetailController::class, 'bank_detail_store_or_update']);
+    Route::post('bank-detail-store', [BankDetailController::class, 'bank_detail_store_or_update']);
     Route::post('bank-detail-view', [BankDetailController::class, 'bank_detail_view']);
 });
