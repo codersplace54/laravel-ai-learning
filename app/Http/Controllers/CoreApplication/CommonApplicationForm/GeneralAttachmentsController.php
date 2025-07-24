@@ -24,11 +24,11 @@ class GeneralAttachmentsController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $attachment = GeneralAttachment::where('user_id', $user->id)->first();
+            $general_attachment = GeneralAttachment::where('user_id', $user->id)->first();
 
             $rules = [
                 'general_self_certification_form' => [
-                    (!$attachment || !$attachment->general_self_certification_form) ? 'required' : 'nullable',
+                    (!$general_attachment || !$general_attachment->general_self_certification_form) ? 'required' : 'nullable',
                     'file',
                     'mimes:pdf,jpg,jpeg,png',
                     'max:2048'
@@ -38,13 +38,13 @@ class GeneralAttachmentsController extends Controller
                 'self_certificate_format_3A' => 'required_if:type_of_tree,EXEMPTED|file|mimes:pdf,jpg,jpeg,png|max:2048',
                 'tree_registration_certificate' => 'required_if:type_of_tree,NON_EXEMPTED|file|mimes:pdf,jpg,jpeg,png|max:2048',
                 'owner_pan_pdf' => [
-                    (!$attachment || !$attachment->owner_pan_pdf) ? 'required' : 'nullable',
+                    (!$general_attachment || !$general_attachment->owner_pan_pdf) ? 'required' : 'nullable',
                     'file',
                     'mimes:pdf,jpg,jpeg,png',
                     'max:2048'
                 ],
                 'owner_pan_number' => [
-                    (!$attachment || !$attachment->owner_pan_pdf) ? 'required' : 'nullable',
+                    (!$general_attachment || !$general_attachment->owner_pan_pdf) ? 'required' : 'nullable',
                     'string',
                     'max:20'
                 ],
@@ -84,9 +84,11 @@ class GeneralAttachmentsController extends Controller
 
             $request->validate($rules);
 
+
             DB::beginTransaction();
 
-            $fields = [
+
+            $file_upload_fields = [
                 'general_self_certification_form',
                 'self_certificate_format_3A',
                 'tree_registration_certificate',
@@ -103,7 +105,8 @@ class GeneralAttachmentsController extends Controller
                 'other_supporting_docuement1_pdf',
             ];
 
-            $delete_fields = [
+
+            $file_upload_delete_fields = [
                 'self_certificate_format_3A',
                 'tree_registration_certificate',
                 'owner_aadhar_pdf',
@@ -118,30 +121,38 @@ class GeneralAttachmentsController extends Controller
                 'other_supporting_docuement1_pdf',
             ];
 
+
             $related_fields = [
                 'owner_aadhar_pdf' => ['owner_aadhar_number'],
                 'udyog_aadhar' => ['udyog_aadhar_number', 'udyog_aadhar_registration_date'],
                 'gst_certificate_pdf' => ['gst_number'],
             ];
 
+
             $paths = [];
 
-            foreach ($fields as $field) {
+
+            // This part will execute for Store/ Update, If new file came it will delete then store the new one ...
+            foreach ($file_upload_fields as $field) {
                 if ($request->hasFile($field)) {
-                    if ($attachment && $attachment->$field) {
-                        Storage::disk('public')->delete($attachment->$field);
+                    if ($general_attachment && $general_attachment->$field) {
+                        Storage::disk('public')->delete($general_attachment->$field);
                     }
                     $file = $request->file($field);
                     $filename = $field . '.' . $file->getClientOriginalExtension();
                     $paths[$field] = $file->storeAs("uploads/$user->id/general_attachments", $filename, 'public');
                 } else {
-                    $paths[$field] = $attachment ? $attachment->$field : null;
+                    $paths[$field] = $general_attachment ? $general_attachment->$field : null;
                 }
             }
 
-            if ($attachment) {
+
+            // This part will execute if general_attachment exists and updation will be done from here ... 
+            if ($general_attachment) {
+
                 $update_data = [];
-                foreach ($fields as $field) {
+
+                foreach ($file_upload_fields as $field) {
                     if ($request->hasFile($field)) {
                         $update_data[$field] = $paths[$field];
                     }
@@ -171,11 +182,16 @@ class GeneralAttachmentsController extends Controller
                     $update_data['udyog_aadhar_registration_date'] = $request->udyog_aadhar_registration_date;
                 }
 
-                foreach ($delete_fields as $field) {
+
+
+                foreach ($file_upload_delete_fields as $field) {
+
                     if ($request->input("remove_$field") === 'delete' && !$request->hasFile($field)) {
-                        if ($attachment->$field) {
-                            Storage::disk('public')->delete($attachment->$field);
+
+                        if ($general_attachment->$field) {
+                            Storage::disk('public')->delete($general_attachment->$field);
                         }
+
                         $update_data[$field] = null;
 
                         if (isset($related_fields[$field])) {
@@ -187,9 +203,9 @@ class GeneralAttachmentsController extends Controller
                 }
 
 
-                $attachment->update($update_data);
+                $general_attachment->update($update_data);
             } else {
-                $attachment = GeneralAttachment::create([
+                $general_attachment = GeneralAttachment::create([
                     'user_id' => $user->id,
                     'general_self_certification_form' => $paths['general_self_certification_form'],
                     'do_you_have_trees_in_the_land_for_industry' => $request->do_you_have_trees_in_the_land_for_industry,
@@ -216,7 +232,7 @@ class GeneralAttachmentsController extends Controller
             }
 
             $general_attachment = $this->get_file_urls(
-                $attachment,
+                $general_attachment,
                 [
                     'general_self_certification_form',
                     'self_certificate_format_3A',
@@ -267,6 +283,7 @@ class GeneralAttachmentsController extends Controller
         }
     }
 
+
     public function general_attachment_view()
     {
 
@@ -282,9 +299,9 @@ class GeneralAttachmentsController extends Controller
                 ], 401);
             }
 
-            $attachment = GeneralAttachment::where('user_id', $user->id)->first();
+            $general_attachment = GeneralAttachment::where('user_id', $user->id)->first();
 
-            if (!$attachment) {
+            if (!$general_attachment) {
                 return response()->json([
                     'status' => 0,
                     'message' => 'No general attachment found for this user.'
@@ -292,7 +309,7 @@ class GeneralAttachmentsController extends Controller
             }
 
             $general_attachment = $this->get_file_urls(
-                $attachment,
+                $general_attachment,
                 [
                     'general_self_certification_form',
                     'self_certificate_format_3A',
@@ -310,6 +327,7 @@ class GeneralAttachmentsController extends Controller
                     'other_supporting_docuement1_pdf',
                 ]
             );
+
 
             return response()->json([
                 'status' => 1,
@@ -329,21 +347,41 @@ class GeneralAttachmentsController extends Controller
     }
 
 
-
     private function get_file_urls($data, $fields)
     {
+
+
         if ($data instanceof \Illuminate\Support\Collection) {
-            return $data->map(function ($item) use ($fields) {
-                return $this->get_file_urls($item, $fields);
-            });
+
+
+            $result = [];
+
+
+            foreach ($data as $item) {
+
+
+                $result[] = $this->get_file_urls($item, $fields);
+            }
+
+
+            return $result;
         }
 
+
         $array = $data->toArray();
+
+
         foreach ($fields as $field) {
+
+
             if (!empty($array[$field])) {
+
+
                 $array[$field] = asset('storage/' . $array[$field]);
             }
         }
+
+
         return $array;
     }
 }
