@@ -11,6 +11,7 @@ use App\Http\Controllers\CoreApplication\CommonApplicationForm\ManagementDetails
 use App\Http\Controllers\CoreApplication\NicCode\NicCodeController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\LineOfActivity\LineOfActivityDetailsController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\GeneralAttachmentsController;
+use App\Http\Controllers\CoreApplication\CommonApplicationForm\BankDetailController;
 
 
 Route::prefix('user')->group(function () {
@@ -65,4 +66,7 @@ Route::middleware('auth:api')->group(function () {
 
     Route::post('general-attachment-store', [GeneralAttachmentsController::class, 'general_attachment_store']);
     Route::post('general-attachment-view', [GeneralAttachmentsController::class, 'general_attachment_view']);
+
+    Route::post('bank-detail', [BankDetailController::class, 'bank_detail_store_or_update']);
+    Route::post('bank-detail-view', [BankDetailController::class, 'bank_detail_view']);
 });
