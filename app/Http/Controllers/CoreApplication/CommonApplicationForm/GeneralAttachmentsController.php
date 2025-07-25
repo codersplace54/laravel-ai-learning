@@ -13,7 +13,7 @@ use App\Models\GeneralAttachment;
 class GeneralAttachmentsController extends Controller
 {
 
-    public function general_attachment_store(Request $request)
+    public function general_attachment_store_or_update(Request $request)
     {
 
         try {
@@ -147,7 +147,7 @@ class GeneralAttachmentsController extends Controller
             }
 
 
-            // This part will execute if general_attachment exists and updation will be done from here ... 
+            // This part will execute if general_attachment exists and updation will be done from here ...
             if ($general_attachment) {
 
                 $update_data = [];
@@ -349,24 +349,6 @@ class GeneralAttachmentsController extends Controller
 
     private function get_file_urls($data, $fields)
     {
-
-
-        if ($data instanceof \Illuminate\Support\Collection) {
-
-
-            $result = [];
-
-
-            foreach ($data as $item) {
-
-
-                $result[] = $this->get_file_urls($item, $fields);
-            }
-
-
-            return $result;
-        }
-
 
         $array = $data->toArray();
 

@@ -15,7 +15,7 @@ use App\Models\ListOfProductsOrByProduct;
 class LineOfActivityDetailsController extends Controller
 {
 
-    public function line_of_activity_store(Request $request)
+    public function line_of_activity_store_or_update(Request $request)
     {
 
         try {
