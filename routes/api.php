@@ -59,6 +59,9 @@ Route::middleware('auth:api')->group(function () {
     Route::post('nic-digit-code-update', [NicCodeController::class, 'nic_code_update']);
     Route::post('nic-digit-code-view', [NicCodeController::class, 'nic_code_view']);
     Route::post('nic-digit-code-delete', [NicCodeController::class, 'nic_code_delete']);
+    Route::post('fetch-all-nic-2-digit-codes-with-description', [NicCodeController::class, 'fetch_all_nic_2_digit_codes_with_description']);
+    Route::post('fetch-all-nic-4-digit-codes-with-description', [NicCodeController::class, 'fetch_all_nic_4_digit_codes_with_description']);
+    Route::post('fetch-all-nic-5-digit-codes-with-description', [NicCodeController::class, 'fetch_all_nic_5_digit_codes_with_description']);
 
     Route::post('line-of-activity-store', [LineOfActivityDetailsController::class, 'line_of_activity_store_or_update']);
     Route::post('line-of-activity-delete', [LineOfActivityDetailsController::class, 'line_of_activity_delete']);
