@@ -282,4 +282,123 @@ class NicCodeController extends Controller
             ], 500);
         }
     }
+
+    public function fetch_all_nic_2_digit_codes_with_description()
+    {
+
+        try {
+
+
+            DB::beginTransaction();
+
+            $nic_2_digit_code = NicCode::select('nic_2_digit_code', 'nic_2_digit_code_description')
+                ->distinct()
+                ->get();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'NIC 2 digit code(s) fetched successfully.',
+                'data' => $nic_2_digit_code
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function fetch_all_nic_4_digit_codes_with_description(Request $request)
+    {
+
+        try {
+
+
+            $request->validate([
+                'nic_2_digit_code' => 'required|string'
+            ]);
+
+            DB::beginTransaction();
+
+            $nic_2_digit_code = NicCode::where('nic_2_digit_code', $request->nic_2_digit_code)
+                ->select('nic_4_digit_code', 'nic_4_digit_code_description')
+                ->distinct()
+                ->get();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'NIC 4 digit code(s) fetched successfully.',
+                'data' => $nic_2_digit_code
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' =>  $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function fetch_all_nic_5_digit_codes_with_description(Request $request)
+    {
+
+        try {
+
+
+            $request->validate([
+                'nic_4_digit_code' => 'required|string'
+            ]);
+
+            DB::beginTransaction();
+
+            $nic_4_digit_code = NicCode::where('nic_4_digit_code', $request->nic_4_digit_code)
+                ->select('nic_5_digit_code', 'nic_5_digit_code_description')
+                ->distinct()
+                ->get();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'NIC 5 digit code(s) fetched successfully.',
+                'data' => $nic_4_digit_code
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
