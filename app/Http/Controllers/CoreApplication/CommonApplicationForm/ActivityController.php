@@ -31,9 +31,6 @@ class ActivityController extends Controller
                 ->exists();
 
             if ($nic_5_digit_code_exist) {
-
-                DB::rollBack();
-
                 return response()->json([
                     'status' => 0,
                     'message' => "NIC 5 digit code '{$request->nic_5_digit_code}' already exists for this user."
@@ -96,6 +93,9 @@ class ActivityController extends Controller
                 ->first();
 
             if (!$activity) {
+
+                DB::rollBack();
+
                 return response()->json([
                     'status' => 0,
                     'message' => 'Activity not found.'
