@@ -289,13 +289,9 @@ class NicCodeController extends Controller
         try {
 
 
-            DB::beginTransaction();
-
             $nic_2_digit_code = NicCode::select('nic_2_digit_code', 'nic_2_digit_code_description')
                 ->distinct()
                 ->get();
-
-            DB::commit();
 
             return response()->json([
                 'status' => 1,
@@ -304,8 +300,6 @@ class NicCodeController extends Controller
             ], 200);
         } catch (\Exception $e) {
 
-
-            DB::rollBack();
 
             return response()->json([
                 'status' => 0,
@@ -324,14 +318,10 @@ class NicCodeController extends Controller
                 'nic_2_digit_code' => 'required|string'
             ]);
 
-            DB::beginTransaction();
-
             $nic_2_digit_code = NicCode::where('nic_2_digit_code', $request->nic_2_digit_code)
                 ->select('nic_4_digit_code', 'nic_4_digit_code_description')
                 ->distinct()
                 ->get();
-
-            DB::commit();
 
             return response()->json([
                 'status' => 1,
@@ -348,8 +338,6 @@ class NicCodeController extends Controller
             ], 422);
         } catch (\Exception $e) {
 
-
-            DB::rollBack();
 
             return response()->json([
                 'status' => 0,
@@ -368,14 +356,10 @@ class NicCodeController extends Controller
                 'nic_4_digit_code' => 'required|string'
             ]);
 
-            DB::beginTransaction();
-
             $nic_4_digit_code = NicCode::where('nic_4_digit_code', $request->nic_4_digit_code)
                 ->select('nic_5_digit_code', 'nic_5_digit_code_description')
                 ->distinct()
                 ->get();
-
-            DB::commit();
 
             return response()->json([
                 'status' => 1,
@@ -392,8 +376,6 @@ class NicCodeController extends Controller
             ], 422);
         } catch (\Exception $e) {
 
-
-            DB::rollBack();
 
             return response()->json([
                 'status' => 0,
