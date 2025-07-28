@@ -12,6 +12,7 @@ use App\Http\Controllers\CoreApplication\NicCode\NicCodeController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\LineOfActivity\LineOfActivityDetailsController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\GeneralAttachmentsController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\BankDetailController;
+use App\Http\Controllers\CoreApplication\CommonApplicationForm\ActivityController;
 
 
 Route::prefix('user')->group(function () {
@@ -72,4 +73,7 @@ Route::middleware('auth:api')->group(function () {
 
     Route::post('bank-detail-store', [BankDetailController::class, 'bank_detail_store_or_update']);
     Route::post('bank-detail-view', [BankDetailController::class, 'bank_detail_view']);
+
+    Route::post('activity-store', [ActivityController::class, 'activity_store']);
+    Route::post('activity-delete', [ActivityController::class, 'activity_delete']);
 });
