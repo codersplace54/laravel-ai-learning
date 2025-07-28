@@ -13,6 +13,8 @@ use App\Http\Controllers\CoreApplication\CommonApplicationForm\LineOfActivity\Li
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\GeneralAttachmentsController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\BankDetailController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\ActivityController;
+use App\Http\Controllers\ServiceMaster\ServiceMasterController;
+
 
 
 Route::prefix('user')->group(function () {
@@ -76,4 +78,6 @@ Route::middleware('auth:api')->group(function () {
 
     Route::post('activity-store', [ActivityController::class, 'activity_store']);
     Route::post('activity-delete', [ActivityController::class, 'activity_delete']);
+
+    Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
 });
