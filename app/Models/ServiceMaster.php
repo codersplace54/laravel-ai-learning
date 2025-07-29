@@ -8,6 +8,7 @@ class ServiceMaster extends Model
 {
     protected $fillable = [
         'id',
+        'added_by',
         'department_id',
         'service_title_or_description',
         'noc_name',
