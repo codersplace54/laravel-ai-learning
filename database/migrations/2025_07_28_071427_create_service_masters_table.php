@@ -11,6 +11,7 @@ return new class extends Migration
     {
         Schema::create('service_masters', function (Blueprint $table) {
             $table->id();
+            $table->bigInteger('added_by');
             $table->bigInteger('department_id');
             $table->string('service_title_or_description');
             $table->string('noc_name');

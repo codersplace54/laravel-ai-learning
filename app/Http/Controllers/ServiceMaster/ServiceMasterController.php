@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\ServiceMaster;
+use App\Models\Department;
 
 
 class ServiceMasterController extends Controller
@@ -18,14 +19,12 @@ class ServiceMasterController extends Controller
         try {
 
 
-            $user = Auth::user();
-
-            if (!$user) {
+            if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
             $request->validate([
-                'department_id' => 'required|integer',
+                'department_id' => 'required|integer|exists:departments,id',
                 'service_title_or_description' => 'required|string|max:255',
                 'noc_name' => 'required|string|max:255',
                 'noc_short_name' => 'required|string|max:255',
@@ -53,6 +52,7 @@ class ServiceMasterController extends Controller
             DB::beginTransaction();
 
             $service_master = ServiceMaster::create([
+                'added_by' => Auth::id(),
                 'department_id' => $request->department_id,
                 'service_title_or_description' => $request->service_title_or_description,
                 'noc_name' => $request->noc_name,
