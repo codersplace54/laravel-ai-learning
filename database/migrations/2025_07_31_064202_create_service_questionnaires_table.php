@@ -23,6 +23,8 @@ return new class extends Migration
             $table->string('group_label')->nullable();
             $table->string('display_width')->nullable();
             $table->boolean('status')->default(1);
+            $table->enum('validation_required', ['yes', 'no']);
+            $table->string('validation_rule')->nullable();
             $table->timestamps();
         });
     }
