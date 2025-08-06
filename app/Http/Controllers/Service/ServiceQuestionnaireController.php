@@ -35,6 +35,8 @@ class ServiceQuestionnaireController extends Controller
                 'questionnaires.*.group_label' => 'nullable|string',
                 'questionnaires.*.display_width' => 'nullable|string',
                 'questionnaires.*.status' => 'nullable|boolean',
+                'questionnaires.*.validation_required' => 'required|in:yes,no',
+                'questionnaires.*.validation_rule' => 'nullable|array',
             ]);
 
             DB::beginTransaction();
@@ -55,8 +57,16 @@ class ServiceQuestionnaireController extends Controller
                     'group_label' => $questionnaire['group_label'] ?? null,
                     'display_width' => $questionnaire['display_width'] ?? null,
                     'status' => $questionnaire['status'] ?? 1,
+                    'validation_required' => $questionnaire['validation_required'],
+                    'validation_rule' => json_encode($questionnaire['validation_rule'] ?? null),
+
                 ]);
             }
+
+            foreach ($service_questionnaire as &$service) {
+                $service->validation_rule = json_decode($service->validation_rule, true);
+            }
+
 
             DB::commit();
 
@@ -103,6 +113,8 @@ class ServiceQuestionnaireController extends Controller
                 'questionnaires.*.group_label' => 'nullable|string',
                 'questionnaires.*.display_width' => 'nullable|string',
                 'questionnaires.*.status' => 'nullable|boolean',
+                'questionnaires.*.validation_required' => 'required|in:yes,no',
+                'questionnaires.*.validation_rule' => 'nullable|array',
             ]);
 
             DB::beginTransaction();
@@ -125,9 +137,15 @@ class ServiceQuestionnaireController extends Controller
                     'group_label' => $questionnaire['group_label'] ?? null,
                     'display_width' => $questionnaire['display_width'] ?? null,
                     'status' => $questionnaire['status'] ?? 1,
+                    'validation_required' => $questionnaire['validation_required'],
+                    'validation_rule' => json_encode($questionnaire['validation_rule'] ?? null),
                 ]);
 
                 $service_questionnaire[] = $service_question;
+            }
+
+            foreach ($service_questionnaire as &$service) {
+                $service->validation_rule = json_decode($service->validation_rule, true);
             }
 
             DB::commit();
@@ -203,6 +221,49 @@ class ServiceQuestionnaireController extends Controller
             return response()->json([
                 'status' => 0,
                 'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function service_questionnaire_view(Request $request)
+    {
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'service_id' => 'required|integer|exists:service_masters,id',
+            ]);
+
+            $service_questionnaires = ServiceQuestionnaire::where('service_id', $request->service_id)->get();
+
+            if ($service_questionnaires->isEmpty()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No questionnaires found for the given service_id.',
+                ], 404);
+            }
+
+            foreach ($service_questionnaires as $service) {
+                $service->validation_rule = json_decode($service->validation_rule, true);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Service questionnaires fetched successfully.',
+                'data' => $service_questionnaires,
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

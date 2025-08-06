@@ -87,4 +87,5 @@ Route::middleware('auth:api')->group(function () {
     Route::post('service-questionnaire-store', [ServiceQuestionnaireController::class, 'service_questionnaire_store']);
     Route::post('service-questionnaire-update', [ServiceQuestionnaireController::class, 'service_questionnaire_update']);
     Route::post('service-questionnaire-delete', [ServiceQuestionnaireController::class, 'service_questionnaire_delete']);
+    Route::post('service-questionnaire-view', [ServiceQuestionnaireController::class, 'service_questionnaire_view']);
 });
