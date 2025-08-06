@@ -15,6 +15,7 @@ use App\Http\Controllers\CoreApplication\CommonApplicationForm\BankDetailControl
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\ActivityController;
 use App\Http\Controllers\ServiceMaster\ServiceMasterController;
 use App\Http\Controllers\Service\RenewalCycleController;
+use App\Http\Controllers\Service\ServiceQuestionnaireController;
 
 
 
@@ -84,7 +85,13 @@ Route::middleware('auth:api')->group(function () {
     Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);
     Route::post('service-master-delete', [ServiceMasterController::class, 'service_master_delete']);
 
+
     Route::post('renewal-cycle-store', [RenewalCycleController::class, 'renewal_cycle_store']);
     Route::post('renewal-cycle-update', [RenewalCycleController::class, 'renewal_cycle_update']);
     Route::post('renewal-cycle-delete', [RenewalCycleController::class, 'renewal_cycle_delete']);
+
+    Route::post('service-questionnaire-store', [ServiceQuestionnaireController::class, 'service_questionnaire_store']);
+    Route::post('service-questionnaire-update', [ServiceQuestionnaireController::class, 'service_questionnaire_update']);
+    Route::post('service-questionnaire-delete', [ServiceQuestionnaireController::class, 'service_questionnaire_delete']);
+    Route::post('service-questionnaire-view', [ServiceQuestionnaireController::class, 'service_questionnaire_view']);
 });
