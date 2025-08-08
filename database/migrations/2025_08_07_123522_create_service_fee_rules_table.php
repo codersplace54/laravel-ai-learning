@@ -19,6 +19,7 @@ return new class extends Migration
             $table->enum('condition_operator', ['=', '!=', '<', '<=', '>', '>=', 'between'])->nullable();
             $table->string('condition_value_start')->nullable();
             $table->string('condition_value_end')->nullable();
+            $table->string('calculated_fee')->nullable();
             $table->string('fixed_calculated_fee')->nullable();
             $table->string('per_unit_fee')->nullable();
             $table->integer('priority')->nullable();
