@@ -213,4 +213,36 @@ class RenewalCycleController extends Controller
             ], 500);
         }
     }
+
+    public function renewal_cycle_view(Request $request)
+    {
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'service_id' => 'required|integer|exists:service_masters,id',
+            ]);
+
+            $renewal_cycle = RenewalCycle::where('service_id', $request->service_id)->get();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Service approval flow fetched successfully.',
+                'data' => $renewal_cycle,
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
