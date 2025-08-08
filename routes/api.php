@@ -16,6 +16,7 @@ use App\Http\Controllers\CoreApplication\CommonApplicationForm\ActivityControlle
 use App\Http\Controllers\ServiceMaster\ServiceMasterController;
 use App\Http\Controllers\Service\RenewalCycleController;
 use App\Http\Controllers\Service\ServiceQuestionnaireController;
+use App\Http\Controllers\Service\ServiceFeeRuleController;
 
 
 
@@ -94,4 +95,9 @@ Route::middleware('auth:api')->group(function () {
     Route::post('service-questionnaire-update', [ServiceQuestionnaireController::class, 'service_questionnaire_update']);
     Route::post('service-questionnaire-delete', [ServiceQuestionnaireController::class, 'service_questionnaire_delete']);
     Route::post('service-questionnaire-view', [ServiceQuestionnaireController::class, 'service_questionnaire_view']);
+
+    Route::post('service-fee-rule-store', [ServiceFeeRuleController::class, 'service_fee_rule_store']);
+    Route::post('service-fee-rule-update', [ServiceFeeRuleController::class, 'service_fee_rule_update']);
+    Route::post('service-fee-rule-view', [ServiceFeeRuleController::class, 'service_fee_rule_view']);
+    Route::post('service-fee-rule-delete', [ServiceFeeRuleController::class, 'service_fee_rule_delete']);
 });
