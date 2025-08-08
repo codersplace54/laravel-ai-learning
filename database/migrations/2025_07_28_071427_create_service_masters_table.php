@@ -19,6 +19,7 @@ return new class extends Migration
             $table->enum('noc_type', ['CFE', 'CFO', 'Renewal', 'Special', 'Others']);
             $table->enum('noc_payment_type', ['Estimated', 'Hardcoded', 'Calculated']);
             $table->integer('target_days')->nullable();
+            $table->enum('allow_repeat_application', ['yes', 'no']);
             $table->enum('has_input_form', ['yes', 'no']);
             $table->string('depends_on_services')->nullable();
             $table->enum('generate_id', ['yes', 'no']);
