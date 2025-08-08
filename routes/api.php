@@ -17,6 +17,7 @@ use App\Http\Controllers\ServiceMaster\ServiceMasterController;
 use App\Http\Controllers\Service\RenewalCycleController;
 use App\Http\Controllers\Service\ServiceQuestionnaireController;
 use App\Http\Controllers\Service\ServiceFeeRuleController;
+use App\Http\Controllers\Service\ServiceApprovalFlowController;
 
 
 
@@ -100,4 +101,9 @@ Route::middleware('auth:api')->group(function () {
     Route::post('service-fee-rule-update', [ServiceFeeRuleController::class, 'service_fee_rule_update']);
     Route::post('service-fee-rule-view', [ServiceFeeRuleController::class, 'service_fee_rule_view']);
     Route::post('service-fee-rule-delete', [ServiceFeeRuleController::class, 'service_fee_rule_delete']);
+
+    Route::post('service-approval-flow-store', [ServiceApprovalFlowController::class, 'service_approval_flow_store']);
+    Route::post('service-approval-flow-update', [ServiceApprovalFlowController::class, 'service_approval_flow_update']);
+    Route::post('service-approval-flow-view', [ServiceApprovalFlowController::class, 'service_approval_flow_view']);
+    Route::post('service-approval-flow-delete', [ServiceApprovalFlowController::class, 'service_approval_flow_delete']);
 });
