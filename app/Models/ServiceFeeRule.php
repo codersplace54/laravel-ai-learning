@@ -16,6 +16,7 @@ class ServiceFeeRule extends Model
         'condition_operator',
         'condition_value_start',
         'condition_value_end',
+        'calculated_fee',
         'fixed_calculated_fee',
         'per_unit_fee',
         'priority',
