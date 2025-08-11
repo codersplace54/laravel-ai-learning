@@ -93,6 +93,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('renewal-cycle-store', [RenewalCycleController::class, 'renewal_cycle_store']);
     Route::post('renewal-cycle-update', [RenewalCycleController::class, 'renewal_cycle_update']);
     Route::post('renewal-cycle-delete', [RenewalCycleController::class, 'renewal_cycle_delete']);
+    Route::post('renewal-cycle-view', [RenewalCycleController::class, 'renewal_cycle_view']);
 
     Route::post('service-questionnaire-store', [ServiceQuestionnaireController::class, 'service_questionnaire_store']);
     Route::post('service-questionnaire-update', [ServiceQuestionnaireController::class, 'service_questionnaire_update']);
