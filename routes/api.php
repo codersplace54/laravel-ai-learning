@@ -86,6 +86,8 @@ Route::middleware('auth:api')->group(function () {
     Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
     Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);
     Route::post('service-master-delete', [ServiceMasterController::class, 'service_master_delete']);
+    Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
+    Route::post('fetch-service-details', [ServiceMasterController::class, 'fetch_service_details']);
 
 
     Route::post('renewal-cycle-store', [RenewalCycleController::class, 'renewal_cycle_store']);
