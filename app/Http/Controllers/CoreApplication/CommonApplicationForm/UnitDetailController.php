@@ -15,7 +15,7 @@ class UnitDetailController extends Controller
 
        try {
 
-        
+
             $request->validate([
                 'unit_name' => 'required|string|max:255',
                 'unit_address' => 'required|string',
