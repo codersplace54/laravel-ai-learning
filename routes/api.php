@@ -18,6 +18,8 @@ use App\Http\Controllers\Service\RenewalCycleController;
 use App\Http\Controllers\Service\ServiceQuestionnaireController;
 use App\Http\Controllers\Service\ServiceFeeRuleController;
 use App\Http\Controllers\Service\ServiceApprovalFlowController;
+use App\Http\Controllers\Service\UserServiceApplicationController;
+use App\Http\Controllers\Service\HolidayController;
 
 
 
@@ -109,4 +111,14 @@ Route::middleware('auth:api')->group(function () {
     Route::post('service-approval-flow-update', [ServiceApprovalFlowController::class, 'service_approval_flow_update']);
     Route::post('service-approval-flow-view', [ServiceApprovalFlowController::class, 'service_approval_flow_view']);
     Route::post('service-approval-flow-delete', [ServiceApprovalFlowController::class, 'service_approval_flow_delete']);
+
+    Route::post('user-service-application-store', [UserServiceApplicationController::class, 'user_service_application_store']);
+    Route::post('user-service-application-update', [UserServiceApplicationController::class, 'user_service_application_update']);
+    Route::post('user-service-application-view', [UserServiceApplicationController::class, 'user_service_application_view']);
+    Route::post('user-service-application-delete', [UserServiceApplicationController::class, 'user_service_application_delete']);
+
+    Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
+    Route::post('holidays-update', [HolidayController::class, 'holidays_update']);
+    Route::post('holidays-view', [HolidayController::class, 'holidays_view']);
+    Route::post('holiday-delete', [HolidayController::class, 'holiday_delete']);
 });
