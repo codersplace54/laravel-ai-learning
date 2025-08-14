@@ -12,15 +12,15 @@ return new class extends Migration
         Schema::create('management_details', function (Blueprint $table) {
             $table->id();
             $table->bigInteger('user_id')->unique()->nullable();
-            $table->string('owner_details_name');
-            $table->string('owner_details_fathers_name');
-            $table->text('owner_details_residential_address');
-            $table->string('owner_details_police_station');
-            $table->string('owner_details_pin');
-            $table->string('owner_aadhar_no');
-            $table->string('owner_details_mobile');
+            $table->string('owner_details_name')->nullable();
+            $table->string('owner_details_fathers_name')->nullable();
+            $table->text('owner_details_residential_address')->nullable();
+            $table->string('owner_details_police_station')->nullable();
+            $table->string('owner_details_pin')->nullable();
+            $table->string('owner_aadhar_no')->nullable();
+            $table->string('owner_details_mobile')->nullable();
             $table->string('owner_details_alternate_mobile')->nullable();
-            $table->string('owner_details_aadhar_no');
+            $table->string('owner_details_aadhar_no')->nullable();
             $table->enum('owner_details_status', [
                 'Owner',
                 'Managing Director',
@@ -36,42 +36,42 @@ return new class extends Migration
                 'Chief Executive Officer',
                 'Vice President',
                 'President'
-            ]);
-            $table->string('owner_details_email');
-            $table->date('owner_details_dob');
+            ])->nullable();
+            $table->string('owner_details_email')->nullable();
+            $table->date('owner_details_dob')->nullable();
             $table->enum('owner_details_social_status', [
                 'General',
                 'SC',
                 'ST',
                 'OBC'
-            ]);
+            ])->nullable();
             $table->enum('owner_details_is_differently_abled', [
                 'YES',
                  'NO'
-            ]);
+            ])->nullable();
             $table->enum('owner_details_is_women_entrepreneur', [
                 'YES',
                 'NO'
-            ]);
+            ])->nullable();
             $table->enum('owner_details_is_minority', [
                 'YES',
                 'NO'
-            ]);
-            $table->string('owner_details_photo');
+            ])->nullable();
+            $table->string('owner_details_photo')->nullable();
 
-            $table->string('manager_details_name');
-            $table->string('manager_details_fathers_name');
-            $table->text('manager_details_residential_address');
-            $table->string('manager_details_police_station');
-            $table->string('manager_details_pin');
-            $table->string('manager_details_mobile');
-            $table->string('manager_details_aadhar_no');
-            $table->date('manager_details_dob');
-            $table->string('manager_details_photo');
+            $table->string('manager_details_name')->nullable();
+            $table->string('manager_details_fathers_name')->nullable();
+            $table->text('manager_details_residential_address')->nullable();
+            $table->string('manager_details_police_station')->nullable();
+            $table->string('manager_details_pin')->nullable();
+            $table->string('manager_details_mobile')->nullable();
+            $table->string('manager_details_aadhar_no')->nullable();
+            $table->date('manager_details_dob')->nullable();
+            $table->string('manager_details_photo')->nullable();
 
-            $table->string('signature_authorization_of_owner');
-            $table->string('factory_occupiers_signature');
-            $table->string('factory_managers_signature');
+            $table->string('signature_authorization_of_owner')->nullable();
+            $table->string('factory_occupiers_signature')->nullable();
+            $table->string('factory_managers_signature')->nullable();
 
             $table->timestamps();
         });

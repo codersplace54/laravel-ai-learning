@@ -14,9 +14,9 @@ return new class extends Migration
         Schema::create('board_of_directors', function (Blueprint $table) {
             $table->id();
             $table->bigInteger('user_id')->nullable();
-            $table->string('name');
+            $table->string('name')->nullable();
             $table->text('permanent_address')->nullable();
-            $table->string('mobile_number');
+            $table->string('mobile_number')->nullable();
             $table->timestamps();
         });
     }

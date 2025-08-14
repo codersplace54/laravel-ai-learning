@@ -11,13 +11,13 @@ return new class extends Migration
     {
         Schema::create('bank_details', function (Blueprint $table) {
             $table->id();
-            $table->bigInteger('user_id');
-            $table->string('bank_name');
-            $table->string('branch_name');
-            $table->enum('account_type', ['Saving', 'Current', 'Other']);
-            $table->string('account_holder_name');
-            $table->string('account_number');
-            $table->string('ifsc_code');
+            $table->bigInteger('user_id')->nullable();
+            $table->string('bank_name')->nullable();
+            $table->string('branch_name')->nullable();
+            $table->enum('account_type', ['Saving', 'Current', 'Other'])->nullable();
+            $table->string('account_holder_name')->nullable();
+            $table->string('account_number')->nullable();
+            $table->string('ifsc_code')->nullable();
             $table->timestamps();
         });
     }

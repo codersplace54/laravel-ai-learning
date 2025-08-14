@@ -11,10 +11,10 @@ return new class extends Migration
     {
         Schema::create('list_of_products_or_byproducts', function (Blueprint $table) {
             $table->id();
-            $table->bigInteger('user_id');
-            $table->string('product_name');
-            $table->string('product_production_capacity_per_month');
-            $table->string('product_average_production_per_month');
+            $table->bigInteger('user_id')->nullable();
+            $table->string('product_name')->nullable();
+            $table->string('product_production_capacity_per_month')->nullable();
+            $table->string('product_average_production_per_month')->nullable();
             $table->enum('unit', [
                 'Liters Numbers Per Month',
                 'Kilo Liters Number Per Month',
@@ -26,7 +26,7 @@ return new class extends Migration
                 'Tonnes Numbers Per Month',
                 'Metric Tonnes Numbers Per Month',
                 'Million Unit (MU)'
-            ]);
+            ])->nullable();
             $table->timestamps();
         });
     }

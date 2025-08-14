@@ -24,14 +24,16 @@ class BankDetailController extends Controller
 
             $bank_detail = BankDetail::where('user_id', $user->id)->first();
 
-            $request->validate([
-                'bank_name' => 'required|string|max:255',
-                'branch_name' => 'required|string|max:255',
-                'account_type' => 'required|in:Saving,Current,Other',
-                'account_holder_name' => 'required|string|max:255',
-                'account_number' => 'required|string|max:50',
-                'ifsc_code' => 'required|string|max:20',
-            ]);
+            if ($request->save_data != 1) {
+                $request->validate([
+                    'bank_name' => 'required|string|max:255',
+                    'branch_name' => 'required|string|max:255',
+                    'account_type' => 'required|in:Saving,Current,Other',
+                    'account_holder_name' => 'required|string|max:255',
+                    'account_number' => 'required|string|max:50',
+                    'ifsc_code' => 'required|string|max:20',
+                ]);
+            }
 
 
             DB::beginTransaction();

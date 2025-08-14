@@ -17,12 +17,14 @@ class ActivityController extends Controller
         try {
 
 
-            $request->validate([
-                'activity_of_enterprise' => 'required|string',
-                'nic_2_digit_code' => 'required|string',
-                'nic_4_digit_code' => 'required|string',
-                'nic_5_digit_code' => 'required|string',
-            ]);
+            if ($request->save_data != 1) {
+                $request->validate([
+                    'activity_of_enterprise' => 'required|string',
+                    'nic_2_digit_code' => 'required|string',
+                    'nic_4_digit_code' => 'required|string',
+                    'nic_5_digit_code' => 'required|string',
+                ]);
+            }
 
             DB::beginTransaction();
 
