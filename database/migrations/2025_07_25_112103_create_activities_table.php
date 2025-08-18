@@ -11,11 +11,11 @@ return new class extends Migration
     {
         Schema::create('activities', function (Blueprint $table) {
             $table->id();
-            $table->bigInteger('user_id');
-            $table->string('activity_of_enterprise');
-            $table->string('nic_2_digit_code');
-            $table->string('nic_4_digit_code');
-            $table->string('nic_5_digit_code');
+            $table->bigInteger('user_id')->nullable();
+            $table->string('activity_of_enterprise')->nullable();
+            $table->string('nic_2_digit_code')->nullable();
+            $table->string('nic_4_digit_code')->nullable();
+            $table->string('nic_5_digit_code')->nullable();
             $table->timestamps();
         });
     }

@@ -29,90 +29,92 @@ class ManagementDetailsController extends Controller
 
             $management_details = ManagementDetails::where('user_id', $user->id)->first();
 
-            $request->validate([
-                'owner_details_name' => 'required|string|max:255',
-                'owner_details_fathers_name' => 'required|string|max:255',
-                'owner_details_residential_address' => 'required|string',
-                'owner_details_police_station' => 'required|string',
-                'owner_details_pin' => 'required|string',
-                'owner_aadhar_no' => 'required|string',
-                'owner_details_mobile' => 'required|string',
-                'owner_details_alternate_mobile' => 'nullable|string',
-                'owner_details_aadhar_no' => 'required|string',
-                'owner_details_status' => 'required|in:Owner,Managing Director,CEO,Chairman,Partner,COO,CFO,Director,VP,Chief Operating Officer,Chief Financial Officer,Chief Executive Officer,Vice President,President',
-                'owner_details_email' => 'required|email',
-                'owner_details_dob' => 'required|date',
-                'owner_details_social_status' => 'required|in:General,SC,ST,OBC',
-                'owner_details_is_differently_abled' => 'required|in:YES,NO',
-                'owner_details_is_women_entrepreneur' => 'required|in:YES,NO',
-                'owner_details_is_minority' => 'required|in:YES,NO',
-                'owner_details_photo' => [
-                    $management_details ? 'nullable' : 'required',
-                    'file',
-                    'mimes:jpg,jpeg,png',
-                    'max:2048'
-                ],
+            if ($request->save_data != 1) {
+                $request->validate([
+                    'owner_details_name' => 'required|string|max:255',
+                    'owner_details_fathers_name' => 'required|string|max:255',
+                    'owner_details_residential_address' => 'required|string',
+                    'owner_details_police_station' => 'required|string',
+                    'owner_details_pin' => 'required|string',
+                    'owner_aadhar_no' => 'required|string',
+                    'owner_details_mobile' => 'required|string',
+                    'owner_details_alternate_mobile' => 'nullable|string',
+                    'owner_details_aadhar_no' => 'required|string',
+                    'owner_details_status' => 'required|in:Owner,Managing Director,CEO,Chairman,Partner,COO,CFO,Director,VP,Chief Operating Officer,Chief Financial Officer,Chief Executive Officer,Vice President,President',
+                    'owner_details_email' => 'required|email',
+                    'owner_details_dob' => 'required|date',
+                    'owner_details_social_status' => 'required|in:General,SC,ST,OBC',
+                    'owner_details_is_differently_abled' => 'required|in:YES,NO',
+                    'owner_details_is_women_entrepreneur' => 'required|in:YES,NO',
+                    'owner_details_is_minority' => 'required|in:YES,NO',
+                    'owner_details_photo' => [
+                        $management_details ? 'nullable' : 'required',
+                        'file',
+                        'mimes:jpg,jpeg,png',
+                        'max:2048'
+                    ],
 
-                'manager_details_name' => 'required|string|max:255',
-                'manager_details_fathers_name' => 'required|string|max:255',
-                'manager_details_residential_address' => 'required|string',
-                'manager_details_police_station' => 'required|string',
-                'manager_details_pin' => 'required|string',
-                'manager_details_mobile' => 'required|string',
-                'manager_details_aadhar_no' => 'required|string',
-                'manager_details_dob' => 'required|date',
-                'manager_details_photo' =>  [
-                    $management_details ? 'nullable' : 'required',
-                    'file',
-                    'mimes:jpg,jpeg,png',
-                    'max:2048'
-                ],
+                    'manager_details_name' => 'required|string|max:255',
+                    'manager_details_fathers_name' => 'required|string|max:255',
+                    'manager_details_residential_address' => 'required|string',
+                    'manager_details_police_station' => 'required|string',
+                    'manager_details_pin' => 'required|string',
+                    'manager_details_mobile' => 'required|string',
+                    'manager_details_aadhar_no' => 'required|string',
+                    'manager_details_dob' => 'required|date',
+                    'manager_details_photo' =>  [
+                        $management_details ? 'nullable' : 'required',
+                        'file',
+                        'mimes:jpg,jpeg,png',
+                        'max:2048'
+                    ],
 
-                'signature_authorization_of_owner' =>  [
-                    $management_details ? 'nullable' : 'required',
-                    'file',
-                    'mimes:jpg,jpeg,png',
-                    'max:2048'
-                ],
+                    'signature_authorization_of_owner' =>  [
+                        $management_details ? 'nullable' : 'required',
+                        'file',
+                        'mimes:jpg,jpeg,png',
+                        'max:2048'
+                    ],
 
-                'factory_occupiers_signature' =>  [
-                    $management_details ? 'nullable' : 'required',
-                    'file',
-                    'mimes:jpg,jpeg,png',
-                    'max:2048'
-                ],
+                    'factory_occupiers_signature' =>  [
+                        $management_details ? 'nullable' : 'required',
+                        'file',
+                        'mimes:jpg,jpeg,png',
+                        'max:2048'
+                    ],
 
-                'factory_managers_signature' =>  [
-                    $management_details ? 'nullable' : 'required',
-                    'file',
-                    'mimes:jpg,jpeg,png',
-                    'max:2048'
-                ],
+                    'factory_managers_signature' =>  [
+                        $management_details ? 'nullable' : 'required',
+                        'file',
+                        'mimes:jpg,jpeg,png',
+                        'max:2048'
+                    ],
 
-                'partner_details' => 'required|array',
-                'partner_details.*.name' => 'required|string|max:255',
-                'partner_details.*.fathers_name' => 'required|string|max:255',
-                'partner_details.*.age' => 'nullable|integer',
-                'partner_details.*.sex' => 'nullable|string',
-                'partner_details.*.social_status' => 'nullable|string',
-                'partner_details.*.profession' => 'nullable|string',
-                'partner_details.*.permanent_address' => 'nullable|string',
-                'partner_details.*.mobile_no' => 'required|string',
-                'partner_details.*.date_of_birth' => 'required|date',
-                'partner_details.*.date_of_joining' => 'nullable|date',
-                'partner_details.*.id_proof_doc' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
-                'partner_details.*.signature_image' => 'nullable|file|mimes:jpg,jpeg,png|max:2048',
+                    'partner_details' => 'required|array',
+                    'partner_details.*.name' => 'required|string|max:255',
+                    'partner_details.*.fathers_name' => 'required|string|max:255',
+                    'partner_details.*.age' => 'nullable|integer',
+                    'partner_details.*.sex' => 'nullable|string',
+                    'partner_details.*.social_status' => 'nullable|string',
+                    'partner_details.*.profession' => 'nullable|string',
+                    'partner_details.*.permanent_address' => 'nullable|string',
+                    'partner_details.*.mobile_no' => 'required|string',
+                    'partner_details.*.date_of_birth' => 'required|date',
+                    'partner_details.*.date_of_joining' => 'nullable|date',
+                    'partner_details.*.id_proof_doc' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+                    'partner_details.*.signature_image' => 'nullable|file|mimes:jpg,jpeg,png|max:2048',
 
-                'board_of_directors' => 'nullable|array',
-                'board_of_directors.*.name' => 'required|string|max:255',
-                'board_of_directors.*.permanent_address' => 'nullable|string|max:255',
-                'board_of_directors.*.mobile_number' => 'required|string',
+                    'board_of_directors' => 'nullable|array',
+                    'board_of_directors.*.name' => 'required|string|max:255',
+                    'board_of_directors.*.permanent_address' => 'nullable|string|max:255',
+                    'board_of_directors.*.mobile_number' => 'required|string',
 
-                'chief_administrative_heads' => 'nullable|array',
-                'chief_administrative_heads.*.name' => 'required|string|max:255',
-                'chief_administrative_heads.*.permanent_address' => 'nullable|string|max:255',
-                'chief_administrative_heads.*.mobile_number' => 'required|string',
-            ]);
+                    'chief_administrative_heads' => 'nullable|array',
+                    'chief_administrative_heads.*.name' => 'required|string|max:255',
+                    'chief_administrative_heads.*.permanent_address' => 'nullable|string|max:255',
+                    'chief_administrative_heads.*.mobile_number' => 'required|string',
+                ]);
+            }
 
 
             DB::beginTransaction();

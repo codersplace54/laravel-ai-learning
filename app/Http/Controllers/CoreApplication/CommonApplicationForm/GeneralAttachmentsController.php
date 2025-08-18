@@ -81,8 +81,9 @@ class GeneralAttachmentsController extends Controller
                 'remove_detailed_project_report_pdf' => 'nullable|in:delete',
                 'remove_other_supporting_docuement1_pdf' => 'nullable|in:delete'
             ];
-
-            $request->validate($rules);
+            if ($request->save_data != 1) {
+                $request->validate($rules);
+            }
 
 
             DB::beginTransaction();

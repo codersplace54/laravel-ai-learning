@@ -11,14 +11,14 @@ return new class extends Migration
     {
         Schema::create('general_attachments', function (Blueprint $table) {
             $table->id();
-            $table->bigInteger('user_id');
-            $table->string('general_self_certification_form');
-            $table->enum('do_you_have_trees_in_the_land_for_industry', ['YES', 'NO']);
+            $table->bigInteger('user_id')->nullable();
+            $table->string('general_self_certification_form')->nullable();
+            $table->enum('do_you_have_trees_in_the_land_for_industry', ['YES', 'NO'])->nullable();
             $table->enum('type_of_tree', ['EXEMPTED', 'NON_EXEMPTED'])->nullable();
             $table->string('self_certificate_format_3A')->nullable();
             $table->string('tree_registration_certificate')->nullable();
-            $table->string('owner_pan_pdf');
-            $table->string('owner_pan_number');
+            $table->string('owner_pan_pdf')->nullable();
+            $table->string('owner_pan_number')->nullable();
             $table->string('owner_aadhar_pdf')->nullable();
             $table->string('owner_aadhar_number')->nullable();
             $table->string('udyog_aadhar')->nullable();

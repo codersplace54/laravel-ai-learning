@@ -39,11 +39,11 @@ Route::middleware('auth:api')->group(function () {
         Route::post('change-password', [AuthController::class, 'change_password']);
     });
 
-    Route::post('unit-details-store', [UnitDetailController::class, 'unit_details_store_or_update']);
-    Route::post('unit-details-view', [UnitDetailController::class, 'unit_details_view']);
+    Route::post('caf/unit-details-store', [UnitDetailController::class, 'unit_details_store_or_update']);
+    Route::post('caf/unit-details-view', [UnitDetailController::class, 'unit_details_view']);
 
-    Route::post('management-details-store', [ManagementDetailsController::class, 'management_details_store_or_update']);
-    Route::post('management-details-view', [ManagementDetailsController::class, 'management_details_view']);
+    Route::post('caf/management-details-store', [ManagementDetailsController::class, 'management_details_store_or_update']);
+    Route::post('caf/management-details-view', [ManagementDetailsController::class, 'management_details_view']);
 
     Route::post('auth-get-all-roles', [RoleController::class, 'all_roles'])->name('roles.all_roles');
     Route::post('auth-store-role', [RoleController::class, 'store_role'])->name('roles.store_role');
@@ -61,8 +61,8 @@ Route::middleware('auth:api')->group(function () {
 
 
 
-    Route::post('core-application-store-enterprise-detail', [EnterpriseDetailController::class, 'enterprise_details_store_or_update'])->name('core_application.store_enterprise_detail');
-    Route::post('core-application-show-enterprise-detail', [EnterpriseDetailController::class, 'show_enterprise_details'])->name('core_application.show_enterprise_detail');
+    Route::post('caf/core-application-store-enterprise-detail', [EnterpriseDetailController::class, 'enterprise_details_store_or_update'])->name('core_application.store_enterprise_detail');
+    Route::post('caf/core-application-show-enterprise-detail', [EnterpriseDetailController::class, 'show_enterprise_details'])->name('core_application.show_enterprise_detail');
 
     Route::post('nic-digit-code-store', [NicCodeController::class, 'nic_code_store']);
     Route::post('nic-digit-code-update', [NicCodeController::class, 'nic_code_update']);
@@ -72,18 +72,18 @@ Route::middleware('auth:api')->group(function () {
     Route::post('fetch-all-nic-4-digit-codes-with-description', [NicCodeController::class, 'fetch_all_nic_4_digit_codes_with_description']);
     Route::post('fetch-all-nic-5-digit-codes-with-description', [NicCodeController::class, 'fetch_all_nic_5_digit_codes_with_description']);
 
-    Route::post('line-of-activity-store', [LineOfActivityDetailsController::class, 'line_of_activity_store_or_update']);
-    Route::post('line-of-activity-delete', [LineOfActivityDetailsController::class, 'line_of_activity_delete']);
-    Route::post('line-of-activity-view', [LineOfActivityDetailsController::class, 'line_of_activity_view']);
+    Route::post('caf/line-of-activity-store', [LineOfActivityDetailsController::class, 'line_of_activity_store_or_update']);
+    Route::post('caf/line-of-activity-delete', [LineOfActivityDetailsController::class, 'line_of_activity_delete']);
+    Route::post('caf/line-of-activity-view', [LineOfActivityDetailsController::class, 'line_of_activity_view']);
 
-    Route::post('general-attachment-store', [GeneralAttachmentsController::class, 'general_attachment_store_or_update']);
-    Route::post('general-attachment-view', [GeneralAttachmentsController::class, 'general_attachment_view']);
+    Route::post('caf/general-attachment-store', [GeneralAttachmentsController::class, 'general_attachment_store_or_update']);
+    Route::post('caf/general-attachment-view', [GeneralAttachmentsController::class, 'general_attachment_view']);
 
-    Route::post('bank-detail-store', [BankDetailController::class, 'bank_detail_store_or_update']);
-    Route::post('bank-detail-view', [BankDetailController::class, 'bank_detail_view']);
+    Route::post('caf/bank-detail-store', [BankDetailController::class, 'bank_detail_store_or_update']);
+    Route::post('caf/bank-detail-view', [BankDetailController::class, 'bank_detail_view']);
 
-    Route::post('activity-store', [ActivityController::class, 'activity_store']);
-    Route::post('activity-delete', [ActivityController::class, 'activity_delete']);
+    Route::post('caf/activity-store', [ActivityController::class, 'activity_store']);
+    Route::post('caf/activity-delete', [ActivityController::class, 'activity_delete']);
 
     Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
     Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);

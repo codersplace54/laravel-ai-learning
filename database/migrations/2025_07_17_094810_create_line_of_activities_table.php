@@ -12,7 +12,7 @@ return new class extends Migration
     {
         Schema::create('line_of_activities', function (Blueprint $table) {
             $table->id();
-            $table->bigInteger('user_id');
+            $table->bigInteger('user_id')->nullable();
             $table->enum('thrust_sector', [
                 'Agri & Horticultural Produce',
                 'Bamboo',
@@ -22,7 +22,7 @@ return new class extends Migration
                 'Rubber',
                 'Tea',
                 'Tourism Promoting Activites(Water-Sports, Ropeways, Adventure and Leisure Sports)'
-            ]);
+            ])->nullable();
             $table->timestamps();
         });
     }

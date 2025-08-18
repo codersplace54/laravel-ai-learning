@@ -14,15 +14,15 @@ return new class extends Migration
         Schema::create('partner_share_president_or_secretary_details', function (Blueprint $table) {
             $table->id();
             $table->bigInteger('user_id')->nullable();
-            $table->string('name');
-            $table->string('fathers_name');
+            $table->string('name')->nullable();
+            $table->string('fathers_name')->nullable();
             $table->integer('age')->nullable();
             $table->string('sex')->nullable();
             $table->string('social_status')->nullable();
             $table->string('profession')->nullable();
             $table->text('permanent_address')->nullable();
-            $table->string('mobile_no');
-            $table->date('date_of_birth');
+            $table->string('mobile_no')->nullable();
+            $table->date('date_of_birth')->nullable();
             $table->date('date_of_joining')->nullable();
             $table->string('id_proof_doc')->nullable();
             $table->string('signature_image')->nullable();

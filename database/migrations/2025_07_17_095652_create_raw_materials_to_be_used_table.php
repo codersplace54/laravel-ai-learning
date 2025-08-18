@@ -11,7 +11,7 @@ return new class extends Migration
     {
         Schema::create('raw_materials_to_be_used', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('user_id')->nullable();
             $table->string('raw_material_name')->nullable();;
             $table->string('raw_material_quantity_per_month')->nullable();;
             $table->enum('raw_material_unit', [
@@ -25,7 +25,7 @@ return new class extends Migration
                 'Tonnes Numbers Per Month',
                 'Metric Tonnes Numbers Per Month',
                 'Million Unit (MU)'
-            ]);
+            ])->nullable();
             $table->timestamps();
         });
     }

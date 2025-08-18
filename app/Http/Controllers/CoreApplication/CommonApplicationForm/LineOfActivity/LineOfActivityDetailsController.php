@@ -26,20 +26,22 @@ class LineOfActivityDetailsController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $request->validate([
-                'thrust_sector' => 'required|in:Agri & Horticultural Produce,Bamboo,Gas,Hospital/Nursing Home,Hotel,Rubber,Tea,Tourism Promoting Activites(Water-Sports, Ropeways, Adventure and Leisure Sports)',
+            if ($request->save_data != 1) {
+                $request->validate([
+                    'thrust_sector' => 'required|in:Agri & Horticultural Produce,Bamboo,Gas,Hospital/Nursing Home,Hotel,Rubber,Tea,Tourism Promoting Activites(Water-Sports, Ropeways, Adventure and Leisure Sports)',
 
-                'raw_materials' => 'required|array',
-                'raw_materials.*.raw_material_name' => 'required|string',
-                'raw_materials.*.raw_material_quantity_per_month' => 'required|string',
-                'raw_materials.*.raw_material_unit' => 'required|in:Liters Numbers Per Month,Kilo Liters Number Per Month,Meter Numbers Per Month,Square Meter Numbers Per Month,Cubic Meter Numbers Per Month,Foot Numbers Per Month,Square Foot Numbers Per Month,Tonnes Numbers Per Month,Metric Tonnes Numbers Per Month,Million Unit (MU)',
+                    'raw_materials' => 'required|array',
+                    'raw_materials.*.raw_material_name' => 'required|string',
+                    'raw_materials.*.raw_material_quantity_per_month' => 'required|string',
+                    'raw_materials.*.raw_material_unit' => 'required|in:Liters Numbers Per Month,Kilo Liters Number Per Month,Meter Numbers Per Month,Square Meter Numbers Per Month,Cubic Meter Numbers Per Month,Foot Numbers Per Month,Square Foot Numbers Per Month,Tonnes Numbers Per Month,Metric Tonnes Numbers Per Month,Million Unit (MU)',
 
-                'products' => 'required|array',
-                'products.*.product_name' => 'required|string',
-                'products.*.product_production_capacity_per_month' => 'required|string',
-                'products.*.product_average_production_per_month' => 'required|string',
-                'products.*.unit' => 'required|in:Liters Numbers Per Month,Kilo Liters Number Per Month,Meter Numbers Per Month,Square Meter Numbers Per Month,Cubic Meter Numbers Per Month,Foot Numbers Per Month,Square Foot Numbers Per Month,Tonnes Numbers Per Month,Metric Tonnes Numbers Per Month,Million Unit (MU)',
-            ]);
+                    'products' => 'required|array',
+                    'products.*.product_name' => 'required|string',
+                    'products.*.product_production_capacity_per_month' => 'required|string',
+                    'products.*.product_average_production_per_month' => 'required|string',
+                    'products.*.unit' => 'required|in:Liters Numbers Per Month,Kilo Liters Number Per Month,Meter Numbers Per Month,Square Meter Numbers Per Month,Cubic Meter Numbers Per Month,Foot Numbers Per Month,Square Foot Numbers Per Month,Tonnes Numbers Per Month,Metric Tonnes Numbers Per Month,Million Unit (MU)',
+                ]);
+            }
 
             DB::beginTransaction();
 

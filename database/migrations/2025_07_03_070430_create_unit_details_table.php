@@ -11,20 +11,20 @@ return new class extends Migration
         Schema::create('unit_details', function (Blueprint $table) {
             $table->id();
             $table->bigInteger('user_id')->unique();
-            $table->string('unit_name');
-            $table->string('unit_address');
-            $table->string('pin_no');
+            $table->string('unit_name')->nullable();
+            $table->string('unit_address')->nullable();
+            $table->string('pin_no')->nullable();
             $table->string('post_office')->nullable();
             $table->string('contact_no')->nullable();
             $table->string('fax')->nullable();
             $table->string('email')->nullable();
             $table->string('website')->nullable();
 
-            $table->string('unit_location_district');
-            $table->string('unit_location_subdivision');
-            $table->string('unit_location_police_station');
-            $table->enum('unit_location_land_type', ['Industrial Estate', 'Panchayat', 'Municipality']);
-            $table->enum('unit_location_area_type', ['Urban', 'Rural']);
+            $table->string('unit_location_district')->nullable();
+            $table->string('unit_location_subdivision')->nullable();
+            $table->string('unit_location_police_station')->nullable();
+            $table->enum('unit_location_land_type', ['Industrial Estate', 'Panchayat', 'Municipality'])->nullable();
+            $table->enum('unit_location_area_type', ['Urban', 'Rural'])->nullable();
 
             $table->string('unit_location_estate_name')->nullable();
             $table->string('unit_location_plot_no')->nullable();
@@ -46,7 +46,7 @@ return new class extends Migration
             $table->enum('land_record_details_classification_of_land', ['Agriculture', 'Commercial', 'Residential', 'Industrial'])->nullable();
             $table->string('land_record_details_land_area')->nullable();
             $table->enum('land_record_details_unit', ['Sq Mtr', 'Acre', 'Hector'])->nullable();
-            
+
             $table->string('construction_details_load_bearing_in_sq_mtr')->nullable();
             $table->string('construction_details_rcc_building_in_sq_mtr')->nullable();
             $table->string('construction_details_others_construction')->nullable();
@@ -65,7 +65,7 @@ return new class extends Migration
             $table->string('employment_details_others_count')->nullable();
             $table->string('employment_details_total_employment')->nullable();
 
-            $table->string('annual_turnover');
+            $table->string('annual_turnover')->nullable();
             $table->enum('category_of_enterprise', ['Micro', 'Small', 'Medium', 'Large'])->nullable();
             $table->string('working_session')->nullable();
             $table->longText('product_manufacturing_process')->nullable();
