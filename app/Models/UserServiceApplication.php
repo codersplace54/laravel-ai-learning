@@ -38,6 +38,7 @@ class UserServiceApplication extends Model
         'NSW_Application_Save_ID',
         'NSW_license_status',
         'NSW_Push_Document_ID',
+        'final_fee',
         'created_at',
         'updated_at',
     ];

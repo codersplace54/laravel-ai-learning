@@ -75,6 +75,8 @@ class UserServiceApplicationController extends Controller
                 $noc_rejection_certificate = $file->storeAs("uploads/$user->id/noc_rejection_certificates", $filename, 'public');
             }
 
+            $final_fee = $this->calculate_final_fee($request->service_id, $request->application_data);
+
             $user_service_application = UserServiceApplication::create([
                 'user_id'               => $user->id,
                 'service_id'            => $request->service_id,
@@ -106,10 +108,8 @@ class UserServiceApplicationController extends Controller
                 'NSW_Application_Save_ID' => $request->NSW_Application_Save_ID,
                 'NSW_license_status'    => $request->NSW_license_status,
                 'NSW_Push_Document_ID'  => $request->NSW_Push_Document_ID,
+                'final_fee'            => $final_fee
             ]);
-
-
-            $final_fee = $this->calculate_final_fee($request->service_id, $request->application_data);
 
             $approval_flow = ServiceApprovalFlow::where('service_id', $request->service_id)
                 ->orderBy('step_number', 'asc')

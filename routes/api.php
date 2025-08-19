@@ -20,6 +20,7 @@ use App\Http\Controllers\Service\ServiceFeeRuleController;
 use App\Http\Controllers\Service\ServiceApprovalFlowController;
 use App\Http\Controllers\Service\UserServiceApplicationController;
 use App\Http\Controllers\Service\HolidayController;
+use App\Http\Controllers\Service\ServiceController;
 
 
 
@@ -121,4 +122,15 @@ Route::middleware('auth:api')->group(function () {
     Route::post('holidays-update', [HolidayController::class, 'holidays_update']);
     Route::post('holidays-view', [HolidayController::class, 'holidays_view']);
     Route::post('holiday-delete', [HolidayController::class, 'holiday_delete']);
+
+    Route::prefix('public')->group(function () {
+        Route::post('/services/count', [ServiceController::class, 'get_total_services']);
+        Route::post('/applications/count-by-service', [ServiceController::class, 'get_applications_count_by_service']);
+        Route::post('/fees/total', [ServiceController::class, 'get_total_fees_paid_all_services']);
+        Route::post('/fees/per-service', [ServiceController::class, 'get_total_fees_paid_per_service']);
+        Route::post('/fees/avg-per-service', [ServiceController::class, 'get_avg_fees_paid_per_service']);
+        Route::post('/approvals/avg-timeline-per-service', [ServiceController::class, 'get_average_approval_timeline_per_service']);
+        Route::post('/applications/approved-count-per-service', [ServiceController::class, 'get_approved_applications_per_service']);
+        Route::post('/applications/pending-count-per-service', [ServiceController::class, 'get_pending_applications_per_service']);
+    });
 });
