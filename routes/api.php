@@ -21,6 +21,7 @@ use App\Http\Controllers\Service\ServiceApprovalFlowController;
 use App\Http\Controllers\Service\UserServiceApplicationController;
 use App\Http\Controllers\Service\HolidayController;
 use App\Http\Controllers\Service\ServiceController;
+use App\Http\Controllers\Subdivision\TripuraController;
 
 
 
@@ -132,5 +133,10 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/approvals/avg-timeline-per-service', [ServiceController::class, 'get_average_approval_timeline_per_service']);
         Route::post('/applications/approved-count-per-service', [ServiceController::class, 'get_approved_applications_per_service']);
         Route::post('/applications/pending-count-per-service', [ServiceController::class, 'get_pending_applications_per_service']);
+
+        Route::post('/tripura/districts', [TripuraController::class, 'get_districts']);
+        Route::post('/tripura/subdivision', [TripuraController::class, 'get_subdivisions']);
+        Route::post('/tripura/ulbs', [TripuraController::class, 'get_ulbs']);
+        Route::post('/tripura/wards', [TripuraController::class, 'get_wards']);
     });
 });

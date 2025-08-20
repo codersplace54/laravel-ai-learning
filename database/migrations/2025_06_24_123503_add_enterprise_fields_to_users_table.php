@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('bin')->unique()->nullable()->after('user_name');
             $table->text('registered_enterprise_address')->after('bin');
             $table->string('registered_enterprise_city')->after('registered_enterprise_address');
-            $table->enum('user_type', ['citizen', 'department'])->default('department')->after('registered_enterprise_city');
+            $table->enum('user_type', ['Individual'])->default('Individual')->after('registered_enterprise_city');
             $table->enum('status', ['active', 'blocked'])->default('active');
             $table->text('current_token')->nullable()->after('status');
         });
