@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\CoreApplication;
+namespace App\Http\Controllers\CoreApplication\CommonApplicationForm;
 
 use Illuminate\Http\Request;
 use App\Models\EnterpriseDetail;
