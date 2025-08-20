@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthController;
-use App\Http\Controllers\CoreApplication\EnterpriseDetailController;
+use App\Http\Controllers\CoreApplication\CommonApplicationForm\EnterpriseDetailController;
 use App\Http\Controllers\Role\RoleController;
 use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\Department\DepartmentController;
