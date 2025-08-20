@@ -30,7 +30,7 @@ class UserController extends Controller
                     'user_name' => 'required|string|max:100|unique:users,user_name',
                     'registered_enterprise_address' => 'required|string',
                     'registered_enterprise_city' => 'required|string',
-                    'user_type' => 'required|string|in:citizen,department',
+                    'user_type' => 'required|string|in:Individual',
                     'password' => 'required|string|min:6',
                 ],
                 [
@@ -45,7 +45,7 @@ class UserController extends Controller
                     'registered_enterprise_address.required' => 'Enterprise address is required.',
                     'registered_enterprise_city.required' => 'Enterprise city is required.',
                     'user_type.required' => 'User type is required.',
-                    'user_type.in' => 'User type must be either citizen or department.',
+                    'user_type.in' => 'User type must be individual.',
                     'password.required' => 'Password is required.',
                     'password.min' => 'Password must be at least 6 characters.',
                 ]
@@ -152,7 +152,7 @@ class UserController extends Controller
                 $rules['registered_enterprise_city'] = 'required|string';
             }
             if ($request->user_type !== null) {
-                $rules['user_type'] = 'required|in:citizen,department';
+                $rules['user_type'] = 'required|in:Individual';
             }
             if ($request->password !== null) {
                 $rules['password'] = 'nullable|string|min:6';
@@ -173,7 +173,7 @@ class UserController extends Controller
                 'registered_enterprise_address.required' => 'Enterprise address is required.',
                 'registered_enterprise_city.required' => 'Enterprise city is required.',
                 'user_type.required' => 'User type is required.',
-                'user_type.in' => 'User type must be either citizen or department.',
+                'user_type.in' => 'User type must be individual.',
                 'password.min' => 'Password must be at least 6 characters long.',
             ]);
 
