@@ -57,6 +57,9 @@ class UserServiceApplicationController extends Controller
                 'NSW_Application_Save_ID' => 'nullable|string|max:255',
                 'NSW_license_status'    => 'nullable|in:pending,approved,rejected,expired',
                 'NSW_Push_Document_ID'  => 'nullable|string|max:255',
+                'final_fee'             => 'nullable|string',
+                'current_step_number'   => 'nullable|date',
+                'max_processing_date'   => 'nullable|string',
             ]);
 
             DB::beginTransaction();
@@ -76,6 +79,13 @@ class UserServiceApplicationController extends Controller
             }
 
             $final_fee = $this->calculate_final_fee($request->service_id, $request->application_data);
+            $approval_flow = ServiceApprovalFlow::where('service_id', $request->service_id)
+                ->orderBy('step_number', 'asc')
+                ->first();
+
+            $application_date = Carbon::parse($request->NOC_application_date ?? now());
+            $target_days = $service->target_days ?? 0;
+            $max_processing_date = $this->add_working_days($application_date, $target_days);
 
             $user_service_application = UserServiceApplication::create([
                 'user_id'               => $user->id,
@@ -108,16 +118,10 @@ class UserServiceApplicationController extends Controller
                 'NSW_Application_Save_ID' => $request->NSW_Application_Save_ID,
                 'NSW_license_status'    => $request->NSW_license_status,
                 'NSW_Push_Document_ID'  => $request->NSW_Push_Document_ID,
-                'final_fee'            => $final_fee
+                'final_fee'             => $final_fee,
+                'current_step_number'   => $approval_flow->step_number,
+                'max_processing_date'   => $max_processing_date
             ]);
-
-            $approval_flow = ServiceApprovalFlow::where('service_id', $request->service_id)
-                ->orderBy('step_number', 'asc')
-                ->first();
-
-            $application_date = Carbon::parse($request->NOC_application_date ?? now());
-            $target_days = $service->target_days ?? 0;
-            $max_processing_date = $this->add_working_days($application_date, $target_days);
 
 
 
@@ -206,6 +210,9 @@ class UserServiceApplicationController extends Controller
                 'NSW_Application_Save_ID' => 'nullable|string|max:255',
                 'NSW_license_status'   => 'nullable|in:pending,approved,rejected,expired',
                 'NSW_Push_Document_ID' => 'nullable|string|max:255',
+                'final_fee'             => 'nullable|string',
+                'current_step_number'   => 'nullable|date',
+                'max_processing_date'   => 'nullable|string',
             ]);
 
             DB::beginTransaction();
@@ -238,6 +245,16 @@ class UserServiceApplicationController extends Controller
                 $user_service_application->application_data = json_encode($request->application_data);
             }
 
+            $final_fee = $this->calculate_final_fee($request->service_id, $request->application_data);
+
+            $approval_flow = ServiceApprovalFlow::where('service_id', $request->service_id)
+                ->orderBy('step_number', 'asc')
+                ->first();
+
+            $application_date = Carbon::parse($request->NOC_application_date ?? now());
+            $target_days = $service->target_days ?? 0;
+            $max_processing_date = $this->add_working_days($application_date, $target_days);
+
             $user_service_application->update([
                 'user_id'               => $user->id,
                 'service_id'            => $request->service_id,
@@ -269,17 +286,10 @@ class UserServiceApplicationController extends Controller
                 'NSW_Application_Save_ID' => $request->NSW_Application_Save_ID,
                 'NSW_license_status'    => $request->NSW_license_status,
                 'NSW_Push_Document_ID'  => $request->NSW_Push_Document_ID,
+                'final_fee'             => $final_fee,
+                'current_step_number'   => $approval_flow->step_number,
+                'max_processing_date'   => $max_processing_date
             ]);
-
-            $final_fee = $this->calculate_final_fee($request->service_id, $request->application_data);
-
-            $approval_flow = ServiceApprovalFlow::where('service_id', $request->service_id)
-                ->orderBy('step_number', 'asc')
-                ->first();
-
-            $application_date = Carbon::parse($request->NOC_application_date ?? now());
-            $target_days = $service->target_days ?? 0;
-            $max_processing_date = $this->add_working_days($application_date, $target_days);
 
             DB::commit();
 

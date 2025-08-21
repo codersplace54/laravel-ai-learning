@@ -39,6 +39,8 @@ class UserServiceApplication extends Model
         'NSW_license_status',
         'NSW_Push_Document_ID',
         'final_fee',
+        'current_step_number',
+        'max_processing_date',
         'created_at',
         'updated_at',
     ];
