@@ -42,6 +42,8 @@ return new class extends Migration
             $table->enum('NSW_license_status', ['pending', 'approved', 'rejected', 'expired'])->nullable();
             $table->string('NSW_Push_Document_ID')->nullable();
             $table->string('final_fee')->nullable();
+            $table->string('current_step_number')->nullable();
+            $table->string('max_processing_date')->nullable();
             $table->timestamps();
         });
     }
