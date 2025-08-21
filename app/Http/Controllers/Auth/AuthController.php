@@ -58,7 +58,12 @@ class AuthController extends Controller
                 'token' => $token,
                 'token_type' => 'bearer',
                 'expires_in' => JWTAuth::factory()->getTTL() * 60,
-                'user' => $user,
+                'data' => $user->only([
+                    'id',
+                    'authorized_person_name',
+                    'email_id',
+                    'user_type'
+                ])
             ]);
         } catch (JWTException $e) {
 
