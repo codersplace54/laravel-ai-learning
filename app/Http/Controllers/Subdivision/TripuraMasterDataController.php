@@ -5,9 +5,9 @@ namespace App\Http\Controllers\Subdivision;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Models\Tripura;
+use App\Models\TripuraMasterData;
 
-class TripuraController extends Controller
+class TripuraMasterDataController extends Controller
 {
     public function get_districts()
     {
@@ -18,9 +18,9 @@ class TripuraController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $districts = Tripura::select('district')
+            $districts = TripuraMasterData::select('district_code','district_name')
                 ->distinct()
-                ->orderBy('district')
+                ->orderBy('district_name')
                 ->get();
 
             return response()->json([
@@ -52,8 +52,9 @@ class TripuraController extends Controller
                 'district' => 'required|string'
             ]);
 
-            $subdivisions = Tripura::where('district', $request->district)
-                ->select('subdivision')
+            $subdivisions = TripuraMasterData::where('district_name', $request->district)
+                ->orWhere('district_code', $request->district)
+                ->select('sub_lgd_code','sub_division')
                 ->distinct()
                 ->get();
 
@@ -86,8 +87,9 @@ class TripuraController extends Controller
                 'subdivision' => 'required|string'
             ]);
 
-            $ulbs = Tripura::where('subdivision', $request->subdivision)
-                ->select('ulb')
+            $ulbs = TripuraMasterData::where('sub_division', $request->subdivision)
+                ->orWhere('sub_lgd_code', $request->subdivision)
+                ->select('ulb_lgd_code','ulb_name')
                 ->distinct()
                 ->get();
 
@@ -120,8 +122,9 @@ class TripuraController extends Controller
                 'ulb' => 'required|string'
             ]);
 
-            $wards = Tripura::where('ulb', $request->ulb)
-                ->select('ward')
+            $wards = TripuraMasterData::where('ulb_name', $request->ulb)
+                ->orWhere('ulb_lgd_code', $request->ulb)
+                ->select('gp_vc_ward_lgd_code','name_of_gp_vc_or_ward')
                 ->distinct()
                 ->get();
 

@@ -4,16 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class Tripura extends Model
+class TripuraMasterData extends Model
 {
-    protected $table = "tripura";
-
     protected $fillable = [
         'id',
-        'district',
-        'subdivision',
-        'ulb',
-        'ward',
+        'district_name',
+        'district_code',
+        'sub_division',
+        'sub_lgd_code',
+        'ulb_name',
+        'ulb_lgd_code',
+        'name_of_gp_vc_or_ward',
+        'gp_vc_ward_lgd_code',
         'created_at',
         'updated_at',
     ];

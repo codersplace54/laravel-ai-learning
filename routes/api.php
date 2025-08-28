@@ -21,7 +21,7 @@ use App\Http\Controllers\Service\ServiceApprovalFlowController;
 use App\Http\Controllers\Service\UserServiceApplicationController;
 use App\Http\Controllers\Service\HolidayController;
 use App\Http\Controllers\Service\ServiceController;
-use App\Http\Controllers\Subdivision\TripuraController;
+use App\Http\Controllers\Subdivision\TripuraMasterDataController;
 use App\Http\Controllers\SchemaController;
 
 
@@ -135,10 +135,10 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/applications/approved-count-per-service', [ServiceController::class, 'get_approved_applications_per_service']);
         Route::post('/applications/pending-count-per-service', [ServiceController::class, 'get_pending_applications_per_service']);
 
-        Route::post('/tripura/districts', [TripuraController::class, 'get_districts']);
-        Route::post('/tripura/subdivision', [TripuraController::class, 'get_subdivisions']);
-        Route::post('/tripura/ulbs', [TripuraController::class, 'get_ulbs']);
-        Route::post('/tripura/wards', [TripuraController::class, 'get_wards']);
+        Route::post('/tripura/districts', [TripuraMasterDataController::class, 'get_districts']);
+        Route::post('/tripura/subdivision', [TripuraMasterDataController::class, 'get_subdivisions']);
+        Route::post('/tripura/ulbs', [TripuraMasterDataController::class, 'get_ulbs']);
+        Route::post('/tripura/wards', [TripuraMasterDataController::class, 'get_wards']);
     });
 
      Route::prefix('department')->group(function () {
