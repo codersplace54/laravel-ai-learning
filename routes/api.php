@@ -87,6 +87,7 @@ Route::middleware('auth:api')->group(function () {
 
     Route::post('caf/activity-store', [ActivityController::class, 'activity_store']);
     Route::post('caf/activity-delete', [ActivityController::class, 'activity_delete']);
+    Route::post('caf/activity-view', [ActivityController::class, 'activity_view']);
 
     Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
     Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);
