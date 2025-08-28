@@ -135,10 +135,10 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/applications/approved-count-per-service', [ServiceController::class, 'get_approved_applications_per_service']);
         Route::post('/applications/pending-count-per-service', [ServiceController::class, 'get_pending_applications_per_service']);
 
-        Route::post('/tripura/districts', [TripuraMasterDataController::class, 'get_districts']);
-        Route::post('/tripura/subdivision', [TripuraMasterDataController::class, 'get_subdivisions']);
-        Route::post('/tripura/ulbs', [TripuraMasterDataController::class, 'get_ulbs']);
-        Route::post('/tripura/wards', [TripuraMasterDataController::class, 'get_wards']);
+        Route::post('/tripura/get-all-districts', [TripuraMasterDataController::class, 'get_districts']);
+        Route::post('/tripura/get-sub-subdivisions', [TripuraMasterDataController::class, 'get_subdivisions']);
+        Route::post('/tripura/get-block-names', [TripuraMasterDataController::class, 'get_ulbs']);
+        Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'get_wards']);
     });
 
      Route::prefix('department')->group(function () {
