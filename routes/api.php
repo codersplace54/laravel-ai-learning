@@ -22,6 +22,7 @@ use App\Http\Controllers\Service\UserServiceApplicationController;
 use App\Http\Controllers\Service\HolidayController;
 use App\Http\Controllers\Service\ServiceController;
 use App\Http\Controllers\Subdivision\TripuraController;
+use App\Http\Controllers\SchemaController;
 
 
 
@@ -139,4 +140,13 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/tripura/ulbs', [TripuraController::class, 'get_ulbs']);
         Route::post('/tripura/wards', [TripuraController::class, 'get_wards']);
     });
+
+     Route::prefix('department')->group(function () {
+        Route::post('/services', [ServiceController::class, 'get_services_by_department']);
+        Route::post('/applications', [ServiceController::class, 'get_department_applications']);
+        Route::post('/applications/{id}', [ServiceController::class, 'get_application_details']);
+
+     });
+
+     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
 });
