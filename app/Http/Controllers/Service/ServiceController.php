@@ -7,7 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\ServiceMaster;
 use App\Models\UserServiceApplication;
-use App\Models\Department;
+use App\Models\ApplicationWorkflowHistory;
+
 
 class ServiceController extends Controller
 {

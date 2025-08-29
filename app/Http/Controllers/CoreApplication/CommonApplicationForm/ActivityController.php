@@ -132,4 +132,41 @@ class ActivityController extends Controller
             ], 500);
         }
     }
+
+    public function activity_view()
+    {
+
+        try {
+
+
+            $user = Auth::user();
+
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $activities = Activity::where('user_id', $user->id)->get();
+
+            if (!$activities) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No activities found for this user.'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Activities fetched successfully.',
+                'data' => $activities,
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching.',
+                'error_message' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
