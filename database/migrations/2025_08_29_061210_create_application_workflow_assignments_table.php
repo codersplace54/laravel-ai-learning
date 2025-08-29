@@ -9,24 +9,26 @@ return new class extends Migration
 
     public function up(): void
     {
-        Schema::create('application_workflow_history', function (Blueprint $table) {
+        Schema::create('application_workflow_assignments', function (Blueprint $table) {
             $table->id();
             $table->bigInteger('application_id');
             $table->bigInteger('service_id');
-            $table->unsignedInteger('step_number');
+            $table->integer('step_number');
             $table->enum('step_type', ['validation', 'review', 'screening', 'scrutiny', 'approval']);
             $table->bigInteger('department_id');
             $table->enum('hierarchy_level', ['block', 'subdivision', 'district', 'state1', 'state2', 'state3']);
-            $table->bigInteger('action_taken_by');
-            $table->dateTime('action_taken_at');
-            $table->enum('status', ['pending', 'in_progress', 'approved', 'rejected','send_back']);
+            $table->boolean('assigned_to_group')->default(true);
+            $table->enum('status', ['pending', 'in_progress', 'approved', 'rejected','send_back'])->default('pending');
+            $table->bigInteger('action_taken_by')->nullable();
+            $table->dateTime('action_taken_at')->nullable();
             $table->text('remarks')->nullable();
             $table->timestamps();
         });
     }
 
+
     public function down(): void
     {
-        Schema::dropIfExists('application_workflow_history');
+        Schema::dropIfExists('application_workflow_assignments');
     }
 };

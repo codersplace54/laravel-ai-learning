@@ -146,6 +146,9 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/services', [ServiceController::class, 'get_services_by_department']);
         Route::post('/applications', [ServiceController::class, 'get_department_applications']);
         Route::post('/applications/{id}', [ServiceController::class, 'get_application_details']);
+        Route::post('/applications/{id}/status', [ServiceController::class, 'update_application_status']);
+        Route::post('/dashboard', [ServiceController::class, 'get_department_dashboard']);
+        Route::post('/workflow-history/{application_id}', [ServiceController::class, 'get_work_flow_history']);
 
      });
 
