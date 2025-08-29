@@ -12,6 +12,7 @@ use App\Models\ServiceFeeRule;
 use App\Models\ServiceApprovalFlow;
 use Carbon\Carbon;
 use App\Models\Holiday;
+use App\Models\ApplicationWorkflowAssignment;
 
 
 class UserServiceApplicationController extends Controller
@@ -121,6 +122,20 @@ class UserServiceApplicationController extends Controller
                 'final_fee'             => $final_fee,
                 'current_step_number'   => $approval_flow->step_number,
                 'max_processing_date'   => $max_processing_date
+            ]);
+
+            ApplicationWorkflowAssignment::create([
+                'application_id'     => $user_service_application->id,
+                'service_id'         => $request->service_id,
+                'step_number'        => $approval_flow->step_number,
+                'step_type'          => $approval_flow->step_type,
+                'department_id'      => $approval_flow->department_id,
+                'hierarchy_level'    => $approval_flow->hierarchy_level,
+                'assigned_to_group'  => true,
+                'status'             => 'pending',
+                'action_taken_by'    => $user->id,
+                'action_taken_at'    => null,
+                'remarks'            => null,
             ]);
 
 

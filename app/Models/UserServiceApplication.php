@@ -59,4 +59,10 @@ class UserServiceApplication extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+
+    public function workflow()
+    {
+        return $this->hasMany(ApplicationWorkflowAssignment::class, 'application_id', 'id')
+            ->orderBy('step_number');
+    }
 }

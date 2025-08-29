@@ -5,9 +5,13 @@ namespace App\Http\Controllers\Service;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use App\Models\ServiceMaster;
 use App\Models\UserServiceApplication;
+use App\Models\ApplicationWorkflowAssignment;
 use App\Models\ApplicationWorkflowHistory;
+use App\Models\ServiceApprovalFlow;
+use App\Models\Department;
 
 
 class ServiceController extends Controller
@@ -470,14 +474,14 @@ class ServiceController extends Controller
             $application = UserServiceApplication::with([
                 'service:id,service_title_or_description',
                 'user:id,authorized_person_name,mobile_no,email_id',
-                // 'workflow.department:id,name'
+                'workflow.department:id,name'
             ])
                 ->where('id', $id)
                 ->first();
 
             if (!$application) {
                 return response()->json([
-                    'success' => false,
+                    'status' => 0,
                     'message' => 'Application not found'
                 ], 404);
             }
@@ -497,26 +501,305 @@ class ServiceController extends Controller
                 'applied_fee'      => $application->applied_fee,
                 'approved_fee'     => $application->approved_fee,
                 'payment_status'   => $application->payment_status,
-                // 'workflow' => $application->workflow->map(function ($flow) {
-                //     return [
-                //         'step_number'     => $flow->step_number,
-                //         'step_type'       => $flow->step_type,
-                //         'department'      => $flow->department->name ?? null
-                //     ];
-                // }),
+                'workflow' => $application->workflow->map(function ($flow) {
+                    return [
+                        'step_number'     => $flow->step_number,
+                        'step_type'       => $flow->step_type,
+                        'department'      => $flow->department->name,
+                        'status'          => $flow->status,
+                        'action_taken_by' => $flow->action_taken_by,
+                        'action_taken_at' => $flow->action_taken_at,
+                        'remarks'         => $flow->remarks,
+                    ];
+                }),
             ];
 
             return response()->json([
-                'success' => true,
+                'status' => 1,
                 'data'    => $response
             ], 200);
         } catch (\Exception $e) {
 
 
             return response()->json([
-                'success' => false,
+                'status' => 0,
                 'message' => 'Something went wrong while fetching application details.',
                 'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function update_application_status(Request $request, $id)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'status'         => 'required|in:pending,approved,rejected,under_review,send_back',
+                'remarks'        => 'nullable|string',
+                'action_taken_by' => 'required|integer|exists:users,id',
+            ]);
+
+            DB::beginTransaction();
+
+
+            $application = UserServiceApplication::where('id', $id)->first();
+
+            $current_step = ApplicationWorkflowAssignment::where('application_id', $application->id)
+                ->where('step_number', $application->current_step_number)
+                ->firstOrFail();
+
+            $current_step->update([
+                'status'          => $request->status,
+                'remarks'         => $request->remarks,
+                'action_taken_by' => $request->action_taken_by,
+                'action_taken_at' => now(),
+            ]);
+
+            ApplicationWorkflowHistory::create([
+                'application_id'  => $application->id,
+                'service_id'      => $application->service_id,
+                'step_number'     => $current_step->step_number,
+                'step_type'       => $current_step->step_type,
+                'department_id'   => $current_step->department_id,
+                'status'          => $request->status,
+                'action_taken_by' => $request->action_taken_by,
+                'action_taken_at' => now(),
+                'remarks'         => $request->remarks,
+            ]);
+
+            $next_step = null;
+
+            if ($request->status === 'approved') {
+                $next_step_flow = ServiceApprovalFlow::where('service_id', $application->service_id)
+                    ->where('step_number', '>', $current_step->step_number)
+                    ->orderBy('step_number')
+                    ->first();
+
+                if ($next_step_flow) {
+                    $next_step = ApplicationWorkflowAssignment::create([
+                        'application_id'  => $application->id,
+                        'service_id'      => $application->service_id,
+                        'step_number'     => $next_step_flow->step_number,
+                        'step_type'       => $next_step_flow->step_type,
+                        'department_id'   => $next_step_flow->department_id,
+                        'action_taken_by' => $request->action_taken_by,
+                        'action_taken_at' => now(),
+                        'remarks'         => $request->remarks,
+                        'status'          => 'pending',
+                    ]);
+
+                    $application->update([
+                        'current_step_number' => $next_step_flow->step_number,
+                        'status'              => 'under_review',
+                    ]);
+                } else {
+                    $application->update(['status' => 'approved']);
+                }
+            } elseif ($request->status === 'rejected') {
+
+                $application->update(['status' => 'rejected']);
+            } elseif ($request->status === 'send_back') {
+
+                $first_step_flow = ServiceApprovalFlow::where('service_id', $application->service_id)
+                    ->orderBy('step_number', 'asc')
+                    ->first();
+
+                if ($first_step_flow) {
+                    $next_step = ApplicationWorkflowAssignment::create([
+                        'application_id'  => $application->id,
+                        'service_id'      => $application->service_id,
+                        'step_number'     => $first_step_flow->step_number,
+                        'step_type'       => $first_step_flow->step_type,
+                        'department_id'   => $first_step_flow->department_id,
+                        'action_taken_by' => $request->action_taken_by,
+                        'action_taken_at' => now(),
+                        'remarks'         => $request->remarks,
+                        'status'          => 'pending',
+                    ]);
+
+                    $application->update([
+                        'current_step_number' => $first_step_flow->step_number,
+                        'status'              => 'submitted',
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status'   => 1,
+                'message'   => 'Application status updated',
+                'next_step' => $next_step ? [
+                    'step_number'     => $next_step->step_number,
+                    'department_id'   => $next_step->department_id,
+                    'hierarchy_level' => $next_step->hierarchy_level
+                ] : null
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while updating status',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function get_department_dashboard(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'department_id' => 'required|integer|exists:departments,id',
+            ]);
+
+            $department = Department::where('id', $request->department_id)
+                ->first();
+
+            if (!$department) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Department not found or inactive.'
+                ], 404);
+            }
+            $department_id = $department->id;
+
+            $application = UserServiceApplication::whereHas('service', function ($val) use ($department_id) {
+                $val->where('department_id', $department_id);
+            })
+                ->selectRaw("
+                            COUNT(*) as total_applications,
+                            SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) as submitted,
+                            SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) as under_review,
+                            SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
+                            SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+                        ")
+                ->first();
+
+            $avg_processing_time_days = UserServiceApplication::whereHas('service', function ($val) use ($department_id) {
+                $val->where('department_id', $department_id);
+            })
+                ->selectRaw('AVG(DATEDIFF(max_processing_date, application_date)) as avg_days')
+                ->value('avg_days');
+
+            $service_breakdown = UserServiceApplication::whereHas('service', function ($val) use ($department_id) {
+                $val->where('department_id', $department_id);
+            })
+                ->selectRaw("
+                            service_id,
+                            COUNT(*) as total_applications,
+                            SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) as submitted,
+                            SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) as under_review,
+                            SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
+                            SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+                        ")
+                ->groupBy('service_id')
+                ->with('service:id,service_title_or_description')
+                ->get()
+                ->map(function ($row) {
+                    return [
+                        'service_id'   => $row->service_id,
+                        'service_name' => $row->service->service_title_or_description ?? null,
+                        'submitted'      => (int) $row->submitted,
+                        'under_review'   => (int) $row->under_review,
+                        'approved'     => (int) $row->approved,
+                        'rejected'     => (int) $row->rejected,
+                    ];
+                });
+
+            return response()->json([
+                'status' => 1,
+                'data' => [
+                    'total_applications'    => $application->total_applications,
+                    'submitted'              => $application->submitted,
+                    'under_review'           => $application->under_review,
+                    'approved'              => $application->approved,
+                    'rejected'              => $application->rejected,
+                    'avg_processing_time_days' => $avg_processing_time_days ? round($avg_processing_time_days, 2) : 0,
+                    'service_breakdown'     => $service_breakdown,
+                ]
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching dashboard data',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function get_work_flow_history($application_id)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $history = ApplicationWorkflowHistory::where('application_id', $application_id)
+                ->with(['department:id,name', 'actionTaker:id,authorized_person_name'])
+                ->orderBy('step_number')
+                ->get();
+
+            $pending_steps = ApplicationWorkflowAssignment::where('application_id', $application_id)
+                ->where('status', 'pending')
+                ->with('department:id,name')
+                ->get();
+
+            $data = [];
+
+            foreach ($history as $entry) {
+                $data[] = [
+                    'step_number'    => $entry->step_number,
+                    'department'     => $entry->department->name,
+                    'action_taken_by' => $entry->actionTaker->authorized_person_name,
+                    'status'         => $entry->status,
+                    'remarks'        => $entry->remarks,
+                    'timestamp'      => $entry->action_taken_at,
+                ];
+            }
+
+            foreach ($pending_steps as $step) {
+                $data[] = [
+                    'step_number' => $step->step_number,
+                    'department'  => $step->department->name,
+                    'status'      => 'pending',
+                ];
+            }
+
+            return response()->json([
+                'status' => 1,
+                'data'    => $data,
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching workflow history',
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }

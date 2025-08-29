@@ -48,4 +48,9 @@ class ServiceMaster extends Model
     {
         return $this->belongsTo(Department::class, 'department_id');
     }
+
+    public function applications()
+    {
+        return $this->hasMany(UserServiceApplication::class, 'service_id', 'id');
+    }
 }
