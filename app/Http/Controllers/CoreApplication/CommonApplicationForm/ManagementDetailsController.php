@@ -270,21 +270,46 @@ class ManagementDetailsController extends Controller
                     $signature_image = $file->storeAs("uploads/$user->id/partner_signature", $filename, 'public');
                 }
 
-                $partner_record = PartnerSharePresidentOrSecretaryDetail::create([
-                    'user_id' => $user->id,
-                    'name' => $partner['name'],
-                    'fathers_name' => $partner['fathers_name'],
-                    'age' => $partner['age'],
-                    'sex' => $partner['sex'],
-                    'social_status' => $partner['social_status'],
-                    'profession' => $partner['profession'],
-                    'permanent_address' => $partner['permanent_address'],
-                    'mobile_no' => $partner['mobile_no'],
-                    'date_of_birth' => $partner['date_of_birth'],
-                    'date_of_joining' => $partner['date_of_joining'],
-                    'id_proof_doc' => $id_proof_doc,
-                    'signature_image' => $signature_image,
-                ]);
+                if (!empty($partner->id)) {
+                    $partner_record = PartnerSharePresidentOrSecretaryDetail::where('user_id', $user->id)
+                        ->where('id', $partner->id)
+                        ->first();
+
+                    if ($partner_record) {
+                        $partner_record->update([
+                            'name' => $partner['name'],
+                            'fathers_name' => $partner['fathers_name'],
+                            'age' => $partner['age'],
+                            'sex' => $partner['sex'],
+                            'social_status' => $partner['social_status'],
+                            'profession' => $partner['profession'],
+                            'permanent_address' => $partner['permanent_address'],
+                            'mobile_no' => $partner['mobile_no'],
+                            'date_of_birth' => $partner['date_of_birth'],
+                            'date_of_joining' => $partner['date_of_joining'],
+                            'id_proof_doc' => $id_proof_doc ?? $partner_record->id_proof_doc,
+                            'signature_image' => $signature_image ?? $partner_record->signature_image,
+                        ]);
+                    }
+                } else {
+
+                    $partner_record = PartnerSharePresidentOrSecretaryDetail::create([
+                        'user_id' => $user->id,
+                        'name' => $partner['name'],
+                        'fathers_name' => $partner['fathers_name'],
+                        'age' => $partner['age'],
+                        'sex' => $partner['sex'],
+                        'social_status' => $partner['social_status'],
+                        'profession' => $partner['profession'],
+                        'permanent_address' => $partner['permanent_address'],
+                        'mobile_no' => $partner['mobile_no'],
+                        'date_of_birth' => $partner['date_of_birth'],
+                        'date_of_joining' => $partner['date_of_joining'],
+                        'id_proof_doc' => $id_proof_doc,
+                        'signature_image' => $signature_image,
+                    ]);
+                }
+                $partner_ids[] = $partner_record->id;
 
                 $partner_array = $this->get_file_urls(
                     $partner_record,
@@ -293,31 +318,77 @@ class ManagementDetailsController extends Controller
 
                 $partner_details_array[] = $partner_array;
             }
+            PartnerSharePresidentOrSecretaryDetail::where('user_id', $user->id)
+                ->whereNotIn('id', $partner_ids)
+                ->delete();
 
             $board_directors = [];
+            $director_ids = [];
             if ($request->has('board_of_directors')) {
                 foreach ($request->board_of_directors as $director) {
-                    $director_record = BoardOfDirector::create([
-                        'user_id' => $user->id,
-                        'name' => $director['name'],
-                        'permanent_address' => $director['permanent_address'] ?? null,
-                        'mobile_number' => $director['mobile_number'],
-                    ]);
-                    $board_directors[] = $director_record->toArray();
+                    if (!empty($director['id'])) {
+                        $director_record = BoardOfDirector::where('user_id', $user->id)
+                            ->where('id', $director['id'])
+                            ->first();
+
+                        if ($director_record) {
+                            $director_record->update([
+                                'name' => $director['name'],
+                                'permanent_address' => $director['permanent_address'] ?? null,
+                                'mobile_number' => $director['mobile_number'],
+                            ]);
+                        }
+                    } else {
+                        $director_record = BoardOfDirector::create([
+                            'user_id' => $user->id,
+                            'name' => $director['name'],
+                            'permanent_address' => $director['permanent_address'] ?? null,
+                            'mobile_number' => $director['mobile_number'],
+                        ]);
+                    }
+                    if (isset($director_record)) {
+                        $director_ids[] = $director_record->id;
+                        $board_directors[] = $director_record->toArray();
+                    }
                 }
+                BoardOfDirector::where('user_id', $user->id)
+                    ->whereNotIn('id', $director_ids)
+                    ->delete();
             }
 
+
             $chief_administrative_heads = [];
+            $head_ids = [];
             if ($request->has('chief_administrative_heads')) {
                 foreach ($request->chief_administrative_heads as $head) {
-                    $head_record = ChiefAdministrativeHead::create([
-                        'user_id' => $user->id,
-                        'name' => $head['name'],
-                        'permanent_address' => $head['permanent_address'] ?? null,
-                        'mobile_number' => $director['mobile_number'],
-                    ]);
-                    $chief_administrative_heads[] = $head_record->toArray();
+                    if (!empty($head['id'])) {
+                        $head_record = ChiefAdministrativeHead::where('user_id', $user->id)
+                            ->where('id', $head['id'])
+                            ->first();
+
+                        if ($head_record) {
+                            $head_record->update([
+                                'name' => $head['name'],
+                                'permanent_address' => $head['permanent_address'] ?? null,
+                                'mobile_number' => $head['mobile_number'],
+                            ]);
+                        }
+                    } else {
+                        $head_record = ChiefAdministrativeHead::create([
+                            'user_id' => $user->id,
+                            'name' => $head['name'],
+                            'permanent_address' => $head['permanent_address'] ?? null,
+                            'mobile_number' => $director['mobile_number'],
+                        ]);
+                    }
+                    if (isset($head_record)) {
+                        $head_ids[] = $head_record->id;
+                        $chief_administrative_heads[] = $head_record->toArray();
+                    }
                 }
+                ChiefAdministrativeHead::where('user_id', $user->id)
+                    ->whereNotIn('id', $head_ids)
+                    ->delete();
             }
 
             DB::commit();
