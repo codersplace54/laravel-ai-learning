@@ -19,40 +19,45 @@ class ActivityController extends Controller
 
             if ($request->save_data != 1) {
                 $request->validate([
-                    'activity_of_enterprise' => 'required|string',
-                    'nic_2_digit_code' => 'required|string',
-                    'nic_4_digit_code' => 'required|string',
-                    'nic_5_digit_code' => 'required|string',
+                    'activities' => 'required|array',
+                    'activities.*.activity_of_enterprise' => 'required|string',
+                    'activities.*.nic_2_digit_code' => 'required|string',
+                    'activities.*.nic_4_digit_code' => 'required|string',
+                    'activities.*.nic_5_digit_code' => 'required|string',
                 ]);
             }
 
             DB::beginTransaction();
 
-            $nic_5_digit_code_exist = Activity::where('nic_5_digit_code', $request->nic_5_digit_code)
-                ->where('user_id', Auth::id())
-                ->exists();
+            $list_of_activities = [];
+            foreach ($request->activities as $activity) {
+                $nic_5_digit_code_exist = Activity::where('nic_5_digit_code', $activity['nic_5_digit_code'])
+                    ->where('user_id', Auth::id())
+                    ->exists();
 
-            if ($nic_5_digit_code_exist) {
-                return response()->json([
-                    'status' => 0,
-                    'message' => "NIC 5 digit code '{$request->nic_5_digit_code}' already exists for this user."
-                ], 409);
+                if ($nic_5_digit_code_exist) {
+                    return response()->json([
+                        'status' => 0,
+                        'message' => "NIC 5 digit code '{$activity['nic_5_digit_code']}' already exists for this user."
+                    ], 409);
+                }
+
+                $list_of_activity = Activity::create([
+                    'user_id' => Auth::id(),
+                    'activity_of_enterprise' => $activity['activity_of_enterprise'],
+                    'nic_2_digit_code' => $activity['nic_2_digit_code'],
+                    'nic_4_digit_code' => $activity['nic_4_digit_code'],
+                    'nic_5_digit_code' => $activity['nic_5_digit_code'],
+                ]);
+                 $list_of_activities[] = $list_of_activity->toArray();
             }
-
-            $activity = Activity::create([
-                'user_id' => Auth::id(),
-                'activity_of_enterprise' => $request->activity_of_enterprise,
-                'nic_2_digit_code' => $request->nic_2_digit_code,
-                'nic_4_digit_code' => $request->nic_4_digit_code,
-                'nic_5_digit_code' => $request->nic_5_digit_code,
-            ]);
 
             DB::commit();
 
             return response()->json([
                 'status' => 1,
                 'message' => 'Activity saved successfully.',
-                'data' => $activity
+                'data' => $list_of_activities
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
 

@@ -20,7 +20,6 @@ return new class extends Migration
             $table->string('owner_aadhar_no')->nullable();
             $table->string('owner_details_mobile')->nullable();
             $table->string('owner_details_alternate_mobile')->nullable();
-            $table->string('owner_details_aadhar_no')->nullable();
             $table->enum('owner_details_status', [
                 'Owner',
                 'Managing Director',
