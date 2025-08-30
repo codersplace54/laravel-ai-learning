@@ -17,7 +17,6 @@ class ManagementDetails extends Model
         'owner_aadhar_no',
         'owner_details_mobile',
         'owner_details_alternate_mobile',
-        'owner_details_aadhar_no',
         'owner_details_status',
         'owner_details_email',
         'owner_details_dob',
