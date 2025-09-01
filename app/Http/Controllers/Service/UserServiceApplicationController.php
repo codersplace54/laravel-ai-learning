@@ -134,7 +134,7 @@ class UserServiceApplicationController extends Controller
                 'assigned_to_group'  => true,
                 'status'             => 'pending',
                 'action_taken_by'    => $user->id,
-                'action_taken_at'    => null,
+                'action_taken_at'    => now(),
                 'remarks'            => null,
             ]);
 

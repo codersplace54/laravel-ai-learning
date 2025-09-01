@@ -568,6 +568,7 @@ class ServiceController extends Controller
                 'step_number'     => $current_step->step_number,
                 'step_type'       => $current_step->step_type,
                 'department_id'   => $current_step->department_id,
+                'hierarchy_level' => $current_step->hierarchy_level,
                 'status'          => $request->status,
                 'action_taken_by' => $request->action_taken_by,
                 'action_taken_at' => now(),
@@ -577,30 +578,49 @@ class ServiceController extends Controller
             $next_step = null;
 
             if ($request->status === 'approved') {
-                $next_step_flow = ServiceApprovalFlow::where('service_id', $application->service_id)
-                    ->where('step_number', '>', $current_step->step_number)
-                    ->orderBy('step_number')
-                    ->first();
 
-                if ($next_step_flow) {
-                    $next_step = ApplicationWorkflowAssignment::create([
-                        'application_id'  => $application->id,
-                        'service_id'      => $application->service_id,
-                        'step_number'     => $next_step_flow->step_number,
-                        'step_type'       => $next_step_flow->step_type,
-                        'department_id'   => $next_step_flow->department_id,
-                        'action_taken_by' => $request->action_taken_by,
-                        'action_taken_at' => now(),
-                        'remarks'         => $request->remarks,
-                        'status'          => 'pending',
-                    ]);
+                $maxStep = ServiceApprovalFlow::where('service_id', $application->service_id)
+                    ->max('step_number');
 
+                if ($current_step->step_number == $maxStep) {
                     $application->update([
-                        'current_step_number' => $next_step_flow->step_number,
-                        'status'              => 'under_review',
+                        'status'       => 'approved',
+                        'updated_at' => now(),
                     ]);
+
+                    return response()->json([
+                        'status' => 1,
+                        'message' => 'Application approved successfully. Final step completed.',
+                        'data' => [
+                            'application_id' => $application->id,
+                            'status'         => 'approved',
+                        ]
+                    ], 200);
                 } else {
-                    $application->update(['status' => 'approved']);
+                    $next_step_flow = ServiceApprovalFlow::where('service_id', $application->service_id)
+                        ->where('step_number', '>', $current_step->step_number)
+                        ->orderBy('step_number')
+                        ->first();
+
+                    if ($next_step_flow) {
+                        $next_step = ApplicationWorkflowAssignment::create([
+                            'application_id'  => $application->id,
+                            'service_id'      => $application->service_id,
+                            'step_number'     => $next_step_flow->step_number,
+                            'step_type'       => $next_step_flow->step_type,
+                            'department_id'   => $next_step_flow->department_id,
+                            'hierarchy_level' => $next_step_flow->hierarchy_level,
+                            'action_taken_by' => $request->action_taken_by,
+                            'action_taken_at' => now(),
+                            'remarks'         => $request->remarks,
+                            'status'          => 'pending',
+                        ]);
+
+                        $application->update([
+                            'current_step_number' => $next_step_flow->step_number,
+                            'status'              => 'under_review',
+                        ]);
+                    }
                 }
             } elseif ($request->status === 'rejected') {
 
@@ -618,6 +638,7 @@ class ServiceController extends Controller
                         'step_number'     => $first_step_flow->step_number,
                         'step_type'       => $first_step_flow->step_type,
                         'department_id'   => $first_step_flow->department_id,
+                        'hierarchy_level' => $first_step_flow->hierarchy_level,
                         'action_taken_by' => $request->action_taken_by,
                         'action_taken_at' => now(),
                         'remarks'         => $request->remarks,
@@ -681,16 +702,16 @@ class ServiceController extends Controller
             }
             $department_id = $department->id;
 
-            $application = UserServiceApplication::whereHas('service', function ($val) use ($department_id) {
-                $val->where('department_id', $department_id);
-            })
-                ->selectRaw("
-                            COUNT(*) as total_applications,
-                            SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) as submitted,
-                            SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) as under_review,
-                            SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
-                            SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
-                        ")
+            $application = DB::table('user_service_applications as application')
+                ->join('service_masters as service', 'service.id', '=', 'application.service_id')
+                ->where('service.department_id', $department_id)
+                ->select(
+                    DB::raw('COUNT(*) as total_applications'),
+                    DB::raw("SUM(CASE WHEN application.status = 'submitted' THEN 1 ELSE 0 END) as submitted"),
+                    DB::raw("SUM(CASE WHEN application.status = 'under_review' THEN 1 ELSE 0 END) as under_review"),
+                    DB::raw("SUM(CASE WHEN application.status = 'approved' THEN 1 ELSE 0 END) as approved"),
+                    DB::raw("SUM(CASE WHEN application.status = 'rejected' THEN 1 ELSE 0 END) as rejected")
+                )
                 ->first();
 
             $avg_processing_time_days = UserServiceApplication::whereHas('service', function ($val) use ($department_id) {
@@ -699,30 +720,20 @@ class ServiceController extends Controller
                 ->selectRaw('AVG(DATEDIFF(max_processing_date, application_date)) as avg_days')
                 ->value('avg_days');
 
-            $service_breakdown = UserServiceApplication::whereHas('service', function ($val) use ($department_id) {
-                $val->where('department_id', $department_id);
-            })
-                ->selectRaw("
-                            service_id,
-                            COUNT(*) as total_applications,
-                            SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) as submitted,
-                            SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) as under_review,
-                            SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
-                            SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
-                        ")
-                ->groupBy('service_id')
-                ->with('service:id,service_title_or_description')
-                ->get()
-                ->map(function ($row) {
-                    return [
-                        'service_id'   => $row->service_id,
-                        'service_name' => $row->service->service_title_or_description ?? null,
-                        'submitted'      => (int) $row->submitted,
-                        'under_review'   => (int) $row->under_review,
-                        'approved'     => (int) $row->approved,
-                        'rejected'     => (int) $row->rejected,
-                    ];
-                });
+            $service_breakdown = DB::table('user_service_applications as application')
+                ->join('service_masters as service', 'service.id', '=', 'application.service_id')
+                ->where('service.department_id', $department_id)
+                ->select(
+                    'application.service_id',
+                    'service.service_title_or_description as service_name',
+                    DB::raw('COUNT(*) as total_applications'),
+                    DB::raw("SUM(CASE WHEN application.status = 'submitted' THEN 1 ELSE 0 END) as submitted"),
+                    DB::raw("SUM(CASE WHEN application.status = 'under_review' THEN 1 ELSE 0 END) as under_review"),
+                    DB::raw("SUM(CASE WHEN application.status = 'approved' THEN 1 ELSE 0 END) as approved"),
+                    DB::raw("SUM(CASE WHEN application.status = 'rejected' THEN 1 ELSE 0 END) as rejected")
+                )
+                ->groupBy('application.service_id', 'service.service_title_or_description')
+                ->get();
 
             return response()->json([
                 'status' => 1,
@@ -759,8 +770,8 @@ class ServiceController extends Controller
             }
 
             $history = ApplicationWorkflowHistory::where('application_id', $application_id)
-                ->with(['department:id,name', 'actionTaker:id,authorized_person_name'])
-                ->orderBy('step_number')
+                ->with(['department:id,name', 'actionTaker:id,authorized_person_name,email_id'])
+                ->orderBy('action_taken_at', 'asc')
                 ->get();
 
             $pending_steps = ApplicationWorkflowAssignment::where('application_id', $application_id)
@@ -774,8 +785,9 @@ class ServiceController extends Controller
                 $data[] = [
                     'step_number'    => $entry->step_number,
                     'department'     => $entry->department->name,
-                    'action_taken_by' => $entry->actionTaker->authorized_person_name,
+                    'action_taken_by' => $entry->actionTaker->authorized_person_name. ' (' . $entry->actionTaker->email_id . ')',
                     'status'         => $entry->status,
+                    'hierarchy_level' => $entry->hierarchy_level,
                     'remarks'        => $entry->remarks,
                     'timestamp'      => $entry->action_taken_at,
                 ];
