@@ -302,15 +302,21 @@ class ServiceMasterController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $services = ServiceMaster::select(
-                'id',
-                'service_title_or_description',
-                'department_id',
-                'noc_type',
-                'target_days',
-                'noc_payment_type',
-                'allow_repeat_application'
-            )->get();
+            $services = ServiceMaster::with('department:id,name')
+                ->get(['id', 'service_title_or_description', 'department_id', 'noc_type', 'target_days', 'noc_payment_type', 'allow_repeat_application']);
+
+            $services = $services->map(function ($service) {
+                return [
+                    'id' => $service->id,
+                    'service_title_or_description' => $service->service_title_or_description,
+                    'department_id' => $service->department_id,
+                    'department_name' =>  $service->department->name,
+                    'noc_type' => $service->noc_type,
+                    'target_days' => $service->target_days,
+                    'noc_payment_type' => $service->noc_payment_type,
+                    'allow_repeat_application' => $service->allow_repeat_application,
+                ];
+            });
 
             return response()->json([
                 'status' => 1,

@@ -10,11 +10,7 @@ use App\Models\JWTToken;
 
 class JWTActivityMiddleware
 {
-    /**
-     * Handle an incoming request.
-     *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
-     */
+
     public function handle($request, Closure $next)
     {
 
@@ -24,22 +20,22 @@ class JWTActivityMiddleware
             $token = JWTAuth::getToken();
             $user = JWTAuth::toUser($token);
 
-            $dbToken = JWTToken::where('user_id', $user->id)
+            $db_token = JWTToken::where('user_id', $user->id)
                 ->where('token', $token)
                 ->first();
 
-            if (!$dbToken) {
+            if (!$db_token) {
                 return response()->json(['message' => 'Session expired or logged out'], 401);
             }
 
 
-            if ($dbToken->last_activity_at && $dbToken->last_activity_at->lt(now()->subHours(1))) {
-                $dbToken->delete();
+            if ($db_token->last_activity_at && $db_token->last_activity_at->lt(now()->subHours(1))) {
+                $db_token->delete();
                 JWTAuth::invalidate($token);
                 return response()->json(['message' => 'Session expired due to inactivity'], 401);
             }
 
-            $dbToken->update(['last_activity_at' => now()]);
+            $db_token->update(['last_activity_at' => now()]);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Unauthorized: ' . $e->getMessage()], 401);
         }
