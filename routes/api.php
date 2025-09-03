@@ -23,6 +23,7 @@ use App\Http\Controllers\Service\HolidayController;
 use App\Http\Controllers\Service\ServiceController;
 use App\Http\Controllers\Subdivision\TripuraMasterDataController;
 use App\Http\Controllers\SchemaController;
+use App\Http\Middleware\JWTActivityMiddleware;
 
 
 
@@ -31,7 +32,7 @@ Route::prefix('user')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
 });
 
-Route::middleware('auth:api')->group(function () {
+Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function () {
 
     Route::prefix('user')->group(function () {
         Route::post('profile-update', [UserController::class, 'update_profile']);
@@ -89,37 +90,42 @@ Route::middleware('auth:api')->group(function () {
     Route::post('caf/activity-delete', [ActivityController::class, 'activity_delete']);
     Route::post('caf/activity-view', [ActivityController::class, 'activity_view']);
 
-    Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
-    Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);
-    Route::post('service-master-delete', [ServiceMasterController::class, 'service_master_delete']);
+    Route::prefix('admin')->group(function () {
+        Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
+        Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);
+        Route::post('service-master-delete', [ServiceMasterController::class, 'service_master_delete']);
+
+
+        Route::post('renewal-cycle-store', [RenewalCycleController::class, 'renewal_cycle_store']);
+        Route::post('renewal-cycle-update', [RenewalCycleController::class, 'renewal_cycle_update']);
+        Route::post('renewal-cycle-delete', [RenewalCycleController::class, 'renewal_cycle_delete']);
+
+        Route::post('service-questionnaire-store', [ServiceQuestionnaireController::class, 'service_questionnaire_store']);
+        Route::post('service-questionnaire-update', [ServiceQuestionnaireController::class, 'service_questionnaire_update']);
+        Route::post('service-questionnaire-delete', [ServiceQuestionnaireController::class, 'service_questionnaire_delete']);
+
+        Route::post('service-fee-rule-store', [ServiceFeeRuleController::class, 'service_fee_rule_store']);
+        Route::post('service-fee-rule-update', [ServiceFeeRuleController::class, 'service_fee_rule_update']);
+        Route::post('service-fee-rule-delete', [ServiceFeeRuleController::class, 'service_fee_rule_delete']);
+
+        Route::post('service-approval-flow-store', [ServiceApprovalFlowController::class, 'service_approval_flow_store']);
+        Route::post('service-approval-flow-update', [ServiceApprovalFlowController::class, 'service_approval_flow_update']);
+        Route::post('service-approval-flow-delete', [ServiceApprovalFlowController::class, 'service_approval_flow_delete']);
+    });
+
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
     Route::post('fetch-service-details', [ServiceMasterController::class, 'fetch_service_details']);
-
-
-    Route::post('renewal-cycle-store', [RenewalCycleController::class, 'renewal_cycle_store']);
-    Route::post('renewal-cycle-update', [RenewalCycleController::class, 'renewal_cycle_update']);
-    Route::post('renewal-cycle-delete', [RenewalCycleController::class, 'renewal_cycle_delete']);
-    Route::post('renewal-cycle-view', [RenewalCycleController::class, 'renewal_cycle_view']);
-
-    Route::post('service-questionnaire-store', [ServiceQuestionnaireController::class, 'service_questionnaire_store']);
-    Route::post('service-questionnaire-update', [ServiceQuestionnaireController::class, 'service_questionnaire_update']);
-    Route::post('service-questionnaire-delete', [ServiceQuestionnaireController::class, 'service_questionnaire_delete']);
     Route::post('service-questionnaire-view', [ServiceQuestionnaireController::class, 'service_questionnaire_view']);
-
-    Route::post('service-fee-rule-store', [ServiceFeeRuleController::class, 'service_fee_rule_store']);
-    Route::post('service-fee-rule-update', [ServiceFeeRuleController::class, 'service_fee_rule_update']);
+    Route::post('renewal-cycle-view', [RenewalCycleController::class, 'renewal_cycle_view']);
     Route::post('service-fee-rule-view', [ServiceFeeRuleController::class, 'service_fee_rule_view']);
-    Route::post('service-fee-rule-delete', [ServiceFeeRuleController::class, 'service_fee_rule_delete']);
-
-    Route::post('service-approval-flow-store', [ServiceApprovalFlowController::class, 'service_approval_flow_store']);
-    Route::post('service-approval-flow-update', [ServiceApprovalFlowController::class, 'service_approval_flow_update']);
     Route::post('service-approval-flow-view', [ServiceApprovalFlowController::class, 'service_approval_flow_view']);
-    Route::post('service-approval-flow-delete', [ServiceApprovalFlowController::class, 'service_approval_flow_delete']);
 
-    Route::post('user-service-application-store', [UserServiceApplicationController::class, 'user_service_application_store']);
-    Route::post('user-service-application-update', [UserServiceApplicationController::class, 'user_service_application_update']);
-    Route::post('user-service-application-view', [UserServiceApplicationController::class, 'user_service_application_view']);
-    Route::post('user-service-application-delete', [UserServiceApplicationController::class, 'user_service_application_delete']);
+    Route::prefix('user')->group(function () {
+        Route::post('service-application-store', [UserServiceApplicationController::class, 'user_service_application_store']);
+        Route::post('service-application-update', [UserServiceApplicationController::class, 'user_service_application_update']);
+        Route::post('service-application-view', [UserServiceApplicationController::class, 'user_service_application_view']);
+        Route::post('service-application-delete', [UserServiceApplicationController::class, 'user_service_application_delete']);
+    });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
     Route::post('holidays-update', [HolidayController::class, 'holidays_update']);
@@ -142,15 +148,14 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'get_wards']);
     });
 
-     Route::prefix('department')->group(function () {
+    Route::prefix('department')->group(function () {
         Route::post('/services', [ServiceController::class, 'get_services_by_department']);
         Route::post('/applications', [ServiceController::class, 'get_department_applications']);
         Route::post('/applications/{id}', [ServiceController::class, 'get_application_details']);
         Route::post('/applications/{id}/status', [ServiceController::class, 'update_application_status']);
         Route::post('/dashboard', [ServiceController::class, 'get_department_dashboard']);
         Route::post('/workflow-history/{application_id}', [ServiceController::class, 'get_work_flow_history']);
+    });
 
-     });
-
-     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
+    Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
 });

@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('ip_address')->nullable();
             $table->string('user_agent')->nullable();
             $table->timestamp('expires_at')->nullable();
+            $table->timestamp('last_activity_at')->nullable();
             $table->timestamps();
         });
     }
