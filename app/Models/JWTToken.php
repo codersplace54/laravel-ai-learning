@@ -8,7 +8,7 @@ use App\Models\User;
 
 class JWTToken extends Model
 {
-        use HasFactory;
+    use HasFactory;
 
     protected $fillable = [
         'id',
@@ -17,8 +17,14 @@ class JWTToken extends Model
         'ip_address',
         'user_agent',
         'expires_at',
+        'last_activity_at',
         'created_at',
         'updated_at',
+    ];
+
+    protected $casts = [
+        'expires_at' => 'datetime:Y-m-d H:i:s',
+        'last_activity_at' => 'datetime:Y-m-d H:i:s',
     ];
 
     public function user()

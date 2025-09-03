@@ -51,6 +51,7 @@ class AuthController extends Controller
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->header('User-Agent'),
                 'expires_at' => now()->addMinutes(JWTAuth::factory()->getTTL()),
+                'last_activity_at' => now(),
             ]);
 
             return response()->json([
@@ -106,6 +107,13 @@ class AuthController extends Controller
                 'status' => 1,
                 'message' => 'Successfully logged out'
             ]);
+        } catch (\Tymon\JWTAuth\Exceptions\TokenInvalidException $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Token is already invalid or expired',
+            ], 401);
         } catch (JWTException $e) {
 
 
