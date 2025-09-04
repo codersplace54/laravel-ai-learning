@@ -6,10 +6,9 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-       public function up(): void
+
+
+    public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
             $table->string('name_of_enterprise')->after('id');
@@ -19,6 +18,10 @@ return new class extends Migration
             $table->string('mobile_no')->after('pan');
             $table->string('user_name')->unique()->after('mobile_no');
             $table->string('bin')->unique()->nullable()->after('user_name');
+            $table->bigInteger('district_id')->nullable()->after('user_name');
+            $table->bigInteger('subdivision_id')->nullable()->after('district_id');
+            $table->bigInteger('ulb_id')->nullable()->after('subdivision_id');
+            $table->bigInteger('ward_id')->nullable()->after('ulb_id');
             $table->text('registered_enterprise_address')->after('bin');
             $table->string('registered_enterprise_city')->after('registered_enterprise_address');
             $table->enum('user_type', ['individual', 'department', 'admin'])->default('individual')->after('registered_enterprise_city');
@@ -27,12 +30,10 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
+
     public function down(): void
     {
-      Schema::table('users', function (Blueprint $table) {
+        Schema::table('users', function (Blueprint $table) {
             $table->renameColumn('authorized_person_name', 'name');
             $table->renameColumn('email_id', 'email');
             $table->dropColumn([

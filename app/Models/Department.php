@@ -15,7 +15,7 @@ class Department extends Model
 
     protected $fillable = [
         'id',
-        'name', 
+        'name',
         'details',
         'created_at',
         'updated_at'
@@ -25,4 +25,9 @@ class Department extends Model
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    public function services()
+    {
+        return $this->hasMany(ServiceMaster::class, 'department_id', 'id');
+    }
 }

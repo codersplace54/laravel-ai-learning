@@ -12,6 +12,7 @@ use App\Models\ApplicationWorkflowAssignment;
 use App\Models\ApplicationWorkflowHistory;
 use App\Models\ServiceApprovalFlow;
 use App\Models\Department;
+use App\Models\User;
 
 
 class ServiceController extends Controller
@@ -542,8 +543,7 @@ class ServiceController extends Controller
 
             $request->validate([
                 'status'         => 'required|in:pending,approved,rejected,under_review,send_back',
-                'remarks'        => 'nullable|string',
-                'action_taken_by' => 'required|integer|exists:users,id',
+                'remarks'        => 'nullable|string'
             ]);
 
             DB::beginTransaction();
@@ -555,10 +555,17 @@ class ServiceController extends Controller
                 ->where('step_number', $application->current_step_number)
                 ->firstOrFail();
 
+            if ($current_step->action_taken_by !== $user->id) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'You are not authorized to update this application. It is not assigned to you.'
+                ], 403);
+            }
+
             $current_step->update([
                 'status'          => $request->status,
                 'remarks'         => $request->remarks,
-                'action_taken_by' => $request->action_taken_by,
+                'action_taken_by' => $user->id,
                 'action_taken_at' => now(),
             ]);
 
@@ -570,7 +577,7 @@ class ServiceController extends Controller
                 'department_id'   => $current_step->department_id,
                 'hierarchy_level' => $current_step->hierarchy_level,
                 'status'          => $request->status,
-                'action_taken_by' => $request->action_taken_by,
+                'action_taken_by' => $user->id,
                 'action_taken_at' => now(),
                 'remarks'         => $request->remarks,
             ]);
@@ -785,7 +792,7 @@ class ServiceController extends Controller
                 $data[] = [
                     'step_number'    => $entry->step_number,
                     'department'     => $entry->department->name,
-                    'action_taken_by' => $entry->actionTaker->authorized_person_name. ' (' . $entry->actionTaker->email_id . ')',
+                    'action_taken_by' => $entry->actionTaker->authorized_person_name . ' (' . $entry->actionTaker->email_id . ')',
                     'status'         => $entry->status,
                     'hierarchy_level' => $entry->hierarchy_level,
                     'remarks'        => $entry->remarks,
@@ -812,6 +819,59 @@ class ServiceController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong while fetching workflow history',
                 'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function get_department_user_applications($user_id)
+    {
+
+        try {
+
+
+            $user = User::where('id', $user_id)
+                ->where('user_type', 'department')
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or non-departmental user.'
+                ], 404);
+            }
+
+            $applications = ApplicationWorkflowAssignment::with([
+                'application.service:id,service_title_or_description',
+                'application.user:id,authorized_person_name,email_id,mobile_no',
+                'department:id,name'
+            ])
+                ->where('action_taken_by', $user_id)
+                ->get()
+                ->unique('application_id')
+                ->map(function ($assignment) {
+                    return [
+                        'application_id'   => $assignment->application->id,
+                        'service_name'     => $assignment->application->service->service_title_or_description ?? null,
+                        'applicant_name'   => $assignment->application->user->authorized_person_name,
+                        'applicant_email'  => $assignment->application->user->email_id,
+                        'applicant_mobile' => $assignment->application->user->mobile_no,
+                        'department'       => $assignment->department->name,
+                        'status'           => $assignment->application->status,
+                        'current_step'     => $assignment->application->current_step_number,
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'data'    => $applications
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong while fetching assigned applications',
+                'error'   => $e->getMessage()
             ], 500);
         }
     }

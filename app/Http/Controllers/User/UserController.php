@@ -28,6 +28,10 @@ class UserController extends Controller
                     'email_id' => 'required|email|unique:users,email_id',
                     'mobile_no' => 'required|string|max:15',
                     'user_name' => 'required|string|max:100|unique:users,user_name',
+                    'district_id' => 'required|integer|exists:tripura_master_data,district_code',
+                    'subdivision_id' => 'required|integer|exists:tripura_master_data,sub_lgd_code',
+                    'ulb_id' => 'required|integer|exists:tripura_master_data,ulb_lgd_code',
+                    'ward_id' => 'required|integer|exists:tripura_master_data,gp_vc_ward_lgd_code',
                     'registered_enterprise_address' => 'required|string',
                     'registered_enterprise_city' => 'required|string',
                     'user_type' => 'required|string|in:individual,department,admin',
@@ -42,6 +46,14 @@ class UserController extends Controller
                     'mobile_no.required' => 'Mobile number is required.',
                     'user_name.required' => 'Username is required.',
                     'user_name.unique' => 'This username is already taken.',
+                    'district_id.required'   => 'District is required.',
+                    'district_id.exists'     => 'Selected district is invalid.',
+                    'subdivision_id.required' => 'Subdivision is required.',
+                    'subdivision_id.exists'  => 'Selected subdivision is invalid.',
+                    'ulb_id.required'        => 'ULB is required.',
+                    'ulb_id.exists'          => 'Selected ULB is invalid.',
+                    'ward_id.required'       => 'Ward is required.',
+                    'ward_id.exists'         => 'Selected ward is invalid.',
                     'registered_enterprise_address.required' => 'Enterprise address is required.',
                     'registered_enterprise_city.required' => 'Enterprise city is required.',
                     'user_type.required' => 'User type is required.',
@@ -61,6 +73,10 @@ class UserController extends Controller
                 'email_id' => $request->email_id,
                 'mobile_no' => $request->mobile_no,
                 'user_name' => $request->user_name,
+                'district_id' => $request->district_id,
+                'subdivision_id' => $request->subdivision_id,
+                'ulb_id' => $request->ulb_id,
+                'ward_id' => $request->ward_id,
                 'registered_enterprise_address' => $request->registered_enterprise_address,
                 'registered_enterprise_city' => $request->registered_enterprise_city,
                 'user_type' => $request->user_type,
@@ -263,7 +279,7 @@ class UserController extends Controller
             );
 
 
-           $user = Auth::user();
+            $user = Auth::user();
 
             if (!$user) {
                 return response()->json([
