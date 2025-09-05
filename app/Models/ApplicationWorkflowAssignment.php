@@ -37,4 +37,9 @@ class ApplicationWorkflowAssignment extends Model
     {
         return $this->belongsTo(User::class, 'action_taken_by');
     }
+
+    public function application()
+    {
+        return $this->belongsTo(UserServiceApplication::class, 'application_id', 'id');
+    }
 }

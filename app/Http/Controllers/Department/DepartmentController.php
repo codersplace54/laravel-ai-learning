@@ -10,7 +10,7 @@ use App\Models\Department;
 
 class DepartmentController extends Controller
 {
-     public function all_departments(Request $request)
+    public function all_departments(Request $request)
     {
         try {
 
@@ -213,6 +213,13 @@ class DepartmentController extends Controller
             );
 
             $department = Department::findOrFail($request->id);
+
+            if ($department->services()->exists()) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Department cannot be deleted because it is assigned to services.',
+                ], 400);
+            }
 
             $department->delete();
 
