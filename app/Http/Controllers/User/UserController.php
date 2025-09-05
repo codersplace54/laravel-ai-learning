@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\AclRule;
 use Exception;
 use Carbon\Carbon;
+use App\Models\DepartmentUser;
 
 class UserController extends Controller
 {
@@ -36,6 +37,11 @@ class UserController extends Controller
                     'registered_enterprise_city' => 'required|string',
                     'user_type' => 'required|string|in:individual,department,admin',
                     'password' => 'required|string|min:6',
+
+                    'department_id'   => 'required_if:user_type,department|integer|exists:departments,id',
+                    'hierarchy_level' => 'required_if:user_type,department|in:block,subdivision,district,state1,state2,state3',
+                    'designation'      => 'nullable|string',
+                    'is_active'      => 'nullable|integer'
                 ],
                 [
                     'name_of_enterprise.required' => 'Enterprise name is required.',
@@ -60,6 +66,13 @@ class UserController extends Controller
                     'user_type.in' => 'User type must be either individual,department or admin.',
                     'password.required' => 'Password is required.',
                     'password.min' => 'Password must be at least 6 characters.',
+
+                    'department_id.required' => 'The department field is required.',
+                    'department_id.integer'  => 'The department must be a valid number.',
+                    'department_id.exists'   => 'The selected department does not exist in our records.',
+                    'hierarchy_level.required' => 'The hierarchy level is required.',
+                    'hierarchy_level.in'       => 'The hierarchy level must be one of: block, subdivision, district, state1, state2, or state3.',
+                    'is_active.integer'        => 'The status must be a valid number (0 or 1).',
                 ]
             );
 
@@ -83,6 +96,20 @@ class UserController extends Controller
                 'password' => Hash::make($request->password),
                 'status' => 'active',
             ]);
+
+            if ($user->user_type == "department") {
+
+                $department_user = DepartmentUser::create([
+                    'user_id' => $user->id,
+                    'department_id' => $request->department_id,
+                    'designation' => $request->designation,
+                    'block_id' => $request->ulb_id,
+                    'subdivision_id' => $request->subdivision_id,
+                    'district_id' => $request->district_id,
+                    'hierarchy_level' => $request->hierarchy_level,
+                    'is_active' => 1
+                ]);
+            }
 
             $now = Carbon::now();
             $date = $now->format('y');
