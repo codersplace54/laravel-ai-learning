@@ -439,7 +439,7 @@ class ServiceController extends Controller
 
             $applications = $data->get()->map(function ($application) {
                 return [
-                    'application_id'      => $application->applicationId,
+                    'application_id'      => $application->id,
                     'service_name'        => $application->service->service_title_or_description,
                     'applicant_name'      => $application->user->authorized_person_name,
                     'applicant_phone'     => $application->user->mobile_no,
