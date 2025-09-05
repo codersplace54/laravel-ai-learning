@@ -17,6 +17,7 @@ use App\Http\Controllers\ServiceMaster\ServiceMasterController;
 use App\Http\Controllers\Service\RenewalCycleController;
 use App\Http\Controllers\Service\ServiceQuestionnaireController;
 use App\Http\Controllers\Service\ServiceFeeRuleController;
+use App\Http\Controllers\Service\RenewalFeeRuleController;
 use App\Http\Controllers\Service\ServiceApprovalFlowController;
 use App\Http\Controllers\Service\UserServiceApplicationController;
 use App\Http\Controllers\Service\HolidayController;
@@ -108,6 +109,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-fee-rule-update', [ServiceFeeRuleController::class, 'service_fee_rule_update']);
         Route::post('service-fee-rule-delete', [ServiceFeeRuleController::class, 'service_fee_rule_delete']);
 
+        Route::post('renewal-fee-rule-store', [RenewalFeeRuleController::class, 'renewal_fee_rule_store']);
+        Route::post('renewal-fee-rule-update', [RenewalFeeRuleController::class, 'renewal_fee_rule_update']);
+        Route::post('renewal-fee-rule-delete', [RenewalFeeRuleController::class, 'renewal_fee_rule_delete']);
+
         Route::post('service-approval-flow-store', [ServiceApprovalFlowController::class, 'service_approval_flow_store']);
         Route::post('service-approval-flow-update', [ServiceApprovalFlowController::class, 'service_approval_flow_update']);
         Route::post('service-approval-flow-delete', [ServiceApprovalFlowController::class, 'service_approval_flow_delete']);
@@ -119,6 +124,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('renewal-cycle-view', [RenewalCycleController::class, 'renewal_cycle_view']);
     Route::post('service-fee-rule-view', [ServiceFeeRuleController::class, 'service_fee_rule_view']);
     Route::post('service-approval-flow-view', [ServiceApprovalFlowController::class, 'service_approval_flow_view']);
+    Route::post('renewal-fee-rule-view', [RenewalFeeRuleController::class, 'renewal_fee_rule_view']);
 
     Route::prefix('user')->group(function () {
         Route::post('service-application-store', [UserServiceApplicationController::class, 'user_service_application_store']);
@@ -141,11 +147,6 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/approvals/avg-timeline-per-service', [ServiceController::class, 'get_average_approval_timeline_per_service']);
         Route::post('/applications/approved-count-per-service', [ServiceController::class, 'get_approved_applications_per_service']);
         Route::post('/applications/pending-count-per-service', [ServiceController::class, 'get_pending_applications_per_service']);
-
-        Route::post('/tripura/get-all-districts', [TripuraMasterDataController::class, 'get_districts']);
-        Route::post('/tripura/get-sub-subdivisions', [TripuraMasterDataController::class, 'get_subdivisions']);
-        Route::post('/tripura/get-block-names', [TripuraMasterDataController::class, 'get_ulbs']);
-        Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'get_wards']);
     });
 
     Route::prefix('department')->group(function () {
@@ -159,4 +160,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
+    Route::post('get-default-source', [ServiceMasterController::class, 'getDefaultSourceValue']);
 });
+
+    Route::post('/tripura/get-all-districts', [TripuraMasterDataController::class, 'get_districts']);
+    Route::post('/tripura/get-sub-subdivisions', [TripuraMasterDataController::class, 'get_subdivisions']);
+    Route::post('/tripura/get-block-names', [TripuraMasterDataController::class, 'get_ulbs']);
+    Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'get_wards']);

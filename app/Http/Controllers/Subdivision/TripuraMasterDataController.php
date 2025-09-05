@@ -14,10 +14,6 @@ class TripuraMasterDataController extends Controller
 
         try {
 
-            if (!Auth::check()) {
-                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
-            }
-
             $districts = TripuraMasterData::select('district_code','district_name')
                 ->distinct()
                 ->orderBy('district_name')
@@ -44,9 +40,6 @@ class TripuraMasterDataController extends Controller
 
         try {
 
-            if (!Auth::check()) {
-                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
-            }
 
             $request->validate([
                 'district' => 'required|string'
@@ -79,9 +72,6 @@ class TripuraMasterDataController extends Controller
 
         try {
 
-            if (!Auth::check()) {
-                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
-            }
 
             $request->validate([
                 'subdivision' => 'required|string'
@@ -114,9 +104,6 @@ class TripuraMasterDataController extends Controller
 
         try {
 
-            if (!Auth::check()) {
-                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
-            }
 
             $request->validate([
                 'ulb' => 'required|string'
