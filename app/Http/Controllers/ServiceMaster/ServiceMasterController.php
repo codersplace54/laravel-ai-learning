@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\ServiceMaster;
+use Illuminate\Support\Facades\Schema;
 
 
 class ServiceMasterController extends Controller
@@ -330,6 +331,56 @@ class ServiceMasterController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong.',
                 'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getDefaultSourceValue(Request $request)
+
+    {
+
+
+        $request->validate([
+            'user_id' => 'required|integer',
+            'default_source_table' => 'required|string',
+            'default_source_column' => 'required|string',
+        ]);
+
+        $userId = $request->input('user_id');
+        $table = $request->input('default_source_table');
+        $column = $request->input('default_source_column');
+
+        // Optional: Whitelist for security
+        // $allowedTables = ['unit_details'];
+        // $allowedColumns = ['unit_name'];
+
+        // if (!in_array($table, $allowedTables) || !in_array($column, $allowedColumns)) {
+        //     return response()->json(['error' => 'Invalid table or column'], 400);
+        // }
+
+        if (!Schema::hasTable($table)) {
+            return response()->json(['error' => 'Table does not exist'], 400);
+        }
+
+        if (!Schema::hasColumn($table, $column)) {
+            return response()->json(['error' => 'Column does not exist'], 400);
+        }
+
+        try {
+            $value = DB::table($table)
+                ->where('user_id', $userId)
+                ->value($column);
+
+            if (is_null($value)) {
+                return response()->json(['message' => 'No data found for this user_id'], 404);
+            }
+
+            return response()->json([
+                'value' => $value,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Server Error: ' . $e->getMessage()
             ], 500);
         }
     }
