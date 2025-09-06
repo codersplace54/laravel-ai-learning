@@ -54,17 +54,27 @@ class AuthController extends Controller
                 'last_activity_at' => now(),
             ]);
 
+            $data = $user->only([
+                'id',
+                'authorized_person_name',
+                'email_id',
+                'user_type'
+            ]);
+
+            if ($user->user_type === 'department') {
+                $department_user = $user->department_user()->with('department')->first();
+                if ($department_user && $department_user->department) {
+                    $data['department_id'] = $department_user->department->id;
+                    $data['department_name'] = $department_user->department->name;
+                }
+            }
+
             return response()->json([
                 'status' => 1,
                 'token' => $token,
                 'token_type' => 'bearer',
                 'expires_in' => JWTAuth::factory()->getTTL() * 60,
-                'data' => $user->only([
-                    'id',
-                    'authorized_person_name',
-                    'email_id',
-                    'user_type'
-                ])
+                'data' => $data
             ]);
         } catch (JWTException $e) {
 

@@ -67,4 +67,29 @@ class User extends Authenticatable implements JWTSubject
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    public function department_user()
+    {
+        return $this->hasOne(DepartmentUser::class, 'user_id');
+    }
+
+    public function district()
+    {
+        return $this->belongsTo(TripuraMasterData::class, 'district_id', 'district_code');
+    }
+
+    public function subdivision()
+    {
+        return $this->belongsTo(TripuraMasterData::class, 'subdivision_id', 'sub_lgd_code');
+    }
+
+    public function ulb()
+    {
+        return $this->belongsTo(TripuraMasterData::class, 'ulb_id', 'ulb_lgd_code');
+    }
+
+        public function ward()
+    {
+        return $this->belongsTo(TripuraMasterData::class, 'ward_id', 'gp_vc_ward_lgd_code');
+    }
 }
