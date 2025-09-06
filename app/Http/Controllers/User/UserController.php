@@ -406,15 +406,43 @@ class UserController extends Controller
 
 
             $department_users = User::where('user_type', 'department')
+                ->with(['district', 'subdivision', 'ulb', 'ward'])
                 ->get();
 
-            if ($department_users ->isEmpty()) {
+            if ($department_users->isEmpty()) {
                 return response()->json([
                     'status' => 0,
                     'message' => 'No Deaprtment users found.',
                     'data' => [],
                 ], 200);
             }
+
+            $department_users = $department_users->map(function ($user) {
+                return [
+                    'id' => $user->id,
+                    'name_of_enterprise' => $user->name_of_enterprise,
+                    'authorized_person_name' => $user->authorized_person_name,
+                    'email_id' => $user->email_id,
+                    'mobile_no'  => $user->mobile_no,
+                    'pan'  => $user->pan,
+                    'user_name'  => $user->user_name,
+                    'bin'   => $user->bin,
+                    'district_code'   => $user->district->district_code,
+                    'district_name' => $user->district->district_name,
+                    'subdivision_code'   => $user->subdivision->sub_lgd_code,
+                    'subdivision_name' =>  $user->subdivision->sub_division,
+                    'ulb_code'   => $user->ulb->ulb_lgd_code,
+                    'ulb_name' => $user->ulb->ulb_name,
+                    'ward_code'   => $user->ward->gp_vc_ward_lgd_code,
+                    'ward_name' => $user->ward->name_of_gp_vc_or_ward,
+                    'registered_enterprise_address' => $user->registered_enterprise_address,
+                    'registered_enterprise_city' => $user->registered_enterprise_city,
+                    'user_type' => $user->user_type,
+                    'status' => $user->status,
+                    'created_at'  => $user->created_at,
+                    'updated_at'  => $user->updated_at
+                ];
+            });
 
             return response()->json([
                 'status' => 1,
