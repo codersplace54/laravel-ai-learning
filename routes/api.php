@@ -56,14 +56,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('auth-update-role', [RoleController::class, 'update_role'])->name('roles.update_role');
     Route::post('auth-destroy-role', [RoleController::class, 'destroy_role'])->name('roles.destroy_role');
 
-
-
-    Route::post('department-get-all-departments', [DepartmentController::class, 'all_departments'])->name('department.all_departments');
     Route::post('department-store-department', [DepartmentController::class, 'store_department'])->name('department.store_department');
     Route::post('department-show-department', [DepartmentController::class, 'show_department'])->name('department.show_department');
     Route::post('department-update-department', [DepartmentController::class, 'update_department'])->name('department.update_department');
     Route::post('department-destroy-department', [DepartmentController::class, 'destroy_department'])->name('department.destroy_department');
-
 
 
     Route::post('caf/core-application-store-enterprise-detail', [EnterpriseDetailController::class, 'enterprise_details_store_or_update'])->name('core_application.store_enterprise_detail');
@@ -157,13 +153,17 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/dashboard', [ServiceController::class, 'get_department_dashboard']);
         Route::post('/workflow-history/{application_id}', [ServiceController::class, 'get_work_flow_history']);
         Route::post('/user/{id}/assigned-applications', [ServiceController::class, 'get_department_user_applications']);
+
+        Route::post('/get-department-users', [UserController::class, 'get_department_users']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
     Route::post('get-default-source', [ServiceMasterController::class, 'getDefaultSourceValue']);
 });
 
-    Route::post('/tripura/get-all-districts', [TripuraMasterDataController::class, 'get_districts']);
-    Route::post('/tripura/get-sub-subdivisions', [TripuraMasterDataController::class, 'get_subdivisions']);
-    Route::post('/tripura/get-block-names', [TripuraMasterDataController::class, 'get_ulbs']);
-    Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'get_wards']);
+Route::post('department-get-all-departments', [DepartmentController::class, 'all_departments'])->name('department.all_departments');
+
+Route::post('/tripura/get-all-districts', [TripuraMasterDataController::class, 'get_districts']);
+Route::post('/tripura/get-sub-subdivisions', [TripuraMasterDataController::class, 'get_subdivisions']);
+Route::post('/tripura/get-block-names', [TripuraMasterDataController::class, 'get_ulbs']);
+Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'get_wards']);

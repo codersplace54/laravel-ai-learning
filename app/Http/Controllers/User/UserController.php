@@ -378,6 +378,7 @@ class UserController extends Controller
                 'mobile_no' => $user->mobile_no,
                 'pan' => $user->pan,
                 'bin' => $user->bin,
+                'user_type' => $user->user_type,
                 'registered_enterprise_address' => $user->registered_enterprise_address,
                 'registered_enterprise_city' => $user->registered_enterprise_city,
 
@@ -391,6 +392,38 @@ class UserController extends Controller
 
             return response()->json([
                 'success' => false,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function get_department_users()
+    {
+
+
+        try {
+
+
+            $department_users = User::where('user_type', 'department')
+                ->get();
+
+            if ($department_users ->isEmpty()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No Deaprtment users found.',
+                    'data' => [],
+                ], 200);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'data' => $department_users
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
                 'message' => 'Something went wrong.',
                 'error' => $e->getMessage()
             ], 500);
