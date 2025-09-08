@@ -35,6 +35,13 @@ class ServiceMaster extends Model
         'valid_for_upload',
         'nsw_license_id',
         'status',
+        'service_mode',
+        'third_party_portal_name',
+        'third_party_redirect_url',
+        'third_party_return_url',
+        'third_party_status_api_url',
+        'third_party_payment_mode',
+        'is_active',
         'created_at',
         'updated_at'
     ];
