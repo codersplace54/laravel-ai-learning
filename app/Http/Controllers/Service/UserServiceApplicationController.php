@@ -133,8 +133,8 @@ class UserServiceApplicationController extends Controller
                 'hierarchy_level'    => $approval_flow->hierarchy_level,
                 'assigned_to_group'  => true,
                 'status'             => 'pending',
-                'action_taken_by'    => $user->id,
-                'action_taken_at'    => now(),
+                'action_taken_by'    => null,
+                'action_taken_at'    => null,
                 'remarks'            => null,
             ]);
 
