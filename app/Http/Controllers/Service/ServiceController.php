@@ -13,6 +13,7 @@ use App\Models\ApplicationWorkflowHistory;
 use App\Models\ServiceApprovalFlow;
 use App\Models\Department;
 use App\Models\User;
+use App\Models\ServiceQuestionnaire;
 
 
 class ServiceController extends Controller
@@ -487,6 +488,20 @@ class ServiceController extends Controller
                 ], 404);
             }
 
+            $formatted_data = [];
+            $application_data = json_decode($application->application_data, true);
+            if (!empty($application_data)) {
+                $questions = ServiceQuestionnaire::whereIn('id', array_keys($application_data))
+                    ->pluck('question_label', 'id');
+                foreach ($application_data as $question_id => $answer) {
+                    $formatted_data[] = [
+                        'id' => $question_id,
+                        'question' => $questions[$question_id],
+                        'answer'   => $answer,
+                    ];
+                }
+            }
+
             $response = [
                 'application_id'  => $application->id,
                 'service_id'      => $application->service_id,
@@ -497,7 +512,7 @@ class ServiceController extends Controller
                     'phone' => $application->user->mobile_no,
                     'email' => $application->user->email_id,
                 ],
-                'application_data' => $application->application_data ?? [],
+                'application_data' => $formatted_data ?? [],
                 'status'           => $application->status,
                 'applied_fee'      => $application->applied_fee,
                 'approved_fee'     => $application->approved_fee,
@@ -508,7 +523,7 @@ class ServiceController extends Controller
                         'step_type'       => $flow->step_type,
                         'department'      => $flow->department->name,
                         'status'          => $flow->status,
-                        'action_taken_by' => $flow->action_taken_by,
+                        'action_taken_by' => $flow->actionTaker->authorized_person_name . ' (' . $flow->actionTaker->email_id . ')',
                         'action_taken_at' => $flow->action_taken_at,
                         'remarks'         => $flow->remarks,
                     ];
@@ -555,10 +570,10 @@ class ServiceController extends Controller
                 ->where('step_number', $application->current_step_number)
                 ->firstOrFail();
 
-            if ($current_step->action_taken_by !== $user->id) {
+            if ($current_step->hierarchy_level !== $user->department_user->hierarchy_level) {
                 return response()->json([
                     'status'  => 0,
-                    'message' => 'You are not authorized to update this application. It is not assigned to you.'
+                    'message' => "You can't update this application. It's assigned to level {$current_step->hierarchy_level} department users."
                 ], 403);
             }
 
@@ -617,9 +632,8 @@ class ServiceController extends Controller
                             'step_type'       => $next_step_flow->step_type,
                             'department_id'   => $next_step_flow->department_id,
                             'hierarchy_level' => $next_step_flow->hierarchy_level,
-                            'action_taken_by' => $request->action_taken_by,
+                            'action_taken_by' => $user->id,
                             'action_taken_at' => now(),
-                            'remarks'         => $request->remarks,
                             'status'          => 'pending',
                         ]);
 
