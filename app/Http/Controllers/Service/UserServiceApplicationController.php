@@ -35,7 +35,7 @@ class UserServiceApplicationController extends Controller
                 'renewalYear'           => 'nullable|integer|min:1|max:10',
                 'applicationId'         => 'nullable|string|max:255',
                 'application_date'      => 'nullable|date',
-                'status'                => 'in:submitted,under_review,approved,rejected',
+                'status'                => 'in:submitted,under_review,approved,rejected,re_submitted,send_back',
                 'application_data'      => 'nullable|array',
                 'applied_fee'           => 'nullable|numeric',
                 'approved_fee'          => 'nullable|numeric',
@@ -88,77 +88,160 @@ class UserServiceApplicationController extends Controller
             $target_days = $service->target_days ?? 0;
             $max_processing_date = $this->add_working_days($application_date, $target_days);
 
-            $user_service_application = UserServiceApplication::create([
-                'user_id'               => $user->id,
-                'service_id'            => $request->service_id,
-                'renewal_cycle_id'      => $request->renewal_cycle_id,
-                'renewal'               => $request->renewal,
-                'renewalYear'           => $request->renewalYear,
-                'applicationId'         => $request->applicationId,
-                'application_date'      => $request->application_date ?? now(),
-                'status'                => $request->status ?? 'submitted',
-                'application_data'      => json_encode($request->application_data ?? null),
-                'applied_fee'           => $request->applied_fee,
-                'approved_fee'          => $request->approved_fee,
-                'payment_status'        => $request->payment_status ?? 'pending',
-                'remarks'               => $request->remarks,
-                'NOC_application_date'  => $request->NOC_application_date,
-                'NOC_expiry_date'       => $request->NOC_expiry_date,
-                'PreviousNOCexpiryDate' => $request->PreviousNOCexpiryDate,
-                'payment_transId'       => $request->payment_transId,
-                'GRN_number'            => $request->GRN_number,
-                'payment_time'          => $request->payment_time,
-                'extra_payment'         => $request->extra_payment,
-                'comments'              => $request->comments,
-                'NOC_certificate'       => $noc_certificate,
-                'NOC_rejection_certificate' => $noc_rejection_certificate,
-                'NOC_generationDate'    => $request->NOC_generationDate,
-                'NOC_penalty_amount'    => $request->NOC_penalty_amount,
-                'NOC_letter_number'     => $request->NOC_letter_number,
-                'NOC_letter_date'       => $request->NOC_letter_date,
-                'NSW_Application_Save_ID' => $request->NSW_Application_Save_ID,
-                'NSW_license_status'    => $request->NSW_license_status,
-                'NSW_Push_Document_ID'  => $request->NSW_Push_Document_ID,
-                'final_fee'             => $final_fee,
-                'current_step_number'   => $approval_flow->step_number,
-                'max_processing_date'   => $max_processing_date
-            ]);
+            $user_service_application = UserServiceApplication::where('user_id', $user->id)
+                ->where('service_id', $request->service_id)
+                ->first();
 
-            ApplicationWorkflowAssignment::create([
-                'application_id'     => $user_service_application->id,
-                'service_id'         => $request->service_id,
-                'step_number'        => $approval_flow->step_number,
-                'step_type'          => $approval_flow->step_type,
-                'department_id'      => $approval_flow->department_id,
-                'hierarchy_level'    => $approval_flow->hierarchy_level,
-                'assigned_to_group'  => true,
-                'status'             => 'pending',
-                'action_taken_by'    => null,
-                'action_taken_at'    => null,
-                'remarks'            => null,
-            ]);
+            if ($user_service_application) {
+
+                if (!in_array($user_service_application->status, ['submitted', 're_submitted', 'send_back'])) {
+                    return response()->json([
+                        'status' => 0,
+                        'message' => "You can't update the application. It's under " . $user_service_application->status . "."
+                    ], 403);
+                }
+
+                $user_service_application->update([
+                    'renewal_cycle_id'      => $request->renewal_cycle_id,
+                    'renewal'               => $request->renewal,
+                    'renewalYear'           => $request->renewalYear,
+                    'applicationId'         => $request->applicationId,
+                    'application_date'      => $request->application_date ?? now(),
+                    'status'                => $request->status ?? 'submitted',
+                    'application_data'      => json_encode($request->application_data ?? null),
+                    'applied_fee'           => $request->applied_fee,
+                    'approved_fee'          => $request->approved_fee,
+                    'payment_status'        => $request->payment_status ?? 'pending',
+                    'remarks'               => $request->remarks,
+                    'NOC_application_date'  => $request->NOC_application_date,
+                    'NOC_expiry_date'       => $request->NOC_expiry_date,
+                    'PreviousNOCexpiryDate' => $request->PreviousNOCexpiryDate,
+                    'payment_transId'       => $request->payment_transId,
+                    'GRN_number'            => $request->GRN_number,
+                    'payment_time'          => $request->payment_time,
+                    'extra_payment'         => $request->extra_payment,
+                    'comments'              => $request->comments,
+                    'NOC_certificate'       => $noc_certificate ?? $user_service_application->NOC_certificate,
+                    'NOC_rejection_certificate' => $noc_rejection_certificate ?? $user_service_application->NOC_rejection_certificate,
+                    'NOC_generationDate'    => $request->NOC_generationDate,
+                    'NOC_penalty_amount'    => $request->NOC_penalty_amount,
+                    'NOC_letter_number'     => $request->NOC_letter_number,
+                    'NOC_letter_date'       => $request->NOC_letter_date,
+                    'NSW_Application_Save_ID' => $request->NSW_Application_Save_ID,
+                    'NSW_license_status'    => $request->NSW_license_status,
+                    'NSW_Push_Document_ID'  => $request->NSW_Push_Document_ID,
+                    'final_fee'             => $final_fee,
+                    'current_step_number'   => $approval_flow->step_number,
+                    'max_processing_date'   => $max_processing_date
+                ]);
+
+                ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
+                    ->where('status', 'pending')
+                    ->update([
+                        'status'          => $request->status,
+                        'remarks'         => $request->remarks,
+                        'action_taken_by' => $user->id,
+                        'action_taken_at' => now(),
+                    ]);
 
 
 
-            DB::commit();
+                ApplicationWorkflowAssignment::create([
+                    'application_id'     => $user_service_application->id,
+                    'service_id'         => $request->service_id,
+                    'step_number'        => $approval_flow->step_number,
+                    'step_type'          => $approval_flow->step_type,
+                    'department_id'      => $approval_flow->department_id,
+                    'hierarchy_level'    => $approval_flow->hierarchy_level,
+                    'assigned_to_group'  => true,
+                    'status'             => 'pending',
+                    'action_taken_by'    => null,
+                    'action_taken_at'    => null,
+                    'remarks'            => null,
+                ]);
 
-            return response()->json([
-                'status'  => 1,
-                'message' => 'Application created successfully.',
-                'data' => [
-                    'id' => $user_service_application->id,
-                    'applicationId' => $user_service_application->applicationId,
-                    'service_id' => $user_service_application->service_id,
-                    'user_id' => $user_service_application->user_id,
-                    'status' => $user_service_application->status,
-                    'final_fee' => $final_fee,
-                    'current_step_number' => $approval_flow->step_number,
-                    'assigned_department_id' => $approval_flow->department_id,
-                    'assigned_hierarchy_level' => $approval_flow->hierarchy_level,
-                    'max_processing_date' => $max_processing_date->format('Y-m-d'),
-                    'payment_status' => $user_service_application->payment_status,
-                ]
-            ], 201);
+                DB::commit();
+
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'Application updated successfully.',
+                    'data' => $user_service_application
+                ], 200);
+            } else {
+
+                $user_service_application = UserServiceApplication::create([
+                    'user_id'               => $user->id,
+                    'service_id'            => $request->service_id,
+                    'renewal_cycle_id'      => $request->renewal_cycle_id,
+                    'renewal'               => $request->renewal,
+                    'renewalYear'           => $request->renewalYear,
+                    'applicationId'         => $request->applicationId,
+                    'application_date'      => $request->application_date ?? now(),
+                    'status'                => $request->status ?? 'submitted',
+                    'application_data'      => json_encode($request->application_data ?? null),
+                    'applied_fee'           => $request->applied_fee,
+                    'approved_fee'          => $request->approved_fee,
+                    'payment_status'        => $request->payment_status ?? 'pending',
+                    'remarks'               => $request->remarks,
+                    'NOC_application_date'  => $request->NOC_application_date,
+                    'NOC_expiry_date'       => $request->NOC_expiry_date,
+                    'PreviousNOCexpiryDate' => $request->PreviousNOCexpiryDate,
+                    'payment_transId'       => $request->payment_transId,
+                    'GRN_number'            => $request->GRN_number,
+                    'payment_time'          => $request->payment_time,
+                    'extra_payment'         => $request->extra_payment,
+                    'comments'              => $request->comments,
+                    'NOC_certificate'       => $noc_certificate,
+                    'NOC_rejection_certificate' => $noc_rejection_certificate,
+                    'NOC_generationDate'    => $request->NOC_generationDate,
+                    'NOC_penalty_amount'    => $request->NOC_penalty_amount,
+                    'NOC_letter_number'     => $request->NOC_letter_number,
+                    'NOC_letter_date'       => $request->NOC_letter_date,
+                    'NSW_Application_Save_ID' => $request->NSW_Application_Save_ID,
+                    'NSW_license_status'    => $request->NSW_license_status,
+                    'NSW_Push_Document_ID'  => $request->NSW_Push_Document_ID,
+                    'final_fee'             => $final_fee,
+                    'current_step_number'   => $approval_flow->step_number,
+                    'max_processing_date'   => $max_processing_date
+                ]);
+
+
+                ApplicationWorkflowAssignment::create([
+                    'application_id'     => $user_service_application->id,
+                    'service_id'         => $request->service_id,
+                    'step_number'        => $approval_flow->step_number,
+                    'step_type'          => $approval_flow->step_type,
+                    'department_id'      => $approval_flow->department_id,
+                    'hierarchy_level'    => $approval_flow->hierarchy_level,
+                    'assigned_to_group'  => true,
+                    'status'             => 'pending',
+                    'action_taken_by'    => null,
+                    'action_taken_at'    => null,
+                    'remarks'            => null,
+                ]);
+
+
+
+                DB::commit();
+
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'Application created successfully.',
+                    'data' => [
+                        'id' => $user_service_application->id,
+                        'applicationId' => $user_service_application->applicationId,
+                        'service_id' => $user_service_application->service_id,
+                        'user_id' => $user_service_application->user_id,
+                        'status' => $user_service_application->status,
+                        'final_fee' => $final_fee,
+                        'current_step_number' => $approval_flow->step_number,
+                        'assigned_department_id' => $approval_flow->department_id,
+                        'assigned_hierarchy_level' => $approval_flow->hierarchy_level,
+                        'max_processing_date' => $max_processing_date->format('Y-m-d'),
+                        'payment_status' => $user_service_application->payment_status,
+                    ]
+                ], 201);
+            }
         } catch (\Illuminate\Validation\ValidationException $e) {
 
 
@@ -202,7 +285,7 @@ class UserServiceApplicationController extends Controller
                 'renewalYear'          => 'nullable|integer|min:1|max:10',
                 'applicationId'        => 'nullable|string|max:255',
                 'application_date'     => 'nullable|date',
-                'status'               => 'nullable|in:submitted,under_review,approved,rejected',
+                'status'               => 'nullable|in:submitted,under_review,approved,rejected,re_submitted,send_back',
                 'application_data'     => 'nullable|array',
                 'applied_fee'          => 'nullable|numeric',
                 'approved_fee'         => 'nullable|numeric',
@@ -304,6 +387,20 @@ class UserServiceApplicationController extends Controller
                 'final_fee'             => $final_fee,
                 'current_step_number'   => $approval_flow->step_number,
                 'max_processing_date'   => $max_processing_date
+            ]);
+
+            ApplicationWorkflowAssignment::create([
+                'application_id'     => $user_service_application->id,
+                'service_id'         => $request->service_id,
+                'step_number'        => $approval_flow->step_number,
+                'step_type'          => $approval_flow->step_type,
+                'department_id'      => $approval_flow->department_id,
+                'hierarchy_level'    => $approval_flow->hierarchy_level,
+                'assigned_to_group'  => true,
+                'status'             => 'pending',
+                'action_taken_by'    => null,
+                'action_taken_at'    => null,
+                'remarks'            => null,
             ]);
 
             DB::commit();

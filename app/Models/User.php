@@ -88,8 +88,13 @@ class User extends Authenticatable implements JWTSubject
         return $this->belongsTo(TripuraMasterData::class, 'ulb_id', 'ulb_lgd_code');
     }
 
-        public function ward()
+    public function ward()
     {
         return $this->belongsTo(TripuraMasterData::class, 'ward_id', 'gp_vc_ward_lgd_code');
+    }
+
+    public function applications()
+    {
+        return $this->hasMany(UserServiceApplication::class, 'user_id', 'id');
     }
 }

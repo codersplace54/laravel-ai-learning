@@ -303,8 +303,11 @@ class ServiceMasterController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $services = ServiceMaster::with('department:id,name')
-                ->get(['id', 'service_title_or_description', 'department_id', 'noc_type', 'target_days', 'noc_payment_type', 'allow_repeat_application']);
+            $user = Auth::user();
+
+            $services = ServiceMaster::with(['department:id,name', 'applications' => function ($query) use ($user) {
+                $query->where('user_id', $user->id)->select('id', 'service_id', 'status');
+            }])->get(['id', 'service_title_or_description', 'department_id', 'noc_type', 'target_days', 'noc_payment_type', 'allow_repeat_application']);
 
             $services = $services->map(function ($service) {
                 return [
@@ -315,6 +318,7 @@ class ServiceMasterController extends Controller
                     'noc_type' => $service->noc_type,
                     'target_days' => $service->target_days,
                     'noc_payment_type' => $service->noc_payment_type,
+                    'application_status' => $service->applications->first() ? $service->applications->first()->status : null,
                     'allow_repeat_application' => $service->allow_repeat_application,
                 ];
             });
