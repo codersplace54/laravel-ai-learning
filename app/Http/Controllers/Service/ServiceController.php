@@ -496,7 +496,7 @@ class ServiceController extends Controller
                 foreach ($application_data as $question_id => $answer) {
                     $formatted_data[] = [
                         'id' => $question_id,
-                        'question' => $questions[$question_id],
+                        'question' => $questions[$question_id] ?? 'Question not found',
                         'answer'   => $answer,
                     ];
                 }
@@ -523,8 +523,9 @@ class ServiceController extends Controller
                         'step_type'       => $flow->step_type,
                         'department'      => $flow->department->name,
                         'status'          => $flow->status,
-                        'action_taken_by' => $flow->actionTaker->authorized_person_name . ' (' . $flow->actionTaker->email_id . ')',
+                        'action_taken_by' => $flow->actionTaker?->authorized_person_name ? $flow->actionTaker->authorized_person_name . ' (' . $flow->actionTaker->email_id . ')' : null,
                         'action_taken_at' => $flow->action_taken_at,
+                        'hierarchy_level'     => $flow->hierarchy_level,
                         'remarks'         => $flow->remarks,
                     ];
                 }),
@@ -555,6 +556,18 @@ class ServiceController extends Controller
             if (!$user) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
+
+            $user = User::where('id', $user->id)
+                ->where('user_type', 'department')
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or non-departmental user.'
+                ], 404);
+            }
+
 
             $request->validate([
                 'status'         => 'required|in:pending,approved,rejected,under_review,send_back',
@@ -632,8 +645,8 @@ class ServiceController extends Controller
                             'step_type'       => $next_step_flow->step_type,
                             'department_id'   => $next_step_flow->department_id,
                             'hierarchy_level' => $next_step_flow->hierarchy_level,
-                            'action_taken_by' => $user->id,
-                            'action_taken_at' => now(),
+                            'action_taken_by' =>  null,
+                            'action_taken_at' => null,
                             'status'          => 'pending',
                         ]);
 
@@ -659,16 +672,16 @@ class ServiceController extends Controller
                         'step_number'     => $first_step_flow->step_number,
                         'step_type'       => $first_step_flow->step_type,
                         'department_id'   => $first_step_flow->department_id,
-                        'hierarchy_level' => $first_step_flow->hierarchy_level,
-                        'action_taken_by' => $request->action_taken_by,
-                        'action_taken_at' => now(),
-                        'remarks'         => $request->remarks,
-                        'status'          => 'pending',
+                        'hierarchy_level' => null,
+                        'action_taken_by' => null,
+                        'action_taken_at' => null,
+                        'remarks'         => null,
+                        'status'          => 'send_back',
                     ]);
 
                     $application->update([
                         'current_step_number' => $first_step_flow->step_number,
-                        'status'              => 'submitted',
+                        'status'              => 'send_back',
                     ]);
                 }
             }
@@ -680,6 +693,7 @@ class ServiceController extends Controller
                 'message'   => 'Application status updated',
                 'next_step' => $next_step ? [
                     'step_number'     => $next_step->step_number,
+                    'step_type'     => $next_step->step_type,
                     'department_id'   => $next_step->department_id,
                     'hierarchy_level' => $next_step->hierarchy_level
                 ] : null
@@ -806,7 +820,7 @@ class ServiceController extends Controller
                 $data[] = [
                     'step_number'    => $entry->step_number,
                     'department'     => $entry->department->name,
-                    'action_taken_by' => $entry->actionTaker->authorized_person_name . ' (' . $entry->actionTaker->email_id . ')',
+                    'action_taken_by' => $entry->actionTaker ? $entry->actionTaker->authorized_person_name . ' (' . $entry->actionTaker->email_id . ')' : null,
                     'status'         => $entry->status,
                     'hierarchy_level' => $entry->hierarchy_level,
                     'remarks'        => $entry->remarks,
@@ -837,7 +851,7 @@ class ServiceController extends Controller
         }
     }
 
-    public function get_department_user_applications($user_id)
+    public function get_department_user_assigned_applications($user_id)
     {
 
         try {
@@ -847,6 +861,7 @@ class ServiceController extends Controller
                 ->where('user_type', 'department')
                 ->first();
 
+
             if (!$user) {
                 return response()->json([
                     'success' => false,
@@ -854,14 +869,18 @@ class ServiceController extends Controller
                 ], 404);
             }
 
+            $hierarchy_level = $user->department_user->hierarchy_level;
+
             $applications = ApplicationWorkflowAssignment::with([
                 'application.service:id,service_title_or_description',
                 'application.user:id,authorized_person_name,email_id,mobile_no',
                 'department:id,name'
             ])
-                ->where('action_taken_by', $user_id)
+                ->where('status', 'pending')
                 ->get()
-                ->unique('application_id')
+                ->filter(function ($assignment) use ($hierarchy_level) {
+                    return $assignment->hierarchy_level == $hierarchy_level;
+                })
                 ->map(function ($assignment) {
                     return [
                         'application_id'   => $assignment->application->id,
@@ -872,6 +891,7 @@ class ServiceController extends Controller
                         'department'       => $assignment->department->name,
                         'status'           => $assignment->application->status,
                         'current_step'     => $assignment->application->current_step_number,
+                        'hierarchy_level'    => $assignment->hierarchy_level,
                     ];
                 });
 

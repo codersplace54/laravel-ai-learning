@@ -152,7 +152,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/applications/{id}/status', [ServiceController::class, 'update_application_status']);
         Route::post('/dashboard', [ServiceController::class, 'get_department_dashboard']);
         Route::post('/workflow-history/{application_id}', [ServiceController::class, 'get_work_flow_history']);
-        Route::post('/user/{id}/assigned-applications', [ServiceController::class, 'get_department_user_applications']);
+        Route::post('/user/{id}/assigned-applications', [ServiceController::class, 'get_department_user_assigned_applications']);
 
         Route::post('/get-department-users', [UserController::class, 'get_department_users']);
     });
