@@ -29,14 +29,15 @@ class UserController extends Controller
                     'email_id' => 'required|email|unique:users,email_id',
                     'mobile_no' => 'required|string|max:15',
                     'user_name' => 'required|string|max:100|unique:users,user_name',
-                    'district_id' => 'required|integer|exists:tripura_master_data,district_code',
-                    'subdivision_id' => 'required|integer|exists:tripura_master_data,sub_lgd_code',
-                    'ulb_id' => 'required|integer|exists:tripura_master_data,ulb_lgd_code',
-                    'ward_id' => 'required|integer|exists:tripura_master_data,gp_vc_ward_lgd_code',
+                    'district_id' => 'nullable|integer|exists:tripura_master_data,district_code',
+                    'subdivision_id' => 'nullable|integer|exists:tripura_master_data,sub_lgd_code',
+                    'ulb_id' => 'nullable|integer|exists:tripura_master_data,ulb_lgd_code',
+                    'ward_id' => 'nullable|integer|exists:tripura_master_data,gp_vc_ward_lgd_code',
                     'registered_enterprise_address' => 'required|string',
                     'registered_enterprise_city' => 'required|string',
                     'user_type' => 'required|string|in:individual,department,admin',
                     'password' => 'required|string|min:6',
+                    'pan' => 'nullable|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
 
                     'department_id'   => 'required_if:user_type,department|integer|exists:departments,id',
                     'hierarchy_level' => 'required_if:user_type,department|in:block,subdivision,district,state1,state2,state3',
@@ -66,7 +67,7 @@ class UserController extends Controller
                     'user_type.in' => 'User type must be either individual,department or admin.',
                     'password.required' => 'Password is required.',
                     'password.min' => 'Password must be at least 6 characters.',
-
+                    'pan.regex' => 'The PAN number must be in valid format (e.g., ABCDE1234F).',
                     'department_id.required' => 'The department field is required.',
                     'department_id.integer'  => 'The department must be a valid number.',
                     'department_id.exists'   => 'The selected department does not exist in our records.',
@@ -93,6 +94,7 @@ class UserController extends Controller
                 'registered_enterprise_address' => $request->registered_enterprise_address,
                 'registered_enterprise_city' => $request->registered_enterprise_city,
                 'user_type' => $request->user_type,
+                'pan' => $request->pan,
                 'password' => Hash::make($request->password),
                 'status' => 'active',
             ]);
@@ -197,8 +199,26 @@ class UserController extends Controller
             if ($request->user_type !== null) {
                 $rules['user_type'] = 'required|in:individual,department,admin';
             }
+            if ($request->pan !== null) {
+                $rules['pan'] = 'nullable|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/';
+            }
             if ($request->password !== null) {
                 $rules['password'] = 'nullable|string|min:6';
+            }
+            if ($request->district_id !== null) {
+                $rules['district_id'] = 'nullable|integer|exists:tripura_master_data,district_code';
+            }
+            if ($request->subdivision_id !== null) {
+                $rules['subdivision_id'] = 'nullable|integer|exists:tripura_master_data,sub_lgd_code';
+            }
+            if ($request->ulb_id !== null) {
+                $rules['ulb_id'] = 'nullable|integer|exists:tripura_master_data,ulb_lgd_code';
+            }
+            if ($request->hierarchy_level !== null) {
+                $rules['hierarchy_level'] = 'nullable|in:block,subdivision,district,state1,state2,state3';
+            }
+            if ($request->department_id !== null) {
+                $rules['department_id'] = 'nullable|integer|exists:departments,id';
             }
 
             $request->validate($rules, [
@@ -217,7 +237,14 @@ class UserController extends Controller
                 'registered_enterprise_city.required' => 'Enterprise city is required.',
                 'user_type.required' => 'User type is required.',
                 'user_type.in' => 'User type must be individual,department or admin.',
+                'pan.regex' => 'The PAN number must be in valid format (e.g., ABCDE1234F).',
                 'password.min' => 'Password must be at least 6 characters long.',
+                'district_id.exists'  => 'Selected district is invalid.',
+                'subdivision_id.exists' => 'Selected subdivision is invalid.',
+                'ulb_id.exists'  => 'Selected ULB is invalid.',
+                'department_id.integer'  => 'The department must be a valid number.',
+                'department_id.exists'   => 'The selected department does not exist in our records.',
+                'hierarchy_level.in' => 'The hierarchy level must be one of: block, subdivision, district, state1, state2, or state3.',
             ]);
 
             DB::beginTransaction();
@@ -252,11 +279,43 @@ class UserController extends Controller
             if ($request->user_type !== null) {
                 $update_data['user_type'] = $request->user_type;
             }
+            if ($request->pan !== null) {
+                $update_data['pan'] = $request->pan;
+            }
             if ($request->password !== null) {
                 $update_data['password'] = Hash::make($request->password);
             }
 
             $user->update($update_data);
+
+            if ($user->user_type == "department") {
+
+                $department_user = DepartmentUser::where('user_id', $user->id)->first();
+                if ($department_user) {
+
+                    $department_user->update([
+                        'department_id' => $request->department_id,
+                        'hierarchy_level' => $request->hierarchy_level,
+                        'district_id' => $request->district_id,
+                        'subdivision_id' => $request->subdivision_id,
+                        'block_id' => $request->ulb_id,
+                    ]);
+                    $user->department_id   = $department_user->department_id;
+                    $user->hierarchy_level = $department_user->hierarchy_level;
+                } else {
+
+                    $department_user = DepartmentUser::create([
+                        'user_id' => $user->id,
+                        'department_id' => $request->department_id,
+                        'designation' => $request->designation,
+                        'block_id' => $request->ulb_id,
+                        'subdivision_id' => $request->subdivision_id,
+                        'district_id' => $request->district_id,
+                        'hierarchy_level' => $request->hierarchy_level,
+                        'is_active' => 1
+                    ]);
+                }
+            }
 
             DB::commit();
 
@@ -404,9 +463,25 @@ class UserController extends Controller
 
         try {
 
+            $department = Auth::user();
+            if (!$department) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $department = User::where('id', $department->id)
+                ->where('user_type', 'department')
+                ->first();
+
+            if (!$department) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or not an department user.'
+                ], 404);
+            }
+
 
             $department_users = User::where('user_type', 'department')
-                ->with(['district', 'subdivision', 'ulb', 'ward'])
+                ->with(['district', 'subdivision', 'ulb', 'ward', 'department_user.department'])
                 ->get();
 
             if ($department_users->isEmpty()) {
@@ -427,14 +502,16 @@ class UserController extends Controller
                     'pan'  => $user->pan,
                     'user_name'  => $user->user_name,
                     'bin'   => $user->bin,
-                    'district_code'   => $user->district->district_code,
-                    'district_name' => $user->district->district_name,
-                    'subdivision_code'   => $user->subdivision->sub_lgd_code,
-                    'subdivision_name' =>  $user->subdivision->sub_division,
-                    'ulb_code'   => $user->ulb->ulb_lgd_code,
-                    'ulb_name' => $user->ulb->ulb_name,
-                    'ward_code'   => $user->ward->gp_vc_ward_lgd_code,
-                    'ward_name' => $user->ward->name_of_gp_vc_or_ward,
+                    'district_code'   => $user->district->district_code ?? null,
+                    'district_name' => $user->district->district_name ?? null,
+                    'subdivision_code'   => $user->subdivision->sub_lgd_code ?? null,
+                    'subdivision_name' =>  $user->subdivision->sub_division ?? null,
+                    'ulb_code'   => $user->ulb->ulb_lgd_code ?? null,
+                    'ulb_name' => $user->ulb->ulb_name ?? null,
+                    'ward_code'   => $user->ward->gp_vc_ward_lgd_code ?? null,
+                    'ward_name' => $user->ward->name_of_gp_vc_or_ward ?? null,
+                    'department_name' => $user->department_user->department->name ?? null,
+                    'department_id' => $user->department_user->department_id ?? null,
                     'registered_enterprise_address' => $user->registered_enterprise_address,
                     'registered_enterprise_city' => $user->registered_enterprise_city,
                     'user_type' => $user->user_type,
