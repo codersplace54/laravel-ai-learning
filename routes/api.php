@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\EnterpriseDetailController;
 use App\Http\Controllers\Role\RoleController;
 use App\Http\Controllers\User\UserController;
@@ -112,6 +113,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-approval-flow-store', [ServiceApprovalFlowController::class, 'service_approval_flow_store']);
         Route::post('service-approval-flow-update', [ServiceApprovalFlowController::class, 'service_approval_flow_update']);
         Route::post('service-approval-flow-delete', [ServiceApprovalFlowController::class, 'service_approval_flow_delete']);
+
+        Route::post('fetch-all-business-users', [AdminController::class, 'fetch_all_business_users']);
+        Route::post('fetch-all-department-users', [AdminController::class, 'fetch_all_department_users']);
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
@@ -127,6 +131,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-application-update', [UserServiceApplicationController::class, 'user_service_application_update']);
         Route::post('service-application-view', [UserServiceApplicationController::class, 'user_service_application_view']);
         Route::post('service-application-delete', [UserServiceApplicationController::class, 'user_service_application_delete']);
+        Route::post('get-all-user-service-applications', [UserServiceApplicationController::class, 'get_all_user_service_applications']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);

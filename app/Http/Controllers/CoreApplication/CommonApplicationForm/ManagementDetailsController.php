@@ -112,6 +112,8 @@ class ManagementDetailsController extends Controller
                     'chief_administrative_heads.*.name' => 'required|string|max:255',
                     'chief_administrative_heads.*.permanent_address' => 'nullable|string|max:255',
                     'chief_administrative_heads.*.mobile_number' => 'required|string',
+
+                    'remove_self_certificate_format_3A' => 'nullable|in:delete',
                 ]);
             }
 
@@ -250,70 +252,73 @@ class ManagementDetailsController extends Controller
             );
 
             $partner_details_array = [];
-            foreach ($request->partner_details as $index => $partner) {
+            $partner_ids = [];
+            if (!empty($request->partner_details) && is_array($request->partner_details)) {
+                foreach ($request->partner_details as $index => $partner) {
 
-                $id_proof_doc = null;
-                $signature_image = null;
+                    $id_proof_doc = null;
+                    $signature_image = null;
 
-                if ($request->hasFile("partner_details.$index.id_proof_doc")) {
-                    $file = $request->file("partner_details.$index.id_proof_doc");
-                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
-                    $id_proof_doc = $file->storeAs("uploads/$user->id/partner_id_proof", $filename, 'public');
-                }
+                    if ($request->hasFile("partner_details.$index.id_proof_doc")) {
+                        $file = $request->file("partner_details.$index.id_proof_doc");
+                        $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                        $id_proof_doc = $file->storeAs("uploads/$user->id/partner_id_proof", $filename, 'public');
+                    }
 
-                if ($request->hasFile("partner_details.$index.signature_image")) {
-                    $file = $request->file("partner_details.$index.signature_image");
-                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
-                    $signature_image = $file->storeAs("uploads/$user->id/partner_signature", $filename, 'public');
-                }
+                    if ($request->hasFile("partner_details.$index.signature_image")) {
+                        $file = $request->file("partner_details.$index.signature_image");
+                        $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                        $signature_image = $file->storeAs("uploads/$user->id/partner_signature", $filename, 'public');
+                    }
 
-                if (!empty($partner->id)) {
-                    $partner_record = PartnerSharePresidentOrSecretaryDetail::where('user_id', $user->id)
-                        ->where('id', $partner->id)
-                        ->first();
+                    if (!empty($partner->id)) {
+                        $partner_record = PartnerSharePresidentOrSecretaryDetail::where('user_id', $user->id)
+                            ->where('id', $partner->id)
+                            ->first();
 
-                    if ($partner_record) {
-                        $partner_record->update([
-                            'name' => $partner['name'],
-                            'fathers_name' => $partner['fathers_name'],
-                            'age' => $partner['age'],
-                            'sex' => $partner['sex'],
-                            'social_status' => $partner['social_status'],
-                            'profession' => $partner['profession'],
-                            'permanent_address' => $partner['permanent_address'],
-                            'mobile_no' => $partner['mobile_no'],
-                            'date_of_birth' => $partner['date_of_birth'],
-                            'date_of_joining' => $partner['date_of_joining'],
-                            'id_proof_doc' => $id_proof_doc ?? $partner_record->id_proof_doc,
-                            'signature_image' => $signature_image ?? $partner_record->signature_image,
+                        if ($partner_record) {
+                            $partner_record->update([
+                                'name' => $partner['name'] ?? '',
+                                'fathers_name' => $partner['fathers_name'] ?? '',
+                                'age' => $partner['age'] ?? null,
+                                'sex' => $partner['sex'] ?? '',
+                                'social_status' => $partner['social_status'] ?? '',
+                                'profession' => $partner['profession'] ?? '',
+                                'permanent_address' => $partner['permanent_address'] ?? '',
+                                'mobile_no' => $partner['mobile_no'] ?? null,
+                                'date_of_birth' => $partner['date_of_birth'] ?? null,
+                                'date_of_joining' => $partner['date_of_joining'] ?? null,
+                                'id_proof_doc' => $id_proof_doc ?? $partner_record->id_proof_doc,
+                                'signature_image' => $signature_image ?? $partner_record->signature_image,
+                            ]);
+                        }
+                    } else {
+
+                        $partner_record = PartnerSharePresidentOrSecretaryDetail::create([
+                            'user_id' => $user->id,
+                            'name' => $partner['name'] ?? '',
+                            'fathers_name' => $partner['fathers_name'] ?? '',
+                            'age' => $partner['age'] ?? null,
+                            'sex' => $partner['sex'] ?? '',
+                            'social_status' => $partner['social_status'] ?? '',
+                            'profession' => $partner['profession'] ?? '',
+                            'permanent_address' => $partner['permanent_address'] ?? '',
+                            'mobile_no' => $partner['mobile_no'] ?? null,
+                            'date_of_birth' => $partner['date_of_birth'] ?? null,
+                            'date_of_joining' => $partner['date_of_joining'] ?? null,
+                            'id_proof_doc' => $id_proof_doc,
+                            'signature_image' => $signature_image,
                         ]);
                     }
-                } else {
+                    $partner_ids[] = $partner_record->id;
 
-                    $partner_record = PartnerSharePresidentOrSecretaryDetail::create([
-                        'user_id' => $user->id,
-                        'name' => $partner['name'],
-                        'fathers_name' => $partner['fathers_name'],
-                        'age' => $partner['age'],
-                        'sex' => $partner['sex'],
-                        'social_status' => $partner['social_status'],
-                        'profession' => $partner['profession'],
-                        'permanent_address' => $partner['permanent_address'],
-                        'mobile_no' => $partner['mobile_no'],
-                        'date_of_birth' => $partner['date_of_birth'],
-                        'date_of_joining' => $partner['date_of_joining'],
-                        'id_proof_doc' => $id_proof_doc,
-                        'signature_image' => $signature_image,
-                    ]);
+                    $partner_array = $this->get_file_urls(
+                        $partner_record,
+                        ['id_proof_doc', 'signature_image']
+                    );
+
+                    $partner_details_array[] = $partner_array;
                 }
-                $partner_ids[] = $partner_record->id;
-
-                $partner_array = $this->get_file_urls(
-                    $partner_record,
-                    ['id_proof_doc', 'signature_image']
-                );
-
-                $partner_details_array[] = $partner_array;
             }
             PartnerSharePresidentOrSecretaryDetail::where('user_id', $user->id)
                 ->whereNotIn('id', $partner_ids)

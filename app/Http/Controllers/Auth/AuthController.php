@@ -58,14 +58,22 @@ class AuthController extends Controller
                 'id',
                 'authorized_person_name',
                 'email_id',
-                'user_type'
+                'user_name',
+                'user_type',
             ]);
+
+            $data['district'] = $user->district->district_name ?? null;
+            $data['subdivision'] = $user->district->sub_division ?? null;
+            $data['ulb'] = $user->district->ulb_name ?? null;
+            $data['ward'] = $user->district->name_of_gp_vc_or_ward ?? null;
 
             if ($user->user_type === 'department') {
                 $department_user = $user->department_user()->with('department')->first();
                 if ($department_user && $department_user->department) {
                     $data['department_id'] = $department_user->department->id;
                     $data['department_name'] = $department_user->department->name;
+                    $data['designation'] = $department_user->designation;
+                    $data['hierarchy'] = $department_user->hierarchy_level;
                 }
             }
 

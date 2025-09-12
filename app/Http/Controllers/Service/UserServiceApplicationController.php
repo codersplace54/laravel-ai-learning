@@ -636,4 +636,51 @@ class UserServiceApplicationController extends Controller
             ], 500);
         }
     }
+
+    public function get_all_user_service_applications(Request $request)
+    {
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'user_id' => 'required|integer|exists:users,id',
+            ]);
+
+            $service_user_application = UserServiceApplication::where('user_id', $request->user_id)->get();
+
+            if ($service_user_application->isEmpty()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No service user applications found for the given user_id.',
+                ], 404);
+            }
+
+            foreach ($service_user_application as $service) {
+                $service->application_data = json_decode($service->application_data, true);
+                $latest_workflow = $service->workflow()->latest('updated_at')->first();
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Service user application fetched successfully.',
+                'data' => [
+                    'application' => $service_user_application,
+                    'application_status' => $latest_workflow,
+                ]
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
