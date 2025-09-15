@@ -437,9 +437,22 @@ class UserController extends Controller
                 'mobile_no' => $user->mobile_no,
                 'pan' => $user->pan,
                 'bin' => $user->bin,
+                'district'                     => $user->district->district_name,
+                'district_code'                => $user->district->district_code,
+                'subdivision_name'                 => $user->subdivision->sub_division ?? null,
+                'subdivision_code'               => $user->subdivision->sub_lgd_code ?? null,
+                'ulb_name'                          => $user->ulb->ulb_name ?? null,
+                'ulb_code'                 => $user->ulb->ulb_lgd_code ?? null,
+                'ward_name'                         => $user->ward->name_of_gp_vc_or_ward ?? null,
+                'ward_code'                      => $user->ward->gp_vc_ward_lgd_code ?? null,
                 'user_type' => $user->user_type,
                 'registered_enterprise_address' => $user->registered_enterprise_address,
                 'registered_enterprise_city' => $user->registered_enterprise_city,
+                'is_active'                    => $user->is_active,
+                'department_id'   => $user->department_user->department_id   ?? null,
+                'hierarchy_level' => $user->department_user->hierarchy_level ?? null,
+                'designation'     => $user->department_user->designation     ?? null,
+
 
             ];
 

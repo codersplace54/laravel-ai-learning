@@ -113,7 +113,11 @@ class ManagementDetailsController extends Controller
                     'chief_administrative_heads.*.permanent_address' => 'nullable|string|max:255',
                     'chief_administrative_heads.*.mobile_number' => 'required|string',
 
-                    'remove_self_certificate_format_3A' => 'nullable|in:delete',
+                    'remove_owner_details_photo' => 'nullable|in:delete',
+                    'remove_manager_details_photo' => 'nullable|in:delete',
+                    'remove_signature_authorization_of_owner' => 'nullable|in:delete',
+                    'remove_factory_occupiers_signature' => 'nullable|in:delete',
+                    'remove_factory_managers_signature' => 'nullable|in:delete',
                 ]);
             }
 
@@ -125,6 +129,16 @@ class ManagementDetailsController extends Controller
             $signature_owner = null;
             $signature_occupier = null;
             $signature_manager = null;
+
+            $update_data = [];
+            $file_upload_delete_fields = [
+                'owner_details_photo',
+                'manager_details_photo',
+                'signature_authorization_of_owner',
+                'factory_occupiers_signature',
+                'factory_managers_signature'
+            ];
+
 
 
             if ($request->hasFile('owner_details_photo')) {
@@ -167,9 +181,19 @@ class ManagementDetailsController extends Controller
                 $signature_manager = $request->file('factory_managers_signature')->storeAs("uploads/$user->id/factory_managers_signature", $filename, 'public');
             }
 
+        foreach ($file_upload_delete_fields as $field) {
+
+            if ($request->input("remove_$field") === 'delete' && !$request->hasFile($field)) {
+                if ($management_details && $management_details->$field) {
+                    Storage::disk('public')->delete($management_details->$field);
+                    $update_data[$field] = null;
+                }
+            }
+        }
+
             if ($management_details) {
 
-                $management_details->update([
+                $management_details->update(array_merge([
                     'owner_details_name' => $request->owner_details_name,
                     'owner_details_fathers_name' => $request->owner_details_fathers_name,
                     'owner_details_residential_address' => $request->owner_details_residential_address,
@@ -200,7 +224,7 @@ class ManagementDetailsController extends Controller
                     'signature_authorization_of_owner' => $signature_owner ?? $management_details->signature_authorization_of_owner,
                     'factory_occupiers_signature' => $signature_occupier ?? $management_details->factory_occupiers_signature,
                     'factory_managers_signature' => $signature_manager ?? $management_details->factory_managers_signature,
-                ]);
+                ], $update_data));
             } else {
 
                 $management_details = ManagementDetails::create([

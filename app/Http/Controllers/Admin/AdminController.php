@@ -42,6 +42,35 @@ class AdminController extends Controller
                 ], 200);
             }
 
+            $business_users = $business_users->map(function ($user) {
+                return [
+                    'id' => $user->id,
+                    'name_of_enterprise' => $user->name_of_enterprise,
+                    'authorized_person_name' => $user->authorized_person_name,
+                    'email_id' => $user->email_id,
+                    'mobile_no'  => $user->mobile_no,
+                    'pan'  => $user->pan,
+                    'user_name'  => $user->user_name,
+                    'bin'   => $user->bin,
+                    'district_code'   => $user->district->district_code ?? null,
+                    'district_name' => $user->district->district_name ?? null,
+                    'subdivision_code'   => $user->subdivision->sub_lgd_code ?? null,
+                    'subdivision_name' =>  $user->subdivision->sub_division ?? null,
+                    'ulb_code'   => $user->ulb->ulb_lgd_code ?? null,
+                    'ulb_name' => $user->ulb->ulb_name ?? null,
+                    'ward_code'   => $user->ward->gp_vc_ward_lgd_code ?? null,
+                    'ward_name' => $user->ward->name_of_gp_vc_or_ward ?? null,
+                    'department_name' => $user->department_user->department->name ?? null,
+                    'department_id' => $user->department_user->department_id ?? null,
+                    'registered_enterprise_address' => $user->registered_enterprise_address,
+                    'registered_enterprise_city' => $user->registered_enterprise_city,
+                    'user_type' => $user->user_type,
+                    'status' => $user->status,
+                    'created_at'  => $user->created_at,
+                    'updated_at'  => $user->updated_at
+                ];
+            });
+
             return response()->json([
                 'status' => 1,
                 'data' => $business_users

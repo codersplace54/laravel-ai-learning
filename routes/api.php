@@ -76,6 +76,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
     Route::post('caf/line-of-activity-store', [LineOfActivityDetailsController::class, 'line_of_activity_store_or_update']);
     Route::post('caf/line-of-activity-delete', [LineOfActivityDetailsController::class, 'line_of_activity_delete']);
+    Route::post('caf/raw-material-delete', [LineOfActivityDetailsController::class, 'raw_material_delete']);
+    Route::post('caf/list-of-products-delete', [LineOfActivityDetailsController::class, 'list_of_products_delete']);
     Route::post('caf/line-of-activity-view', [LineOfActivityDetailsController::class, 'line_of_activity_view']);
 
     Route::post('caf/general-attachment-store', [GeneralAttachmentsController::class, 'general_attachment_store_or_update']);

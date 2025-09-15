@@ -59,6 +59,7 @@ class AuthController extends Controller
                 'authorized_person_name',
                 'email_id',
                 'user_name',
+                'bin',
                 'user_type',
             ]);
 
