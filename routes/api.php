@@ -134,6 +134,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-application-view', [UserServiceApplicationController::class, 'user_service_application_view']);
         Route::post('service-application-delete', [UserServiceApplicationController::class, 'user_service_application_delete']);
         Route::post('get-all-user-service-applications', [UserServiceApplicationController::class, 'get_all_user_service_applications']);
+        Route::post('get-details-user-service-applications', [UserServiceApplicationController::class, 'get_details_user_service_applications']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);

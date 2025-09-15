@@ -670,15 +670,75 @@ class UserServiceApplicationController extends Controller
             foreach ($service_user_application as $service) {
                 $service->application_data = json_decode($service->application_data, true);
                 $latest_workflow = $service->workflow()->latest('updated_at')->first();
+
+                $response_data[] = [
+                    'application_id' => $service->id,
+                    'application_data' => $service->application_data,
+                    'service_title_or_description' => $service->service->service_title_or_description ?? null,
+                    'department' => $service->service->department_id ?? null,
+                    'department_name' => $service->service->department->name ?? null,
+                    'application_number' => $service->applicationId ?? null,
+                    'application_date' => $service->application_date ?? null,
+                    'noc_payment_type' => $service->noc_payment_type ?? null,
+                    'NOC_expiry_date'  => $service->NOC_expiry_date ?? null,
+                    'payment_status'  => $service->payment_status ?? null,
+                    'status'  => $service->status ?? null,
+                    'renewal_date'  => $service->renewalYear ?? null,
+                    'allow_repeat_application' => $service->allow_repeat_application ?? null,
+                    'latest_workflow_status' => $latest_workflow?->status ?? null
+                ];
             }
 
             return response()->json([
                 'status' => 1,
                 'message' => 'Service user application fetched successfully.',
-                'data' => [
-                    'application' => $service_user_application,
-                    'application_status' => $latest_workflow,
-                ]
+                'data' => $response_data
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function get_details_user_service_applications(Request $request)
+    {
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'service_id' => 'required|integer|exists:service_masters,id',
+                'application_id' => 'required|integer|exists:user_service_applications,id',
+            ]);
+
+            $service_user_application = UserServiceApplication::where('service_id', $request->service_id)
+                ->where('id', $request->application_id)
+                ->get();
+
+            if ($service_user_application->isEmpty()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No service user application found for the given service_id.',
+                ], 404);
+            }
+
+            foreach ($service_user_application as $service) {
+                $service->application_data = json_decode($service->application_data, true);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Service user application fetched successfully.',
+                'data' => $service_user_application,
             ]);
         } catch (\Exception $e) {
 

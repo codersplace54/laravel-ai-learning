@@ -318,6 +318,7 @@ class ServiceMasterController extends Controller
                     'noc_type' => $service->noc_type,
                     'target_days' => $service->target_days,
                     'noc_payment_type' => $service->noc_payment_type,
+                    'application_id' => $service->applications->first() ? $service->applications->first()->id : null,
                     'application_status' => $service->applications->first() ? $service->applications->first()->status : null,
                     'allow_repeat_application' => $service->allow_repeat_application,
                 ];
