@@ -516,6 +516,7 @@ class ServiceController extends Controller
                 'status'           => $application->status,
                 'applied_fee'      => $application->applied_fee,
                 'approved_fee'     => $application->approved_fee,
+                'application_fee'     => $application->final_fee,
                 'payment_status'   => $application->payment_status,
                 'workflow' => $application->workflow->map(function ($flow) {
                     return [

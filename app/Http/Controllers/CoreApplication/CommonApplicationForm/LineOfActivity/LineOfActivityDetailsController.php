@@ -153,6 +153,84 @@ class LineOfActivityDetailsController extends Controller
         }
     }
 
+    public function raw_material_delete(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            DB::beginTransaction();
+
+            $request->validate([
+                'id' => 'required|integer|exists:raw_materials_to_be_used,id',
+            ]);
+
+            RawMaterialToBeUsed::where('id', $request->id)->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Raw Materials to be used deleted successfully.',
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            Log::error('Error deleting LineOfActivity: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+            ], 500);
+        }
+    }
+
+    public function list_of_products_delete(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            DB::beginTransaction();
+
+            $request->validate([
+                'id' => 'required|integer|exists:list_of_products_or_byproducts,id',
+            ]);
+
+            ListOfProductsOrByProduct::where('id', $request->id)->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'List of products deleted successfully.',
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            Log::error('Error deleting LineOfActivity: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+            ], 500);
+        }
+    }
+
 
     public function line_of_activity_view()
     {

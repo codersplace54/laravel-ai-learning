@@ -84,6 +84,13 @@ class UserServiceApplicationController extends Controller
                 ->orderBy('step_number', 'asc')
                 ->first();
 
+            if (!$approval_flow) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'You cannot submit an application for this particular service; please contact the administrator.'
+                ], 404);
+            }
+
             $application_date = Carbon::parse($request->NOC_application_date ?? now());
             $target_days = $service->target_days ?? 0;
             $max_processing_date = $this->add_working_days($application_date, $target_days);
