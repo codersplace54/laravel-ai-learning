@@ -446,6 +446,9 @@ class ServiceController extends Controller
                     'applicant_phone'     => $application->user->mobile_no,
                     'status'              => $application->status,
                     'submission_date'     => $application->application_date,
+                    'final_fee'           => $application->final_fee,
+                    'extra_payment'       => $application->extra_payment,
+                    'total_fee'           => $application->total_fee,
                     'current_step_number' => $application->current_step_number,
                     'max_processing_date' => $application->max_processing_date,
                 ];
@@ -571,7 +574,7 @@ class ServiceController extends Controller
 
 
             $request->validate([
-                'status'         => 'required|in:pending,approved,rejected,under_review,send_back',
+                'status'         => 'required|in:pending,approved,rejected,under_review,send_back,extra_payment',
                 'remarks'        => 'nullable|string'
             ]);
 
@@ -683,6 +686,39 @@ class ServiceController extends Controller
                     $application->update([
                         'current_step_number' => $first_step_flow->step_number,
                         'status'              => 'send_back',
+                    ]);
+                }
+            } elseif ($request->status === 'extra_payment') {
+
+                $request->validate([
+                    'extra_payment' => 'required|integer',
+                ]);
+
+
+                $first_step_flow = ServiceApprovalFlow::where('service_id', $application->service_id)
+                    ->orderBy('step_number', 'asc')
+                    ->first();
+
+                if ($first_step_flow) {
+                    $next_step = ApplicationWorkflowAssignment::create([
+                        'application_id'  => $application->id,
+                        'service_id'      => $application->service_id,
+                        'step_number'     => $first_step_flow->step_number,
+                        'step_type'       => $first_step_flow->step_type,
+                        'department_id'   => $first_step_flow->department_id,
+                        'hierarchy_level' => null,
+                        'action_taken_by' => null,
+                        'action_taken_at' => null,
+                        'remarks'         => null,
+                        'status'          => 'extra_payment',
+                    ]);
+
+                    $application->update([
+                        'current_step_number' => $first_step_flow->step_number,
+                        'payment_status'      => 'pending',
+                        'extra_payment'       => $request->extra_payment,
+                        'remarks'             => $request->remarks,
+                        'status'              => 'extra_payment',
                     ]);
                 }
             }
