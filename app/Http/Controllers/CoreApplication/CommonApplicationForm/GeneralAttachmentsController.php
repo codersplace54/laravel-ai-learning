@@ -367,4 +367,70 @@ class GeneralAttachmentsController extends Controller
 
         return $array;
     }
+
+    public function get_user_caf_generalAttachment_details(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+
+            if (!$user) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Unauthenticated user.'
+                ], 401);
+            }
+
+            $request->validate([
+                'user_id' => 'required|exists:users,id',
+            ]);
+
+            $general_attachment = GeneralAttachment::where('user_id', $request->user_id)->first();
+
+            if (!$general_attachment) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No general attachment found for this user.'
+                ], 404);
+            }
+
+            $general_attachment = $this->get_file_urls(
+                $general_attachment,
+                [
+                    'general_self_certification_form',
+                    'self_certificate_format_3A',
+                    'tree_registration_certificate',
+                    'owner_pan_pdf',
+                    'owner_aadhar_pdf',
+                    'udyog_aadhar',
+                    'gst_certificate_pdf',
+                    'combined_plan_document',
+                    'unit_land_details_pdf',
+                    'unit_registaration_details_pdf',
+                    'unit_property_tax_clearance_certificate_pdf',
+                    'unit_process_flow_chart_diagram_or_write_up_pdf',
+                    'detailed_project_report_pdf',
+                    'other_supporting_docuement1_pdf',
+                ]
+            );
+
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'General attachment fetched successfully.',
+                'data' => $general_attachment,
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            Log::error('Error fetching general attachment: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching.',
+            ], 500);
+        }
+    }
 }

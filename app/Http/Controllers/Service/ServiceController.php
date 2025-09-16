@@ -407,7 +407,7 @@ class ServiceController extends Controller
                 'applicant_phone' => 'nullable|string',
                 'date_from'       => 'nullable|date',
                 'date_to'         => 'nullable|date|after_or_equal:date_from',
-            ]); 
+            ]);
 
             $data = UserServiceApplication::with(['service', 'user'])
                 ->whereHas('service', function ($service) use ($request) {
@@ -447,13 +447,14 @@ class ServiceController extends Controller
                     'status'              => $application->status,
                     'submission_date'     => $application->application_date,
                     'final_fee'           => $application->final_fee,
-                    'extra_payment'       => $application->extra_payment,
-                    'total_fee'           => $application->total_fee,
+                    'extra_payment'       => $application->extra_payment ?? 0,
+                    'total_fee'           => $application->total_fee  ?? 0,
+                    'payment_status'      => $application->payment_status,
                     'current_step_number' => $application->current_step_number,
                     'max_processing_date' => $application->max_processing_date,
                     'district'            => $application->user->district->district_name,
                     'sub_division'            => $application->user->subdivision->sub_division,
-                    'hierarchy'            => $application->user->department_user->hierarchy_level,
+                    'hierarchy'            => $application->user->department_user->hierarchy_level ?? null,
                 ];
             });
 
@@ -523,6 +524,8 @@ class ServiceController extends Controller
                 'applied_fee'      => $application->applied_fee,
                 'approved_fee'     => $application->approved_fee,
                 'application_fee'     => $application->final_fee,
+                'extra_payment'        => $application->extra_payment ?? 0,
+                'total_fee'         => $application->total_fee ?? 0,
                 'payment_status'   => $application->payment_status,
                 'workflow' => $application->workflow->map(function ($flow) {
                     return [
@@ -716,9 +719,12 @@ class ServiceController extends Controller
                         'status'          => 'extra_payment',
                     ]);
 
+                    $total_fee = $application->final_fee +  $request->extra_payment;
+
                     $application->update([
                         'current_step_number' => $first_step_flow->step_number,
                         'payment_status'      => 'pending',
+                        'total_fee'           =>  $total_fee,
                         'extra_payment'       => $request->extra_payment,
                         'remarks'             => $request->remarks,
                         'status'              => 'extra_payment',

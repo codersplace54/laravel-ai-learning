@@ -49,7 +49,7 @@ class ActivityController extends Controller
                     'nic_4_digit_code' => $activity['nic_4_digit_code'],
                     'nic_5_digit_code' => $activity['nic_5_digit_code'],
                 ]);
-                 $list_of_activities[] = $list_of_activity->toArray();
+                $list_of_activities[] = $list_of_activity->toArray();
             }
 
             DB::commit();
@@ -151,6 +151,47 @@ class ActivityController extends Controller
             }
 
             $activities = Activity::where('user_id', $user->id)->get();
+
+            if (!$activities) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No activities found for this user.'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Activities fetched successfully.',
+                'data' => $activities,
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching.',
+                'error_message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function get_user_caf_activity_details(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'user_id' => 'required|exists:users,id',
+            ]);
+
+            $activities = Activity::where('user_id', $request->user_id)->get();
 
             if (!$activities) {
                 return response()->json([

@@ -294,4 +294,47 @@ class LineOfActivityDetailsController extends Controller
             ], 500);
         }
     }
+
+    public function get_user_caf_lineOfActivity_details(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'user_id' => 'required|exists:users,id',
+            ]);
+
+            $line_of_activity = LineOfActivity::where('user_id', $request->user_id)->first();
+
+            if (!$line_of_activity) {
+                return response()->json(['status' => 0, 'message' => 'No LineOfActivity found.'], 404);
+            }
+
+            $raw_material_to_be_used = RawMaterialToBeUsed::where('user_id', $request->user_id)->get();
+            $list_of_products = ListOfProductsOrByProduct::where('user_id', $request->user_id)->get();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'LineOfActivity details fetched successfully.',
+                'line_of_activity' => $line_of_activity,
+                'raw_material_to_be_used' => $raw_material_to_be_used,
+                'list_of_products' => $list_of_products,
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            Log::error('Error fetching LineOfActivity: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+            ], 500);
+        }
+    }
 }

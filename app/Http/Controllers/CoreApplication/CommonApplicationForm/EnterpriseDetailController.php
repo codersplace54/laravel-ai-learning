@@ -261,4 +261,51 @@ class EnterpriseDetailController extends Controller
             ], 500);
         }
     }
+
+    public function get_user_caf_enterprise_details(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+
+            if (!$user) {
+
+                return response()->json([
+                    "status" => 0,
+                    "message" => "Unauthorized. User not authenticated.",
+                ], 401);
+            }
+
+            $request->validate([
+                'user_id' => 'required|exists:users,id',
+            ]);
+
+            $enterprise_detail = EnterpriseDetail::where('user_id', $request->user_id)->first();
+
+            if (!$enterprise_detail) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Enterprise details not found for this user.',
+                ], 404);
+            }
+
+            return response()->json([
+
+
+                'status' => 1,
+                'message' => 'Enterprise details fetched successfully.',
+                'data' => $enterprise_detail,
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to fetch enterprise details.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

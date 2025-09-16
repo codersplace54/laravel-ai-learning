@@ -163,6 +163,13 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/user/{id}/assigned-applications', [ServiceController::class, 'get_department_user_assigned_applications']);
 
         Route::post('/get-department-users', [UserController::class, 'get_department_users']);
+        Route::post('/get-user-caf-unit_details', [UnitDetailController::class, 'get_user_caf_unit_details']);
+        Route::post('/get-user-caf-management-details', [ManagementDetailsController::class, 'get_user_caf_management_details']);
+        Route::post('/get-user-caf-enterprise-details', [EnterpriseDetailController::class, 'get_user_caf_enterprise_details']);
+        Route::post('/get-user-caf-lineOfActivity-details', [LineOfActivityDetailsController::class, 'get_user_caf_lineOfActivity_details']);
+        Route::post('/get-user-caf-generalAttachment-details', [GeneralAttachmentsController::class, 'get_user_caf_generalAttachment_details']);
+        Route::post('/get-user-caf-bank-details', [BankDetailController::class, 'get_user_caf_bank_details']);
+        Route::post('/get-user-caf-activity-details', [ActivityController::class, 'get_user_caf_activity_details']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
