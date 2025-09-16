@@ -103,6 +103,8 @@ class UserServiceApplicationController extends Controller
 
             if ($user_service_application) {
 
+            $total_fee =  $final_fee + $user_service_application->extra_payment;
+
                 if (!in_array($user_service_application->status, ['submitted', 're_submitted', 'send_back', 'extra_payment','saved'])) {
                     return response()->json([
                         'status' => 0,

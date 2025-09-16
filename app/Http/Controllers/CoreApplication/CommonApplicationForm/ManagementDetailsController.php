@@ -181,15 +181,15 @@ class ManagementDetailsController extends Controller
                 $signature_manager = $request->file('factory_managers_signature')->storeAs("uploads/$user->id/factory_managers_signature", $filename, 'public');
             }
 
-        foreach ($file_upload_delete_fields as $field) {
+            foreach ($file_upload_delete_fields as $field) {
 
-            if ($request->input("remove_$field") === 'delete' && !$request->hasFile($field)) {
-                if ($management_details && $management_details->$field) {
-                    Storage::disk('public')->delete($management_details->$field);
-                    $update_data[$field] = null;
+                if ($request->input("remove_$field") === 'delete' && !$request->hasFile($field)) {
+                    if ($management_details && $management_details->$field) {
+                        Storage::disk('public')->delete($management_details->$field);
+                        $update_data[$field] = null;
+                    }
                 }
             }
-        }
 
             if ($management_details) {
 
@@ -529,5 +529,71 @@ class ManagementDetailsController extends Controller
             }
         }
         return $array;
+    }
+
+    public function get_user_caf_management_details(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+
+            if (!$user) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Unauthenticated.',
+                ], 401);
+            }
+
+            $request->validate([
+                'user_id' => 'required|exists:users,id',
+            ]);
+
+            $management_details = ManagementDetails::where('user_id', $request->user_id)->first();
+            $partnerDetails = PartnerSharePresidentOrSecretaryDetail::where('user_id', $request->user_id)->get();
+            $boardDirectors = BoardOfDirector::where('user_id', $request->user_id)->get();
+            $chiefHeads = ChiefAdministrativeHead::where('user_id', $request->user_id)->get();
+
+            if (! $management_details) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Management details not found.',
+                ], 404);
+            }
+
+            $management_details_array = $this->get_file_urls(
+                $management_details,
+                [
+                    'owner_details_photo',
+                    'manager_details_photo',
+                    'signature_authorization_of_owner',
+                    'factory_occupiers_signature',
+                    'factory_managers_signature'
+                ]
+            );
+
+            $partnerDetails_array = $this->get_file_urls(
+                $partnerDetails,
+                ['id_proof_doc', 'signature_image']
+            );
+
+            return response()->json([
+                'status' => 1,
+                'management_details' =>  $management_details_array,
+                'partner_details' => $partnerDetails_array,
+                'board_of_directors' => $boardDirectors,
+                'chief_administrative_heads' => $chiefHeads,
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            Log::error('Error fetching management details: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+            ], 500);
+        }
     }
 }
