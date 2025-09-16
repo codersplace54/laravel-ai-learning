@@ -18,7 +18,7 @@ return new class extends Migration
             $table->bigInteger('department_id');
             $table->enum('hierarchy_level', ['block', 'subdivision', 'district', 'state1', 'state2', 'state3'])->nullable();
             $table->boolean('assigned_to_group')->default(true);
-            $table->enum('status', ['re_submitted','pending', 'in_progress', 'approved', 'rejected','send_back'])->default('pending');
+            $table->enum('status', ['re_submitted','pending', 'in_progress', 'approved', 'rejected','send_back','extra_payment'])->default('pending');
             $table->bigInteger('action_taken_by')->nullable();
             $table->dateTime('action_taken_at')->nullable();
             $table->text('remarks')->nullable();
