@@ -407,7 +407,7 @@ class ServiceController extends Controller
                 'applicant_phone' => 'nullable|string',
                 'date_from'       => 'nullable|date',
                 'date_to'         => 'nullable|date|after_or_equal:date_from',
-            ]);
+            ]); 
 
             $data = UserServiceApplication::with(['service', 'user'])
                 ->whereHas('service', function ($service) use ($request) {
@@ -448,6 +448,9 @@ class ServiceController extends Controller
                     'submission_date'     => $application->application_date,
                     'current_step_number' => $application->current_step_number,
                     'max_processing_date' => $application->max_processing_date,
+                    'district'            => $application->user->district->district_name,
+                    'sub_division'            => $application->user->subdivision->sub_division,
+                    'hierarchy'            => $application->user->department_user->hierarchy_level,
                 ];
             });
 
