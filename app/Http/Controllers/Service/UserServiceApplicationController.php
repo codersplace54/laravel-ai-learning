@@ -13,6 +13,7 @@ use App\Models\ServiceApprovalFlow;
 use Carbon\Carbon;
 use App\Models\Holiday;
 use App\Models\ApplicationWorkflowAssignment;
+use App\Models\ServiceQuestionnaire;
 
 
 class UserServiceApplicationController extends Controller
@@ -103,9 +104,9 @@ class UserServiceApplicationController extends Controller
 
             if ($user_service_application) {
 
-            $total_fee =  $final_fee + $user_service_application->extra_payment;
+                $total_fee =  $final_fee + $user_service_application->extra_payment;
 
-                if (!in_array($user_service_application->status, ['submitted', 're_submitted', 'send_back', 'extra_payment','saved'])) {
+                if (!in_array($user_service_application->status, ['submitted', 're_submitted', 'send_back', 'extra_payment', 'saved'])) {
                     return response()->json([
                         'status' => 0,
                         'message' => "You can't update the application. It's under " . $user_service_application->status . "."
@@ -749,14 +750,27 @@ class UserServiceApplicationController extends Controller
                 ], 404);
             }
 
+            $formatted_data = [];
             foreach ($service_user_application as $service) {
-                $service->application_data = json_decode($service->application_data, true);
+                $application_data = json_decode($service->application_data, true);
+                if (!empty($application_data)) {
+                    $questions = ServiceQuestionnaire::whereIn('id', array_keys($application_data))
+                        ->pluck('question_label', 'id');
+                    foreach ($application_data as $question_id => $answer) {
+                        $formatted_data[] = [
+                            'id' => $question_id ?? null ,
+                            'question' => $questions[$question_id] ?? 'Question not found',
+                            'answer'   => $answer ?? null,
+                        ];
+                    }
+                }
             }
 
             return response()->json([
                 'status' => 1,
                 'message' => 'Service user application fetched successfully.',
                 'data' => $service_user_application,
+                'application_data' => $formatted_data ?? [],
             ]);
         } catch (\Exception $e) {
 

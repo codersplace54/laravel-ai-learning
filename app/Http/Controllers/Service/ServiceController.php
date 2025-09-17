@@ -452,8 +452,14 @@ class ServiceController extends Controller
                     'payment_status'      => $application->payment_status,
                     'current_step_number' => $application->current_step_number,
                     'max_processing_date' => $application->max_processing_date,
-                    'district'            => $application->user->district->district_name,
-                    'sub_division'            => $application->user->subdivision->sub_division,
+                    'district_code'   => $application->user->district->district_code ?? null,
+                    'district_name' => $application->user->district->district_name ?? null,
+                    'subdivision_code'   => $application->user->subdivision->sub_lgd_code ?? null,
+                    'subdivision_name' =>  $application->user->subdivision->sub_division ?? null,
+                    'ulb_code'   => $application->user->ulb->ulb_lgd_code ?? null,
+                    'ulb_name' => $application->user->ulb->ulb_name ?? null,
+                    'ward_code'   => $application->user->ward->gp_vc_ward_lgd_code ?? null,
+                    'ward_name' => $application->user->ward->name_of_gp_vc_or_ward ?? null,
                     'hierarchy'            => $application->user->department_user->hierarchy_level ?? null,
                 ];
             });
