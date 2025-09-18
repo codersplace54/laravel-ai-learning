@@ -68,6 +68,11 @@ class User extends Authenticatable implements JWTSubject
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 
+    public function management_details()
+    {
+        return $this->hasOne(ManagementDetails::class, 'user_id');
+    }
+    
     public function department_user()
     {
         return $this->hasOne(DepartmentUser::class, 'user_id');

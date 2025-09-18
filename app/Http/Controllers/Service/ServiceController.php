@@ -14,7 +14,11 @@ use App\Models\ServiceApprovalFlow;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\ServiceQuestionnaire;
-
+use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Storage;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class ServiceController extends Controller
 {
@@ -562,6 +566,94 @@ class ServiceController extends Controller
         }
     }
 
+    public function download_application_pdf(Request $request)
+    {
+        $application_id = $request->application_id;
+
+        $application = UserServiceApplication::where('id', $application_id)->first();
+
+        if (!$application) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Application not found',
+            ], 500);
+        }
+        $path = $application->NOC_certificate;
+
+        if (!Storage::disk('public')->exists($path)) {
+            return response()->json(['status' => 0, 'message' => 'Pdf not found.'], 404);
+        }
+        return response()->json([
+            'status' => 1,
+            'message' => 'PDF available',
+            'download_url' => Storage::url($path)
+        ]);
+    }
+
+    public function generate_dynamic_pdf(UserServiceApplication $application, User $user): void
+    {
+        $template = (string) data_get($application, 'service.form_template', '');
+        if ($template === '') abort(422, 'No form template configured for this service.');
+        
+        $verifyUrl = rtrim('https://swaagat.tripura.gov.in', '/') . '/verify?code=' . urlencode($application->spc_code ?? $application->id);
+
+        $qrSvg       = QrCode::format('svg')->size(220)->margin(0)->generate($verifyUrl);
+        $qrDataUri = 'data:image/png;base64,' . base64_encode($qrSvg);
+
+        $data = [
+            'form_title'        => 'FORM VI',
+            'rules_ref'         => '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
+            'government'        => 'Government of Tripura',
+            'issuing_office'    => 'Office of the Licensing Officer',
+            'verify_portal_url' => 'https://swaagat.tripura.gov.in',
+
+            'license_id'          => $application->id ?? '—',
+            'issue_date'          => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
+            'principal_employer'  => $application->user->authorized_person_name ?? '—',
+            'guardian_name'       => $application->user->management_details->owner_details_father_name ?? '—',
+            'address'             => $application->user->management_details->owner_details_residential_details ?? '—',
+            'work_location'       => $application->work_location ?? 'Tripura',
+            'registration_no'     => $application->id ?? '—',
+            'registration_date'   => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
+            'valid_upto'          => $application->NOC_expiry_date ? Carbon::parse($application->NOC_expiry_date)->format('d-m-Y') : '—',
+            'max_contract_labour' => (string) ($application->max_contract_labour ?? 0),
+            'fee_paid'            => (string) ($application->final_fee ?? 0),
+            'security_deposit'    => (string) ($application->security_deposit ?? ''),
+            'designation'         => $application->service->department->department_user->designation ?? '',
+            'spc_code'            => $application->spc_code ?? '—',
+            'signature_note'      => 'Not Required',
+            'user_name'           => $user->authorized_person_name ?? '',
+            'user_id'             => (string) $user->id,
+            'qr_code'            => $qrDataUri,
+        ];
+
+        $filled = preg_replace_callback('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', function ($m) use ($data) {
+            $key = $m[1];
+            $val = $data[$key] ?? '';
+            return e(is_scalar($val) ? (string) $val : '');
+        }, $template);
+
+        if (stripos($filled, '<html') === false) {
+            $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
+        }
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($filled)
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled'      => true,
+                'defaultFont'          => 'DejaVu Sans',
+                'dpi'                  => 110,
+            ]);
+
+        $filename = uniqid('license_') . '.pdf';
+        $path     = "uploads/{$user->id}/application/{$filename}";
+
+        \Illuminate\Support\Facades\Storage::disk('public')->put($path, $pdf->output());
+        $application->update(['NOC_certificate' => $path]);
+    }
+
+
     public function update_application_status(Request $request, $id)
     {
 
@@ -599,12 +691,12 @@ class ServiceController extends Controller
                 ->where('step_number', $application->current_step_number)
                 ->firstOrFail();
 
-            if ($current_step->hierarchy_level !== $user->department_user->hierarchy_level) {
-                return response()->json([
-                    'status'  => 0,
-                    'message' => "You can't update this application. It's assigned to level {$current_step->hierarchy_level} department users."
-                ], 403);
-            }
+            // if ($current_step->hierarchy_level !== $user->department_user->hierarchy_level) {
+            //     return response()->json([
+            //         'status'  => 0,
+            //         'message' => "You can't update this application. It's assigned to level {$current_step->hierarchy_level} department users."
+            //     ], 403);
+            // }
 
             $current_step->update([
                 'status'          => $request->status,
@@ -638,6 +730,8 @@ class ServiceController extends Controller
                         'status'       => 'approved',
                         'updated_at' => now(),
                     ]);
+
+                    $this->generate_dynamic_pdf($application, $user);
 
                     return response()->json([
                         'status' => 1,

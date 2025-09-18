@@ -23,6 +23,7 @@ use App\Http\Controllers\Service\ServiceApprovalFlowController;
 use App\Http\Controllers\Service\UserServiceApplicationController;
 use App\Http\Controllers\Service\HolidayController;
 use App\Http\Controllers\Service\ServiceController;
+use App\Http\Controllers\Service\ServiceTemplateController;
 use App\Http\Controllers\Subdivision\TripuraMasterDataController;
 use App\Http\Controllers\SchemaController;
 use App\Http\Middleware\JWTActivityMiddleware;
@@ -91,6 +92,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('caf/activity-view', [ActivityController::class, 'activity_view']);
 
     Route::prefix('admin')->group(function () {
+        Route::post('service-template-show', [ServiceTemplateController::class, 'service_template_show']);
+        Route::post('service-template-store',  [ServiceTemplateController::class, 'service_template_store']);
+        Route::post('download-application-pdf',  [ServiceController::class, 'download_application_pdf']);
+
         Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
         Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);
         Route::post('service-master-delete', [ServiceMasterController::class, 'service_master_delete']);
