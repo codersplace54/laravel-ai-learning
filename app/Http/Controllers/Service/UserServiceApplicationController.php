@@ -694,6 +694,7 @@ class UserServiceApplicationController extends Controller
                     'application_id' => $service->id,
                     'application_data' => $service->application_data,
                     'service_title_or_description' => $service->service->service_title_or_description ?? null,
+                    'application_type' => $service->service->noc_type ?? null,
                     'department' => $service->service->department_id ?? null,
                     'department_name' => $service->service->department->name ?? null,
                     'application_number' => $service->applicationId ?? null,
