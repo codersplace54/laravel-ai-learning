@@ -961,4 +961,192 @@ class ServiceController extends Controller
             ], 500);
         }
     }
+
+    public function get_total_applications_by_department(Request $request)
+    {
+
+        try {
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $user = User::where('id', $user->id)
+                ->where('user_type', 'department')
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or non-departmental user.'
+                ], 404);
+            }
+
+            $request->validate([
+                'department_id' => 'required|integer|exists:departments,id',
+            ]);
+
+            $hierarchy_level = $user->department_user->hierarchy_level;
+            $user_id         = $user->id;
+            $department_id   = $request->department_id;
+
+            $total_applications_for_this_department = Department::find($department_id)->applications()->count();
+
+            $total_count_pending_application_in_department = ApplicationWorkflowAssignment::where('status', 'pending')
+                ->where('hierarchy_level', $hierarchy_level)
+                ->where('department_id', $request->department_id)
+                ->distinct('application_id')
+                ->count('application_id');
+
+            $total_count_approved_application_in_department = ApplicationWorkflowAssignment::where('status', 'approved')
+                ->where('hierarchy_level', $hierarchy_level)
+                ->where('department_id', $request->department_id)
+                ->distinct('application_id')
+                ->count('application_id');
+
+            $number_of_NOC_issued_by_department = UserServiceApplication::where('status', 'approved')
+                ->whereHas('latestWorkflow', function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                })
+                ->count();
+
+            $services = ServiceMaster::withCount('applications')
+                ->where('department_id', $department_id)
+                ->get(['id', 'service_title_or_description']);
+
+            $application_count_per_service = $services->map(function ($service) {
+                return [
+                    'service_id' => $service->id,
+                    'service_name' => $service->service_title_or_description,
+                    'application_count' => $service->applications_count,
+                ];
+            });
+
+            $district_wise_application_in_department = UserServiceApplication::with(['service', 'user.district'])
+                ->whereHas('service', function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                })
+                ->select('user_id')
+                ->with('user.district')
+                ->get()
+                ->groupBy(fn($app) => $app->user?->district?->district_name)
+                ->map(fn($group, $district_name) => [
+                    'district_name' => $district_name,
+                    'count' => $group->count(),
+                ])
+                ->values();
+
+            $district_wise_application_per_service = UserServiceApplication::with(['service', 'user.district'])
+                ->whereHas('service', function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                })
+                ->get()
+                ->groupBy(fn($app) => $app->service?->service_title_or_description)
+                ->map(function ($appsPerService, $serviceName) {
+                    return [
+                        'service_name' => $serviceName,
+                        'districts' => $appsPerService
+                            ->groupBy(fn($app) => $app->user?->district?->district_name)
+                            ->map(fn($apps_per_district, $district_name) => [
+                                'district_name' => $district_name,
+                                'count' => $apps_per_district->count(),
+                            ])
+                            ->values(),
+                    ];
+                })
+                ->values();
+
+            return response()->json([
+                'status'            => 1,
+                'message'           => 'Total count applications under this department fetched successfully',
+                'total_applications_for_this_department' => $total_applications_for_this_department,
+                'total_count_pending_application_in_department' => $total_count_pending_application_in_department,
+                'total_count_approved_application_in_department' => $total_count_approved_application_in_department,
+                'number_of_NOC_issued_by_department' => $number_of_NOC_issued_by_department,
+                'application_count_per_service' => $application_count_per_service,
+                'district_wise_application_in_department' => $district_wise_application_in_department,
+                'district_wise_application_per_service' => $district_wise_application_per_service,
+
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching the application count',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function get_list_of_NOC_issued_by_department(Request $request)
+    {
+        try {
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $user = User::where('id', $user->id)
+                ->where('user_type', 'department')
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or non-departmental user.'
+                ], 404);
+            }
+
+            $request->validate([
+                'department_id' => 'required|integer|exists:departments,id',
+            ]);
+
+            $department_id   = $request->department_id;
+            $per_page = $request->get('per_page', 10);
+
+            $list_of_NOC_issued_by_department = UserServiceApplication::with(['user', 'unit', 'latestWorkflow'])
+                ->where('status', 'approved')
+                ->whereHas('latestWorkflow', function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                })
+                ->paginate($per_page)
+                ->through(function ($application) {
+                    return [
+                        'application_id'   => $application->id,
+                        'applicant_name'   => $application->user?->authorized_person_name,
+                        'application_date' => $application->application_date,
+                        'name_of_unit'     => $application->unit?->unit_name,
+                    ];
+                });
+
+
+            return response()->json([
+                'status'            => 1,
+                'message'           => 'Total count applications under this department fetched successfully',
+                'list_of_NOC_issued_by_department' => $list_of_NOC_issued_by_department->items(),
+                'pagination' => [
+                    'current_page' => $list_of_NOC_issued_by_department->currentPage(),
+                    'row_count'    => $list_of_NOC_issued_by_department->perPage(),
+                    'total'        => $list_of_NOC_issued_by_department->total(),
+                    'start_row'    => $list_of_NOC_issued_by_department->firstItem(),
+                    'end_row'      => $list_of_NOC_issued_by_department->lastItem(),
+                    'last_page'    => $list_of_NOC_issued_by_department->lastPage(),
+                    'next_page_url' => $list_of_NOC_issued_by_department->nextPageUrl(),
+                    'prev_page_url' => $list_of_NOC_issued_by_department->previousPageUrl(),
+                ],
+
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching the application count',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
 }

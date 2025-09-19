@@ -66,4 +66,15 @@ class UserServiceApplication extends Model
         return $this->hasMany(ApplicationWorkflowAssignment::class, 'application_id', 'id')
             ->orderBy('step_number');
     }
+
+    public function latestWorkflow()
+    {
+        return $this->hasOne(ApplicationWorkflowAssignment::class, 'application_id')
+            ->latestOfMany();
+    }
+
+    public function unit()
+    {
+        return $this->belongsTo(UnitDetail::class, 'user_id', 'user_id');
+    }
 }
