@@ -1023,21 +1023,6 @@ class ServiceController extends Controller
                 ];
             });
 
-            $list_of_NOC_issued_by_department = UserServiceApplication::with(['user', 'unit'])
-                ->where('status', 'approved')
-                ->whereHas('latestWorkflow', function ($q) use ($department_id) {
-                    $q->where('department_id', $department_id);
-                })
-                ->get()
-                ->map(function ($application) {
-                    return [
-                        'application_id'   => $application->id,
-                        'applicant_name'   => $application->user?->authorized_person_name,
-                        'application_date' => $application->application_date,
-                        'name_of_unit'     => $application->unit?->unit_name,
-                    ];
-                });
-
             $district_wise_application_in_department = UserServiceApplication::with(['service', 'user.district'])
                 ->whereHas('service', function ($q) use ($department_id) {
                     $q->where('department_id', $department_id);
@@ -1080,9 +1065,78 @@ class ServiceController extends Controller
                 'total_count_approved_application_in_department' => $total_count_approved_application_in_department,
                 'number_of_NOC_issued_by_department' => $number_of_NOC_issued_by_department,
                 'application_count_per_service' => $application_count_per_service,
-                'list_of_NOC_issued_by_department' => $list_of_NOC_issued_by_department,
                 'district_wise_application_in_department' => $district_wise_application_in_department,
                 'district_wise_application_per_service' => $district_wise_application_per_service,
+
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching the application count',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function get_list_of_NOC_issued_by_department(Request $request)
+    {
+        try {
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $user = User::where('id', $user->id)
+                ->where('user_type', 'department')
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or non-departmental user.'
+                ], 404);
+            }
+
+            $request->validate([
+                'department_id' => 'required|integer|exists:departments,id',
+            ]);
+
+            $department_id   = $request->department_id;
+            $per_page = $request->get('per_page', 10);
+
+            $list_of_NOC_issued_by_department = UserServiceApplication::with(['user', 'unit', 'latestWorkflow'])
+                ->where('status', 'approved')
+                ->whereHas('latestWorkflow', function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                })
+                ->paginate($per_page)
+                ->through(function ($application) {
+                    return [
+                        'application_id'   => $application->id,
+                        'applicant_name'   => $application->user?->authorized_person_name,
+                        'application_date' => $application->application_date,
+                        'name_of_unit'     => $application->unit?->unit_name,
+                    ];
+                });
+
+
+            return response()->json([
+                'status'            => 1,
+                'message'           => 'Total count applications under this department fetched successfully',
+                'list_of_NOC_issued_by_department' => $list_of_NOC_issued_by_department->items(),
+                'pagination' => [
+                    'current_page' => $list_of_NOC_issued_by_department->currentPage(),
+                    'row_count'    => $list_of_NOC_issued_by_department->perPage(),
+                    'total'        => $list_of_NOC_issued_by_department->total(),
+                    'start_row'    => $list_of_NOC_issued_by_department->firstItem(),
+                    'end_row'      => $list_of_NOC_issued_by_department->lastItem(),
+                    'last_page'    => $list_of_NOC_issued_by_department->lastPage(),
+                    'next_page_url' => $list_of_NOC_issued_by_department->nextPageUrl(),
+                    'prev_page_url' => $list_of_NOC_issued_by_department->previousPageUrl(),
+                ],
 
             ], 200);
         } catch (\Exception $e) {

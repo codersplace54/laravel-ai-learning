@@ -172,6 +172,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/get-user-caf-activity-details', [ActivityController::class, 'get_user_caf_activity_details']);
 
         Route::post('/get-total-applications-by-department', [ServiceController::class, 'get_total_applications_by_department']);
+        Route::post('/get-list-of-NOC-issued-by-department', [ServiceController::class, 'get_list_of_NOC_issued_by_department']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
