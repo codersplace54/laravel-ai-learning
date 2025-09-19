@@ -19,7 +19,7 @@ return new class extends Migration
             $table->enum('hierarchy_level', ['block', 'subdivision', 'district', 'state1', 'state2', 'state3']);
             $table->bigInteger('action_taken_by');
             $table->dateTime('action_taken_at');
-            $table->enum('status', ['pending', 'in_progress', 'approved', 'rejected','send_back','extra_payment']);
+            $table->enum('status', ['pending', 'in_progress', 'approved', 'rejected','send_back','extra_payment','saved']);
             $table->text('remarks')->nullable();
             $table->timestamps();
         });
