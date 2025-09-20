@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use App\Models\Holiday;
 use App\Models\ApplicationWorkflowAssignment;
 use App\Models\ServiceQuestionnaire;
+use App\Models\ServiceMaster;
 
 
 class UserServiceApplicationController extends Controller
@@ -86,6 +87,12 @@ class UserServiceApplicationController extends Controller
                 ->orderBy('step_number', 'asc')
                 ->first();
 
+            $noc_name = ServiceMaster::where('id', $request->service_id)
+                ->value('noc_name');
+            $dateTime = now()->format('dmYHi');
+
+             $application_number = strtoupper($noc_name) . $dateTime;
+
             if (!$approval_flow) {
                 return response()->json([
                     'status'  => 0,
@@ -126,7 +133,7 @@ class UserServiceApplicationController extends Controller
                     'renewal_cycle_id'      => $request->renewal_cycle_id,
                     'renewal'               => $request->renewal,
                     'renewalYear'           => $request->renewalYear,
-                    'applicationId'         => $request->applicationId,
+                    'applicationId'         => $application_number,
                     'application_date'      => $request->application_date ?? now(),
                     'status'                => $request->status ?? 'submitted',
                     'application_data'      => json_encode($request->application_data ?? null),
@@ -197,7 +204,7 @@ class UserServiceApplicationController extends Controller
                     'renewal_cycle_id'      => $request->renewal_cycle_id,
                     'renewal'               => $request->renewal,
                     'renewalYear'           => $request->renewalYear,
-                    'applicationId'         => $request->applicationId,
+                    'applicationId'         => $application_number,
                     'application_date'      => $request->application_date ?? now(),
                     'status'                => $request->status ?? 'submitted',
                     'application_data'      => json_encode($request->application_data ?? null),
@@ -759,7 +766,7 @@ class UserServiceApplicationController extends Controller
                         ->pluck('question_label', 'id');
                     foreach ($application_data as $question_id => $answer) {
                         $formatted_data[] = [
-                            'id' => $question_id ?? null ,
+                            'id' => $question_id ?? null,
                             'question' => $questions[$question_id] ?? 'Question not found',
                             'answer'   => $answer ?? null,
                         ];
@@ -783,6 +790,4 @@ class UserServiceApplicationController extends Controller
             ], 500);
         }
     }
-
-    
 }
