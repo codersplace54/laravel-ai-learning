@@ -377,8 +377,8 @@ class ServiceController extends Controller
             foreach ($services as $service) {
                 $service->total_applications = UserServiceApplication::where('service_id', $service->service_id)->count();
                 $service->pending_applications = UserServiceApplication::where('service_id', $service->service_id)
-                    ->where('status', 'submitted')
-                    ->count();
+                     ->where('status', '!=', 'approved')
+                     ->count();
             }
 
             return response()->json([
@@ -1148,6 +1148,8 @@ class ServiceController extends Controller
                 ->distinct('application_id')
                 ->count('application_id');
 
+            $percentage_pending_application = ($total_count_pending_application_in_department / $total_applications_for_this_department) * 100;
+
             $total_count_approved_application_in_department = ApplicationWorkflowAssignment::query()
                 ->where('hierarchy_level', $hierarchy_level)
                 ->where('department_id', $request->department_id)
@@ -1157,6 +1159,11 @@ class ServiceController extends Controller
                 ->distinct('application_id')
                 ->count('application_id');
 
+            $percentage_approved_application = ($total_count_approved_application_in_department / $total_applications_for_this_department) * 100;
+
+            $total_count_rejected_application_in_department = UserServiceApplication::where('status', 'rejected')->count();
+
+            $percentage_rejected_application = ($total_count_rejected_application_in_department / $total_applications_for_this_department) * 100;
 
             $number_of_NOC_issued_by_department = UserServiceApplication::where('status', 'approved')
                 ->whereHas('latestWorkflow', function ($q) use ($department_id) {
@@ -1215,6 +1222,9 @@ class ServiceController extends Controller
                 'message'           => 'Total count applications under this department fetched successfully',
                 'total_applications_for_this_department' => $total_applications_for_this_department,
                 'total_count_pending_application_in_department' => $total_count_pending_application_in_department,
+                'percentage_pending_application' => $percentage_pending_application,
+                'percentage_approved_application' => $percentage_approved_application,
+                'percentage_rejected_application' => $percentage_rejected_application,
                 'total_count_approved_application_in_department' => $total_count_approved_application_in_department,
                 'number_of_NOC_issued_by_department' => $number_of_NOC_issued_by_department,
                 'application_count_per_service' => $application_count_per_service,
@@ -1268,7 +1278,7 @@ class ServiceController extends Controller
                 ->paginate($per_page)
                 ->through(function ($application) {
                     return [
-                        'application_id'   => $application->id,
+                        'application_id'   => $application->applicationId,
                         'applicant_name'   => $application->user?->authorized_person_name,
                         'application_date' => $application->application_date,
                         'name_of_unit'     => $application->unit?->unit_name,
