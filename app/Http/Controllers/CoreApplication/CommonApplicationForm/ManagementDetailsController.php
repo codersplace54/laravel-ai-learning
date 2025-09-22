@@ -112,6 +112,12 @@ class ManagementDetailsController extends Controller
                     'chief_administrative_heads.*.name' => 'required|string|max:255',
                     'chief_administrative_heads.*.permanent_address' => 'nullable|string|max:255',
                     'chief_administrative_heads.*.mobile_number' => 'required|string',
+
+                    'remove_owner_details_photo' => 'nullable|in:delete',
+                    'remove_manager_details_photo' => 'nullable|in:delete',
+                    'remove_signature_authorization_of_owner' => 'nullable|in:delete',
+                    'remove_factory_occupiers_signature' => 'nullable|in:delete',
+                    'remove_factory_managers_signature' => 'nullable|in:delete',
                 ]);
             }
 
@@ -123,6 +129,16 @@ class ManagementDetailsController extends Controller
             $signature_owner = null;
             $signature_occupier = null;
             $signature_manager = null;
+
+            $update_data = [];
+            $file_upload_delete_fields = [
+                'owner_details_photo',
+                'manager_details_photo',
+                'signature_authorization_of_owner',
+                'factory_occupiers_signature',
+                'factory_managers_signature'
+            ];
+
 
 
             if ($request->hasFile('owner_details_photo')) {
@@ -165,9 +181,19 @@ class ManagementDetailsController extends Controller
                 $signature_manager = $request->file('factory_managers_signature')->storeAs("uploads/$user->id/factory_managers_signature", $filename, 'public');
             }
 
+            foreach ($file_upload_delete_fields as $field) {
+
+                if ($request->input("remove_$field") === 'delete' && !$request->hasFile($field)) {
+                    if ($management_details && $management_details->$field) {
+                        Storage::disk('public')->delete($management_details->$field);
+                        $update_data[$field] = null;
+                    }
+                }
+            }
+
             if ($management_details) {
 
-                $management_details->update([
+                $management_details->update(array_merge([
                     'owner_details_name' => $request->owner_details_name,
                     'owner_details_fathers_name' => $request->owner_details_fathers_name,
                     'owner_details_residential_address' => $request->owner_details_residential_address,
@@ -198,7 +224,7 @@ class ManagementDetailsController extends Controller
                     'signature_authorization_of_owner' => $signature_owner ?? $management_details->signature_authorization_of_owner,
                     'factory_occupiers_signature' => $signature_occupier ?? $management_details->factory_occupiers_signature,
                     'factory_managers_signature' => $signature_manager ?? $management_details->factory_managers_signature,
-                ]);
+                ], $update_data));
             } else {
 
                 $management_details = ManagementDetails::create([
@@ -250,70 +276,73 @@ class ManagementDetailsController extends Controller
             );
 
             $partner_details_array = [];
-            foreach ($request->partner_details as $index => $partner) {
+            $partner_ids = [];
+            if (!empty($request->partner_details) && is_array($request->partner_details)) {
+                foreach ($request->partner_details as $index => $partner) {
 
-                $id_proof_doc = null;
-                $signature_image = null;
+                    $id_proof_doc = null;
+                    $signature_image = null;
 
-                if ($request->hasFile("partner_details.$index.id_proof_doc")) {
-                    $file = $request->file("partner_details.$index.id_proof_doc");
-                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
-                    $id_proof_doc = $file->storeAs("uploads/$user->id/partner_id_proof", $filename, 'public');
-                }
+                    if ($request->hasFile("partner_details.$index.id_proof_doc")) {
+                        $file = $request->file("partner_details.$index.id_proof_doc");
+                        $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                        $id_proof_doc = $file->storeAs("uploads/$user->id/partner_id_proof", $filename, 'public');
+                    }
 
-                if ($request->hasFile("partner_details.$index.signature_image")) {
-                    $file = $request->file("partner_details.$index.signature_image");
-                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
-                    $signature_image = $file->storeAs("uploads/$user->id/partner_signature", $filename, 'public');
-                }
+                    if ($request->hasFile("partner_details.$index.signature_image")) {
+                        $file = $request->file("partner_details.$index.signature_image");
+                        $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                        $signature_image = $file->storeAs("uploads/$user->id/partner_signature", $filename, 'public');
+                    }
 
-                if (!empty($partner->id)) {
-                    $partner_record = PartnerSharePresidentOrSecretaryDetail::where('user_id', $user->id)
-                        ->where('id', $partner->id)
-                        ->first();
+                    if (!empty($partner->id)) {
+                        $partner_record = PartnerSharePresidentOrSecretaryDetail::where('user_id', $user->id)
+                            ->where('id', $partner->id)
+                            ->first();
 
-                    if ($partner_record) {
-                        $partner_record->update([
-                            'name' => $partner['name'],
-                            'fathers_name' => $partner['fathers_name'],
-                            'age' => $partner['age'],
-                            'sex' => $partner['sex'],
-                            'social_status' => $partner['social_status'],
-                            'profession' => $partner['profession'],
-                            'permanent_address' => $partner['permanent_address'],
-                            'mobile_no' => $partner['mobile_no'],
-                            'date_of_birth' => $partner['date_of_birth'],
-                            'date_of_joining' => $partner['date_of_joining'],
-                            'id_proof_doc' => $id_proof_doc ?? $partner_record->id_proof_doc,
-                            'signature_image' => $signature_image ?? $partner_record->signature_image,
+                        if ($partner_record) {
+                            $partner_record->update([
+                                'name' => $partner['name'] ?? '',
+                                'fathers_name' => $partner['fathers_name'] ?? '',
+                                'age' => $partner['age'] ?? null,
+                                'sex' => $partner['sex'] ?? '',
+                                'social_status' => $partner['social_status'] ?? '',
+                                'profession' => $partner['profession'] ?? '',
+                                'permanent_address' => $partner['permanent_address'] ?? '',
+                                'mobile_no' => $partner['mobile_no'] ?? null,
+                                'date_of_birth' => $partner['date_of_birth'] ?? null,
+                                'date_of_joining' => $partner['date_of_joining'] ?? null,
+                                'id_proof_doc' => $id_proof_doc ?? $partner_record->id_proof_doc,
+                                'signature_image' => $signature_image ?? $partner_record->signature_image,
+                            ]);
+                        }
+                    } else {
+
+                        $partner_record = PartnerSharePresidentOrSecretaryDetail::create([
+                            'user_id' => $user->id,
+                            'name' => $partner['name'] ?? '',
+                            'fathers_name' => $partner['fathers_name'] ?? '',
+                            'age' => $partner['age'] ?? null,
+                            'sex' => $partner['sex'] ?? '',
+                            'social_status' => $partner['social_status'] ?? '',
+                            'profession' => $partner['profession'] ?? '',
+                            'permanent_address' => $partner['permanent_address'] ?? '',
+                            'mobile_no' => $partner['mobile_no'] ?? null,
+                            'date_of_birth' => $partner['date_of_birth'] ?? null,
+                            'date_of_joining' => $partner['date_of_joining'] ?? null,
+                            'id_proof_doc' => $id_proof_doc,
+                            'signature_image' => $signature_image,
                         ]);
                     }
-                } else {
+                    $partner_ids[] = $partner_record->id;
 
-                    $partner_record = PartnerSharePresidentOrSecretaryDetail::create([
-                        'user_id' => $user->id,
-                        'name' => $partner['name'],
-                        'fathers_name' => $partner['fathers_name'],
-                        'age' => $partner['age'],
-                        'sex' => $partner['sex'],
-                        'social_status' => $partner['social_status'],
-                        'profession' => $partner['profession'],
-                        'permanent_address' => $partner['permanent_address'],
-                        'mobile_no' => $partner['mobile_no'],
-                        'date_of_birth' => $partner['date_of_birth'],
-                        'date_of_joining' => $partner['date_of_joining'],
-                        'id_proof_doc' => $id_proof_doc,
-                        'signature_image' => $signature_image,
-                    ]);
+                    $partner_array = $this->get_file_urls(
+                        $partner_record,
+                        ['id_proof_doc', 'signature_image']
+                    );
+
+                    $partner_details_array[] = $partner_array;
                 }
-                $partner_ids[] = $partner_record->id;
-
-                $partner_array = $this->get_file_urls(
-                    $partner_record,
-                    ['id_proof_doc', 'signature_image']
-                );
-
-                $partner_details_array[] = $partner_array;
             }
             PartnerSharePresidentOrSecretaryDetail::where('user_id', $user->id)
                 ->whereNotIn('id', $partner_ids)
@@ -500,5 +529,71 @@ class ManagementDetailsController extends Controller
             }
         }
         return $array;
+    }
+
+    public function get_user_caf_management_details(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+
+            if (!$user) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Unauthenticated.',
+                ], 401);
+            }
+
+            $request->validate([
+                'user_id' => 'required|exists:users,id',
+            ]);
+
+            $management_details = ManagementDetails::where('user_id', $request->user_id)->first();
+            $partnerDetails = PartnerSharePresidentOrSecretaryDetail::where('user_id', $request->user_id)->get();
+            $boardDirectors = BoardOfDirector::where('user_id', $request->user_id)->get();
+            $chiefHeads = ChiefAdministrativeHead::where('user_id', $request->user_id)->get();
+
+            if (! $management_details) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Management details not found.',
+                ], 404);
+            }
+
+            $management_details_array = $this->get_file_urls(
+                $management_details,
+                [
+                    'owner_details_photo',
+                    'manager_details_photo',
+                    'signature_authorization_of_owner',
+                    'factory_occupiers_signature',
+                    'factory_managers_signature'
+                ]
+            );
+
+            $partnerDetails_array = $this->get_file_urls(
+                $partnerDetails,
+                ['id_proof_doc', 'signature_image']
+            );
+
+            return response()->json([
+                'status' => 1,
+                'management_details' =>  $management_details_array,
+                'partner_details' => $partnerDetails_array,
+                'board_of_directors' => $boardDirectors,
+                'chief_administrative_heads' => $chiefHeads,
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            Log::error('Error fetching management details: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+            ], 500);
+        }
     }
 }

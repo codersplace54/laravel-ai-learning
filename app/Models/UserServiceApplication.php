@@ -39,6 +39,7 @@ class UserServiceApplication extends Model
         'NSW_license_status',
         'NSW_Push_Document_ID',
         'final_fee',
+        'total_fee',
         'current_step_number',
         'max_processing_date',
         'created_at',
@@ -64,5 +65,16 @@ class UserServiceApplication extends Model
     {
         return $this->hasMany(ApplicationWorkflowAssignment::class, 'application_id', 'id')
             ->orderBy('step_number');
+    }
+
+    public function latestWorkflow()
+    {
+        return $this->hasOne(ApplicationWorkflowAssignment::class, 'application_id')
+            ->latestOfMany();
+    }
+
+    public function unit()
+    {
+        return $this->belongsTo(UnitDetail::class, 'user_id', 'user_id');
     }
 }

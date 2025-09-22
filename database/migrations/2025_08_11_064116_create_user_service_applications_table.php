@@ -18,7 +18,7 @@ return new class extends Migration
             $table->integer('renewalYear')->nullable();
             $table->string('applicationId')->nullable();
             $table->timestamp('application_date')->useCurrent();
-            $table->enum('status', ['submitted', 'under_review', 'approved', 'rejected'])->default('submitted');
+            $table->enum('status', ['saved','submitted', 'under_review', 'approved', 'rejected','send_back','re_submitted','extra_payment'])->default('submitted');
             $table->string('application_data')->nullable();
             $table->string('applied_fee')->nullable();
             $table->string('approved_fee')->nullable();
@@ -42,9 +42,12 @@ return new class extends Migration
             $table->enum('NSW_license_status', ['pending', 'approved', 'rejected', 'expired'])->nullable();
             $table->string('NSW_Push_Document_ID')->nullable();
             $table->string('final_fee')->nullable();
+            $table->string('total_fee')->nullable();
             $table->string('current_step_number')->nullable();
             $table->string('max_processing_date')->nullable();
             $table->timestamps();
+
+            $table->unique(['user_id', 'service_id'], 'user_service_unique');
         });
     }
 

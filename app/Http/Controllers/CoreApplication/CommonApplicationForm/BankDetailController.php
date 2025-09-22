@@ -129,4 +129,47 @@ class BankDetailController extends Controller
             ], 500);
         }
     }
+
+    public function get_user_caf_bank_details(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'user_id' => 'required|exists:users,id',
+            ]);
+
+            $bankDetail = BankDetail::where('user_id', $request->user_id)->first();
+
+            if (!$bankDetail) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No bank details found for this user.'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Bank detail fetched successfully.',
+                'data' => $bankDetail,
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            Log::error('Error fetching bank detail: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching.',
+                'error_message' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

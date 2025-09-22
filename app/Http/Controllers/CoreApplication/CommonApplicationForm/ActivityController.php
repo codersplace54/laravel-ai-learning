@@ -31,25 +31,29 @@ class ActivityController extends Controller
 
             $list_of_activities = [];
             foreach ($request->activities as $activity) {
-                $nic_5_digit_code_exist = Activity::where('nic_5_digit_code', $activity['nic_5_digit_code'])
-                    ->where('user_id', Auth::id())
-                    ->exists();
+                $existing_activity = Activity::where('user_id', Auth::id())
+                    ->where('nic_5_digit_code', $activity['nic_5_digit_code'])
+                    ->first();
 
-                if ($nic_5_digit_code_exist) {
-                    return response()->json([
-                        'status' => 0,
-                        'message' => "NIC 5 digit code '{$activity['nic_5_digit_code']}' already exists for this user."
-                    ], 409);
+                if ($existing_activity) {
+                    $existing_activity->update([
+                        'activity_of_enterprise' => $activity['activity_of_enterprise'],
+                        'nic_2_digit_code' => $activity['nic_2_digit_code'],
+                        'nic_4_digit_code' => $activity['nic_4_digit_code'],
+                    ]);
+
+                    $list_of_activities[] = $existing_activity->toArray();
+                } else {
+                    $new_activity = Activity::create([
+                        'user_id' => Auth::id(),
+                        'activity_of_enterprise' => $activity['activity_of_enterprise'],
+                        'nic_2_digit_code' => $activity['nic_2_digit_code'],
+                        'nic_4_digit_code' => $activity['nic_4_digit_code'],
+                        'nic_5_digit_code' => $activity['nic_5_digit_code'],
+                    ]);
+
+                    $list_of_activities[] = $new_activity->toArray();
                 }
-
-                $list_of_activity = Activity::create([
-                    'user_id' => Auth::id(),
-                    'activity_of_enterprise' => $activity['activity_of_enterprise'],
-                    'nic_2_digit_code' => $activity['nic_2_digit_code'],
-                    'nic_4_digit_code' => $activity['nic_4_digit_code'],
-                    'nic_5_digit_code' => $activity['nic_5_digit_code'],
-                ]);
-                 $list_of_activities[] = $list_of_activity->toArray();
             }
 
             DB::commit();
@@ -151,6 +155,47 @@ class ActivityController extends Controller
             }
 
             $activities = Activity::where('user_id', $user->id)->get();
+
+            if (!$activities) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No activities found for this user.'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Activities fetched successfully.',
+                'data' => $activities,
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching.',
+                'error_message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function get_user_caf_activity_details(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'user_id' => 'required|exists:users,id',
+            ]);
+
+            $activities = Activity::where('user_id', $request->user_id)->get();
 
             if (!$activities) {
                 return response()->json([

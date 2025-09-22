@@ -68,6 +68,11 @@ class User extends Authenticatable implements JWTSubject
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 
+    public function management_details()
+    {
+        return $this->hasOne(ManagementDetails::class, 'user_id');
+    }
+    
     public function department_user()
     {
         return $this->hasOne(DepartmentUser::class, 'user_id');
@@ -88,8 +93,13 @@ class User extends Authenticatable implements JWTSubject
         return $this->belongsTo(TripuraMasterData::class, 'ulb_id', 'ulb_lgd_code');
     }
 
-        public function ward()
+    public function ward()
     {
         return $this->belongsTo(TripuraMasterData::class, 'ward_id', 'gp_vc_ward_lgd_code');
+    }
+
+    public function applications()
+    {
+        return $this->hasMany(UserServiceApplication::class, 'user_id', 'id');
     }
 }

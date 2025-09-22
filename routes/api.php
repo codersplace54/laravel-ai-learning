@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\CoreApplication\CommonApplicationForm\EnterpriseDetailController;
 use App\Http\Controllers\Role\RoleController;
 use App\Http\Controllers\User\UserController;
@@ -22,6 +23,7 @@ use App\Http\Controllers\Service\ServiceApprovalFlowController;
 use App\Http\Controllers\Service\UserServiceApplicationController;
 use App\Http\Controllers\Service\HolidayController;
 use App\Http\Controllers\Service\ServiceController;
+use App\Http\Controllers\Service\ServiceTemplateController;
 use App\Http\Controllers\Subdivision\TripuraMasterDataController;
 use App\Http\Controllers\SchemaController;
 use App\Http\Middleware\JWTActivityMiddleware;
@@ -75,6 +77,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
     Route::post('caf/line-of-activity-store', [LineOfActivityDetailsController::class, 'line_of_activity_store_or_update']);
     Route::post('caf/line-of-activity-delete', [LineOfActivityDetailsController::class, 'line_of_activity_delete']);
+    Route::post('caf/raw-material-delete', [LineOfActivityDetailsController::class, 'raw_material_delete']);
+    Route::post('caf/list-of-products-delete', [LineOfActivityDetailsController::class, 'list_of_products_delete']);
     Route::post('caf/line-of-activity-view', [LineOfActivityDetailsController::class, 'line_of_activity_view']);
 
     Route::post('caf/general-attachment-store', [GeneralAttachmentsController::class, 'general_attachment_store_or_update']);
@@ -88,6 +92,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('caf/activity-view', [ActivityController::class, 'activity_view']);
 
     Route::prefix('admin')->group(function () {
+        Route::post('service-template-show', [ServiceTemplateController::class, 'service_template_show']);
+        Route::post('service-template-store',  [ServiceTemplateController::class, 'service_template_store']);
+        Route::post('download-application-pdf',  [ServiceController::class, 'download_application_pdf']);
+
         Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
         Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);
         Route::post('service-master-delete', [ServiceMasterController::class, 'service_master_delete']);
@@ -112,6 +120,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-approval-flow-store', [ServiceApprovalFlowController::class, 'service_approval_flow_store']);
         Route::post('service-approval-flow-update', [ServiceApprovalFlowController::class, 'service_approval_flow_update']);
         Route::post('service-approval-flow-delete', [ServiceApprovalFlowController::class, 'service_approval_flow_delete']);
+
+        Route::post('fetch-all-business-users', [AdminController::class, 'fetch_all_business_users']);
+        Route::post('fetch-all-department-users', [AdminController::class, 'fetch_all_department_users']);
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
@@ -127,6 +138,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-application-update', [UserServiceApplicationController::class, 'user_service_application_update']);
         Route::post('service-application-view', [UserServiceApplicationController::class, 'user_service_application_view']);
         Route::post('service-application-delete', [UserServiceApplicationController::class, 'user_service_application_delete']);
+        Route::post('get-all-user-service-applications', [UserServiceApplicationController::class, 'get_all_user_service_applications']);
+        Route::post('get-details-user-service-applications', [UserServiceApplicationController::class, 'get_details_user_service_applications']);
+        Route::post('download-user-application-pdf',  [ServiceController::class, 'download_user_application_pdf']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
@@ -152,9 +166,19 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/applications/{id}/status', [ServiceController::class, 'update_application_status']);
         Route::post('/dashboard', [ServiceController::class, 'get_department_dashboard']);
         Route::post('/workflow-history/{application_id}', [ServiceController::class, 'get_work_flow_history']);
-        Route::post('/user/{id}/assigned-applications', [ServiceController::class, 'get_department_user_applications']);
+        Route::post('/user/{id}/assigned-applications', [ServiceController::class, 'get_department_user_assigned_applications']);
 
         Route::post('/get-department-users', [UserController::class, 'get_department_users']);
+        Route::post('/get-user-caf-unit_details', [UnitDetailController::class, 'get_user_caf_unit_details']);
+        Route::post('/get-user-caf-management-details', [ManagementDetailsController::class, 'get_user_caf_management_details']);
+        Route::post('/get-user-caf-enterprise-details', [EnterpriseDetailController::class, 'get_user_caf_enterprise_details']);
+        Route::post('/get-user-caf-lineOfActivity-details', [LineOfActivityDetailsController::class, 'get_user_caf_lineOfActivity_details']);
+        Route::post('/get-user-caf-generalAttachment-details', [GeneralAttachmentsController::class, 'get_user_caf_generalAttachment_details']);
+        Route::post('/get-user-caf-bank-details', [BankDetailController::class, 'get_user_caf_bank_details']);
+        Route::post('/get-user-caf-activity-details', [ActivityController::class, 'get_user_caf_activity_details']);
+
+        Route::post('/get-total-applications-by-department', [ServiceController::class, 'get_total_applications_by_department']);
+        Route::post('/get-list-of-NOC-issued-by-department', [ServiceController::class, 'get_list_of_NOC_issued_by_department']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);

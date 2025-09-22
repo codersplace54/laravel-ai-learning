@@ -399,4 +399,55 @@ class UnitDetailController extends Controller
             ], 500);
         }
     }
+
+    public function get_user_caf_unit_details(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+
+            if (!$user) {
+
+
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'User not authenticated.',
+                ], 401);
+            }
+
+            $request->validate([
+                    'user_id' => 'required|exists:users,id',
+                ]);
+
+
+            $unitDetails = UnitDetail::where('user_id', $request->user_id)->first();
+
+            if (!$unitDetails) {
+
+
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Unit details not found.',
+                ], 404);
+            }
+
+            return response()->json([
+
+
+                'status' => 1,
+                'message' => 'Unit details fetched successfully.',
+                'data' => $unitDetails,
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to fetch unit details.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
