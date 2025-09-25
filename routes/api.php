@@ -25,6 +25,10 @@ use App\Http\Controllers\Service\HolidayController;
 use App\Http\Controllers\Service\ServiceController;
 use App\Http\Controllers\Service\ServiceTemplateController;
 use App\Http\Controllers\Subdivision\TripuraMasterDataController;
+use App\Http\Controllers\Incentive\SchemeController;
+use App\Http\Controllers\Incentive\ProformaController;
+use App\Http\Controllers\Incentive\ProformaQuestionnaireController;
+use App\Http\Controllers\Incentive\UserIncentiveApplicationController;
 use App\Http\Controllers\SchemaController;
 use App\Http\Middleware\JWTActivityMiddleware;
 
@@ -92,6 +96,28 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('caf/activity-view', [ActivityController::class, 'activity_view']);
 
     Route::prefix('admin')->group(function () {
+
+        Route::prefix('incentive')->group(function () {
+
+            Route::post('proforma-store', [ProformaController::class, 'proforma_store']);
+            Route::post('proforma-update', [ProformaController::class, 'proforma_update']);
+            Route::post('proforma-list', [ProformaController::class, 'proforma_list']);
+            Route::post('fetch-proforma-details', [ProformaController::class, 'fetch_proforma_details']);
+            Route::post('proforma-delete', [ProformaController::class, 'proforma_delete']);
+
+            Route::post('scheme-store', [SchemeController::class, 'scheme_store']);
+            Route::post('scheme-update', [SchemeController::class, 'scheme_update']);
+            Route::post('scheme-list', [SchemeController::class, 'scheme_list']);
+            Route::post('fetch-scheme-details', [SchemeController::class, 'fetch_scheme_details']);
+            Route::post('scheme-delete',   [SchemeController::class, 'scheme_delete']);
+
+            Route::post('proforma-questionnaire-store',  [ProformaQuestionnaireController::class, 'proforma_questionnaire_store']);
+            Route::post('proforma-questionnaire-update', [ProformaQuestionnaireController::class, 'proforma_questionnaire_update']);
+            Route::post('proforma-questionnaire-delete', [ProformaQuestionnaireController::class, 'proforma_questionnaire_delete']);
+            Route::post('proforma-questionnaire-view',   [ProformaQuestionnaireController::class, 'proforma_questionnaire_view']);
+            Route::post('fetch-proforma-questionnaire-details', [ProformaQuestionnaireController::class, 'proforma_questionnaire_details']);
+        });
+
         Route::post('service-template-show', [ServiceTemplateController::class, 'service_template_show']);
         Route::post('service-template-store',  [ServiceTemplateController::class, 'service_template_store']);
         Route::post('download-application-pdf',  [ServiceController::class, 'download_application_pdf']);
@@ -134,6 +160,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('renewal-fee-rule-view', [RenewalFeeRuleController::class, 'renewal_fee_rule_view']);
 
     Route::prefix('user')->group(function () {
+        
         Route::post('service-application-store', [UserServiceApplicationController::class, 'user_service_application_store']);
         Route::post('service-application-update', [UserServiceApplicationController::class, 'user_service_application_update']);
         Route::post('service-application-view', [UserServiceApplicationController::class, 'user_service_application_view']);
@@ -141,6 +168,14 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-all-user-service-applications', [UserServiceApplicationController::class, 'get_all_user_service_applications']);
         Route::post('get-details-user-service-applications', [UserServiceApplicationController::class, 'get_details_user_service_applications']);
         Route::post('download-user-application-pdf',  [ServiceController::class, 'download_user_application_pdf']);
+
+        Route::prefix('incentive')->group(function () {
+            Route::post('scheme-list', [UserIncentiveApplicationController::class, 'user_incentive_scheme_list']);
+            Route::post('eligibility-proforma-list', [UserIncentiveApplicationController::class, 'user_eligibility_proforma_list']);
+            Route::post('proforma-questionnaire-view',   [UserIncentiveApplicationController::class, 'user_proforma_questionnaire_view']);
+            Route::post('proforma-application-store', [UserIncentiveApplicationController::class, 'user_proforma_application_store']);
+
+        });
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
