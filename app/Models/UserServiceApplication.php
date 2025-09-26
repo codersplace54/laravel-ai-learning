@@ -44,6 +44,15 @@ class UserServiceApplication extends Model
         'max_processing_date',
         'created_at',
         'updated_at',
+
+        'external_application_id',
+        'external_status',
+        'external_payment_status',
+        'external_max_processing_date',
+        'external_noc_number',
+        'external_valid_till',
+        'external_remarks',
+        'is_third_party',
     ];
 
     protected $casts = [
