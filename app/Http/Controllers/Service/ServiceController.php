@@ -711,13 +711,10 @@ class ServiceController extends Controller
                         'status'       => 'approved',
                         'updated_at' => now(),
                     ]);
-
-                    if ($application->service->form_template) {
+                    
+                    if($application->service->form_template){
                         $this->generate_dynamic_pdf($application, $user);
                     }
-
-                    DB::commit();
-
                     return response()->json([
                         'status' => 1,
                         'message' => 'Application approved successfully. Final step completed.',
@@ -1079,8 +1076,8 @@ class ServiceController extends Controller
             'designation'         => $application->service->department->department_user->designation ?? '',
             'spc_code'            => $application->spc_code ?? '—',
             'signature_note'      => 'Not Required',
-            'user_name'           => $application->user->authorized_person_name ?? '',
-            'user_id'             => (string) $application->user_id,
+            'user_name'           => $user->authorized_person_name ?? '',
+            'user_id'             => (string) $user->id,
             'qr_code'            => $qrDataUri,
         ];
 
@@ -1093,7 +1090,7 @@ class ServiceController extends Controller
         if (stripos($filled, '<html') === false) {
             $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
         }
-
+        // dd($filled);
         $pdf = Pdf::loadHTML($filled)
             ->setPaper('a4', 'portrait')
             ->setOptions([
@@ -1103,14 +1100,14 @@ class ServiceController extends Controller
                 'dpi'                  => 110,
             ]);
 
+            
         $filename = uniqid('license_') . '.pdf';
-        $path     = "uploads/noc_certificate/{$application->user_id}/{$filename}";
+        $path     = "uploads/{$user->id}/application/{$filename}";
 
         Storage::disk('public')->put($path, $pdf->output());
         $application->update(['NOC_certificate' => $path]);
-    }
-
-
+            
+        }
     public function get_total_applications_by_department(Request $request)
     {
 
@@ -1148,22 +1145,25 @@ class ServiceController extends Controller
                 ->distinct('application_id')
                 ->count('application_id');
 
+
+            $total_count_approved_application_in_department = ApplicationWorkflowAssignment::where('status', 'approved')
+
             $percentage_pending_application = ($total_count_pending_application_in_department / $total_applications_for_this_department) * 100;
 
             $total_count_approved_application_in_department = ApplicationWorkflowAssignment::query()
+
                 ->where('hierarchy_level', $hierarchy_level)
                 ->where('department_id', $request->department_id)
-                ->whereHas('application', function ($q) {
-                    $q->where('status', 'approved');
-                })
                 ->distinct('application_id')
                 ->count('application_id');
+
 
             $percentage_approved_application = ($total_count_approved_application_in_department / $total_applications_for_this_department) * 100;
 
             $total_count_rejected_application_in_department = UserServiceApplication::where('status', 'rejected')->count();
 
             $percentage_rejected_application = ($total_count_rejected_application_in_department / $total_applications_for_this_department) * 100;
+
 
             $number_of_NOC_issued_by_department = UserServiceApplication::where('status', 'approved')
                 ->whereHas('latestWorkflow', function ($q) use ($department_id) {
@@ -1311,5 +1311,6 @@ class ServiceController extends Controller
                 'error'   => $e->getMessage()
             ], 500);
         }
+
     }
 }
