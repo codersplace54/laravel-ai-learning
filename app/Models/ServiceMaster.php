@@ -35,6 +35,7 @@ class ServiceMaster extends Model
         'valid_for_upload',
         'nsw_license_id',
         'status',
+
         'service_mode',
         'third_party_portal_name',
         'third_party_redirect_url',
@@ -42,6 +43,7 @@ class ServiceMaster extends Model
         'third_party_status_api_url',
         'third_party_payment_mode',
         'is_active',
+
         'created_at',
         'updated_at'
     ];
@@ -59,5 +61,10 @@ class ServiceMaster extends Model
     public function applications()
     {
         return $this->hasMany(UserServiceApplication::class, 'service_id', 'id');
+    }
+
+    public function thirdPartyParams()
+    {
+        return $this->hasMany(ServiceThirdPartyParam::class, 'service_id');
     }
 }

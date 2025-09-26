@@ -21,6 +21,14 @@ class ApplicationWorkflowHistory extends Model
         'action_taken_at',
         'status',
         'remarks',
+
+        'external_status',
+        'external_payment_amount',
+        'external_payment_status',
+        'external_noc_url',
+        'external_noc_file',
+        'source',
+
         'created_at',
         'updated_at'
     ];
