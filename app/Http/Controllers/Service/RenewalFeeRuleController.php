@@ -24,11 +24,11 @@ class RenewalFeeRuleController extends Controller
 
             $request->validate([
                 'rules' => 'required|array',
-                'rules.*.service_id' => 'required|integer|exists:service_masters,id',
-                'rules.*.renewal_cycle_id' => 'required|integer|exists:renewal_cycles,id',
+                'rules.*.service_id' => 'nullable|integer|exists:service_masters,id',
+                'rules.*.renewal_cycle_id' => 'nullable|integer|exists:renewal_cycles,id',
                 'rules.*.fee_type' => 'nullable|in:hardcoded,calculated,estimated',
                 'rules.*.fixed_fee' => 'nullable|string',
-                'rules.*.question_id' => 'required|integer|exists:service_questionnaires,id',
+                'rules.*.question_id' => 'nullable|integer|exists:service_questionnaires,id',
                 'rules.*.condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
                 'rules.*.condition_value_start' => 'nullable|string',
                 'rules.*.condition_value_end' => 'nullable|string',
@@ -45,37 +45,9 @@ class RenewalFeeRuleController extends Controller
 
             foreach ($request->rules as $rule) {
 
-                $renewal_cycle = RenewalCycle::where('id', $rule['renewal_cycle_id'])
-                    ->where('service_id', $rule['service_id'])
-                    ->first();
-
-                if (!$renewal_cycle) {
-
-                    DB::rollBack();
-
-                    return response()->json([
-                        'status' => 0,
-                        'message' => "Renewal Cycle ID {$rule['renewal_cycle_id']} does not belong to Service ID {$rule['service_id']}.",
-                    ], 422);
-                }
-
-                $service_questionnaire = ServiceQuestionnaire::where('id', $rule['question_id'])
-                    ->where('service_id', $rule['service_id'])
-                    ->first();
-
-                if (!$service_questionnaire) {
-
-                    DB::rollBack();
-
-                    return response()->json([
-                        'status' => 0,
-                        'message' => "Service Questionnaire ID {$rule['question_id']} does not belong to Service ID {$rule['question_id']}.",
-                    ], 422);
-                }
-
                 $renewal_fee_rule = RenewalFeeRule::create([
-                    'service_id' => $rule['service_id'],
-                    'renewal_cycle_id' => $rule['renewal_cycle_id'],
+                    'service_id' => $rule['service_id'] ?? null,
+                    'renewal_cycle_id' => $rule['renewal_cycle_id']  ?? null,
                     'fee_type' => $rule['fee_type'] ?? null,
                     'fixed_fee' => $rule['fixed_fee'] ?? null,
                     'question_id' => $rule['question_id'] ?? null,
@@ -125,11 +97,11 @@ class RenewalFeeRuleController extends Controller
             $request->validate([
                 'rules' => 'required|array',
                 'rules.*.id' => 'nullable|integer|exists:renewal_fee_rules,id',
-                'rules.*.service_id' => 'required|integer|exists:service_masters,id',
-                'rules.*.renewal_cycle_id' => 'required|integer|exists:renewal_cycles,id',
+                'rules.*.service_id' => 'nullable|integer|exists:service_masters,id',
+                'rules.*.renewal_cycle_id' => 'nullable|integer|exists:renewal_cycles,id',
                 'rules.*.fee_type' => 'nullable|in:hardcoded,calculated,estimated',
                 'rules.*.fixed_fee' => 'nullable|string',
-                'rules.*.question_id' => 'required|integer|exists:service_questionnaires,id',
+                'rules.*.question_id' => 'nullable|integer|exists:service_questionnaires,id',
                 'rules.*.condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
                 'rules.*.condition_value_start' => 'nullable|string',
                 'rules.*.condition_value_end' => 'nullable|string',
@@ -146,39 +118,11 @@ class RenewalFeeRuleController extends Controller
 
             foreach ($request->rules as $rule) {
 
-                $renewal_cycle = RenewalCycle::where('id', $rule['renewal_cycle_id'])
-                    ->where('service_id', $rule['service_id'])
-                    ->first();
-
-                if (!$renewal_cycle) {
-
-                    DB::rollBack();
-
-                    return response()->json([
-                        'status' => 0,
-                        'message' => "Renewal Cycle ID {$rule['renewal_cycle_id']} does not belong to Service ID {$rule['service_id']}.",
-                    ], 422);
-                }
-
-                $service_questionnaire = ServiceQuestionnaire::where('id', $rule['question_id'])
-                    ->where('service_id', $rule['service_id'])
-                    ->first();
-
-                if (!$service_questionnaire) {
-
-                    DB::rollBack();
-
-                    return response()->json([
-                        'status' => 0,
-                        'message' => "Service Questionnaire ID {$rule['question_id']} does not belong to Service ID {$rule['question_id']}.",
-                    ], 422);
-                }
-
                 $renewal_fee_rule = RenewalFeeRule::findOrFail($rule['id']);
 
                 $renewal_fee_rule->update([
-                    'service_id' => $rule['service_id'],
-                    'renewal_cycle_id' => $rule['renewal_cycle_id'],
+                    'service_id' => $rule['service_id'] ?? null,
+                    'renewal_cycle_id' => $rule['renewal_cycle_id'] ?? null,
                     'fee_type' => $rule['fee_type'] ?? null,
                     'fixed_fee' => $rule['fixed_fee'] ?? null,
                     'question_id' => $rule['question_id'] ?? null,
