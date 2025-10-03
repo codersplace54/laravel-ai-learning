@@ -9,6 +9,9 @@ class ProformaQuestionnaire extends Model
     protected $fillable = [
         'proforma_id',
         'question_label',
+        'is_claim',
+        'claim_percentage',
+        'claim_per_unit',
         'question_type',
         'is_required',
         'options',

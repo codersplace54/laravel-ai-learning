@@ -16,8 +16,9 @@ return new class extends Migration
              $table->bigInteger('scheme_id');
             $table->string('code'); 
             $table->string('title');
+            $table->string('depends_on_proforma_ids')->nullable();
             $table->enum('proforma_type', ['eligibility','claim']);
-            $table->enum('claim_type', ['one_time','monthly','quarterly'])->nullable(); 
+            $table->enum('claim_type', ['one_time','monthly','quarterly','half_yearly','annually'])->nullable(); 
             $table->text('description')->nullable();
             $table->integer('display_order')->nullable();
             $table->integer('status')->default(1);

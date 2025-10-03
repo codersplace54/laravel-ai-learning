@@ -50,7 +50,7 @@ class ServiceTemplateController extends Controller
                 'errors'  => $e->errors(),
             ], 422);
 
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
 
             return response()->json([
@@ -101,7 +101,7 @@ class ServiceTemplateController extends Controller
                 'errors'  => $e->errors(),
             ], 422);
 
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'status'  => 0,

@@ -50,7 +50,7 @@ class SchemeController extends Controller
 
             return response()->json(['status' => 0, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
 
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
 
             DB::rollBack();
 
@@ -102,7 +102,7 @@ class SchemeController extends Controller
 
             return response()->json(['status' => 0, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
 
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
 
             DB::rollBack();
 
@@ -129,7 +129,7 @@ class SchemeController extends Controller
                 'data'    => $data,
             ]);
 
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
 
             return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
         }
