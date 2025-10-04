@@ -33,8 +33,8 @@ class UserController extends Controller
                     'subdivision_id' => 'nullable|integer|exists:tripura_master_data,sub_lgd_code',
                     'ulb_id' => 'nullable|integer|exists:tripura_master_data,ulb_lgd_code',
                     'ward_id' => 'nullable|integer|exists:tripura_master_data,gp_vc_ward_lgd_code',
-                    'registered_enterprise_address' => 'required|string',
-                    'registered_enterprise_city' => 'required|string',
+                    'registered_enterprise_address' => 'nullable|string',
+                    'registered_enterprise_city' => 'nullable|string',
                     'user_type' => 'required|string|in:individual,department,admin',
                     'password' => 'required|string|min:6',
                     'pan' => 'nullable|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
@@ -191,10 +191,10 @@ class UserController extends Controller
                 $rules['user_name'] = 'required|string|max:100|alpha_dash|unique:users,user_name,' . $request->id;
             }
             if ($request->registered_enterprise_address !== null) {
-                $rules['registered_enterprise_address'] = 'required|string';
+                $rules['registered_enterprise_address'] = 'nullable|string';
             }
             if ($request->registered_enterprise_city !== null) {
-                $rules['registered_enterprise_city'] = 'required|string';
+                $rules['registered_enterprise_city'] = 'nullable|string';
             }
             if ($request->user_type !== null) {
                 $rules['user_type'] = 'required|in:individual,department,admin';

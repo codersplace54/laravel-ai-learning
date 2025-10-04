@@ -15,6 +15,8 @@ return new class extends Migration
             $table->enum('param_type', ['request', 'response'])->nullable();
             $table->integer('param_required')->default(1)->nullable();
             $table->string('default_value')->nullable();
+            $table->string('default_source_table')->nullable();
+            $table->string('default_source_column')->nullable();
             $table->enum('data_source', ['user_input', 'system_generated', 'static'])->default('user_input')->nullable();
             $table->string('description')->nullable();
             $table->timestamps();

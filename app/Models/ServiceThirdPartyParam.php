@@ -13,6 +13,8 @@ class ServiceThirdPartyParam extends Model
         'param_type',
         'param_required',
         'default_value',
+        'default_source_table',
+        'default_source_column',
         'data_source',
         'description',
         'created_at',

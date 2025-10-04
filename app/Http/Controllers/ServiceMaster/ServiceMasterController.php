@@ -96,9 +96,6 @@ class ServiceMasterController extends Controller
                 'is_active' => $request->is_active ?? 1
             ]);
 
-            if($service_master->service_mode == "third_party")
-            $this->store_service_third_party_params($request, $service_master);
-
             DB::commit();
 
             return response()->json([
@@ -136,7 +133,7 @@ class ServiceMasterController extends Controller
                 'noc_name' => 'required|string|max:255',
                 'noc_short_name' => 'required|string|max:255',
                 'noc_type' => 'required|in:CFE,CFO,Renewal,Special,Others',
-                'noc_payment_type' => 'required|in:Estimated,Hardcoded,Calculated',
+                'noc_payment_type' => 'nullable|in:Estimated,Hardcoded,Calculated',
                 'target_days' => 'nullable|integer',
                 'allow_repeat_application' => 'required|in:yes,no',
                 'has_input_form' => 'required|in:yes,no',
@@ -207,18 +204,15 @@ class ServiceMasterController extends Controller
                 'third_party_redirect_url' => $request->third_party_redirect_url,
                 'third_party_return_url' => $request->third_party_return_url,
                 'third_party_status_api_url' => $request->third_party_status_api_url,
-                'is_active' => $request->is_active,
+                'is_active' => $request->is_active ?? $service->is_active,
             ]);
-
-            $third_party_parameters = $this->store_service_third_party_params($request, $service);
 
             DB::commit();
 
             return response()->json([
                 'status' => 1,
                 'message' => 'Service master updated successfully.',
-                'data' => $service,
-                'third_party_parameters' => $third_party_parameters
+                'data' => $service
             ]);
         } catch (\Exception $e) {
 
@@ -305,11 +299,13 @@ class ServiceMasterController extends Controller
             ]);
 
             $service = ServiceMaster::where('id', $request->service_id)->first();
+            $third_party_parameters = ServiceThirdPartyParam::where('service_id', $request->service_id)->first();
 
             return response()->json([
                 'status' => 1,
                 'message' => 'Service details fetched successfully.',
                 'data' => $service,
+                'third_party_parameters' => $third_party_parameters
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -344,7 +340,7 @@ class ServiceMasterController extends Controller
 
             $services = ServiceMaster::with(['department:id,name', 'applications' => function ($query) use ($user) {
                 $query->where('user_id', $user->id)->select('id', 'service_id', 'status');
-            }])->get(['id', 'service_title_or_description', 'department_id', 'noc_type', 'target_days', 'noc_payment_type', 'allow_repeat_application','service_mode','third_party_portal_name']);
+            }])->get(['id', 'service_title_or_description', 'department_id', 'noc_type', 'target_days', 'noc_payment_type', 'allow_repeat_application', 'service_mode', 'third_party_portal_name']);
 
             $services = $services->map(function ($service) {
                 return [
@@ -429,44 +425,77 @@ class ServiceMasterController extends Controller
         }
     }
 
-    public function store_service_third_party_params(Request $request, $service_master)
+    public function store_service_third_party_params(Request $request)
     {
 
-        $request->validate([
-            'param_name'            => 'nullable|string',
-            'param_type'     => 'nullable|string|in:request,response',
-            'param_required' => 'nullable|integer|in:0,1',
-            'default_value' => 'nullable|string',
-            'data_source'     => 'nullable|string|in:user_input,system_generated',
-            'description' => 'nullable|string',
-        ]);
+        try {
 
-        $service_third_party_params = ServiceThirdPartyParam::where('service_id', $service_master->id)->first();
 
-        if ($service_third_party_params) {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
 
-            $service_third_party_params->update([
-                'service_id'         => $service_master->id,
-                'param_name'         => $request->param_name,
-                'param_type'         => $request->param_type,
-                'param_required'     => $request->param_required,
-                'default_value'      => $request->default_value,
-                'data_source'        => $request->data_source,
-                'description'        => $request->description,
+            $request->validate([
+                'service_id' => 'required|integer|exists:service_masters,id',
+                'param_name'            => 'nullable|string',
+                'param_type'     => 'nullable|string|in:request,response',
+                'param_required' => 'nullable|integer|in:0,1',
+                'default_value' => 'nullable|string',
+                'default_source_table' => 'nullable|string',
+                'default_source_column' => 'nullable|string',
+                'data_source'     => 'nullable|string|in:user_input,system_generated',
+                'description' => 'nullable|string',
             ]);
-        } else {
 
-            $service_third_party_params = ServiceThirdPartyParam::create([
-                'service_id'        => $service_master->id,
-                'param_name'        => $request->param_name,
-                'param_type'        => $request->param_type,
-                'param_required'    => $request->param_required,
-                'default_value'     => $request->default_value,
-                'data_source'       => $request->data_source,
-                'description'       => $request->description
+            DB::beginTransaction();
+
+            $service_third_party_params = ServiceThirdPartyParam::where('service_id', $request->service_id)->first();
+
+            if ($service_third_party_params) {
+
+                $service_third_party_params->update([
+                    'service_id'         => $request->service_id,
+                    'param_name'         => $request->param_name,
+                    'param_type'         => $request->param_type,
+                    'param_required'     => $request->param_required,
+                    'default_value'      => $request->default_value,
+                    'default_source_table'   => $request->default_source_table,
+                    'default_source_column' => $request->default_source_column,
+                    'data_source'           => $request->data_source,
+                    'description'        => $request->description,
+                ]);
+            } else {
+
+                $service_third_party_params = ServiceThirdPartyParam::create([
+                    'service_id'        => $request->service_id,
+                    'param_name'        => $request->param_name,
+                    'param_type'        => $request->param_type,
+                    'param_required'    => $request->param_required,
+                    'default_value'     => $request->default_value,
+                    'default_source_table'   => $request->default_source_table,
+                    'default_source_column' => $request->default_source_column,
+                    'data_source'       => $request->data_source,
+                    'description'       => $request->description
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Service third party params created successfully.',
+                'data' => $service_third_party_params
             ]);
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to create Service third party params.',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        return $service_third_party_params;
     }
 }

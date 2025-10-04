@@ -125,6 +125,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
         Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);
         Route::post('service-master-delete', [ServiceMasterController::class, 'service_master_delete']);
+        Route::post('store-service-third-party-params', [ServiceMasterController::class, 'store_service_third_party_params']);
 
 
         Route::post('renewal-cycle-store', [RenewalCycleController::class, 'renewal_cycle_store']);
@@ -160,7 +161,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('renewal-fee-rule-view', [RenewalFeeRuleController::class, 'renewal_fee_rule_view']);
 
     Route::prefix('user')->group(function () {
-        
+
         Route::post('service-application-store', [UserServiceApplicationController::class, 'user_service_application_store']);
         Route::post('service-application-update', [UserServiceApplicationController::class, 'user_service_application_update']);
         Route::post('service-application-view', [UserServiceApplicationController::class, 'user_service_application_view']);

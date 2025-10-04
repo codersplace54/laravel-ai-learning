@@ -22,8 +22,8 @@ return new class extends Migration
             $table->bigInteger('subdivision_id')->nullable()->after('district_id');
             $table->bigInteger('ulb_id')->nullable()->after('subdivision_id');
             $table->bigInteger('ward_id')->nullable()->after('ulb_id');
-            $table->text('registered_enterprise_address')->after('bin');
-            $table->string('registered_enterprise_city')->after('registered_enterprise_address');
+            $table->text('registered_enterprise_address')->nullable()->after('bin');
+            $table->string('registered_enterprise_city')->nullable()->after('registered_enterprise_address');
             $table->enum('user_type', ['individual', 'department', 'admin'])->default('individual')->after('registered_enterprise_city');
             $table->enum('status', ['active', 'blocked'])->default('active');
             $table->text('current_token')->nullable()->after('status');
