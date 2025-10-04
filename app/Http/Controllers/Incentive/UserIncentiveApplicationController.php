@@ -59,15 +59,29 @@ class UserIncentiveApplicationController extends Controller
 
             $application = UserIncentiveApplication::firstOrNew($find_application);
 
-            $existing_answers = $application->form_answers_json
-                ? $application->form_answers_json
-                : [];
+            $existing_answers = $application->form_answers_json;
+
+            if (is_string($existing_answers)) {
+                $existing_answers = json_decode($existing_answers, true) ?: [];
+            }
+            if (!is_array($existing_answers)) {
+                $existing_answers = [];
+            }
             // dd("hello");
             $incoming_answers = $request->form_answers_json
                 ? json_decode($request->form_answers_json, true)
                 : [];
 
-            $answers = array_replace($existing_answers, $incoming_answers);
+            $answers = $existing_answers;
+
+            foreach ($incoming_answers as $qid => $payload) {
+                if (!isset($answers[$qid])) {
+                    $answers[$qid] = ['value' => null, 'files' => []];
+                }
+                if (array_key_exists('value', $payload)) {
+                    $answers[$qid]['value'] = $payload['value'];
+                }
+            }
 
             $remove_file_ids_by_question = $request->input('remove_file_ids', []);
 
@@ -90,7 +104,7 @@ class UserIncentiveApplicationController extends Controller
 
                 foreach ($existing_files as $file) {
                     $should_delete = in_array($file['file_id'], $file_ids_to_remove, true);
-                    
+
                     if ($should_delete) {
                         Storage::disk('public')->delete($file['path']);
                         continue;
@@ -139,6 +153,7 @@ class UserIncentiveApplicationController extends Controller
 
                 $answers[$question_id]['files'] = array_values(array_merge($existing_files, $new_files_for_question));
                 $answers[$question_id]['value'] = $answers[$question_id]['value'] ?? null;
+                
             }
 
 
@@ -202,9 +217,9 @@ class UserIncentiveApplicationController extends Controller
                     'meta'           => null,
                     'action_taken_at' => now(),
                 ]);
-                
+
                 DB::commit();
-                
+
                 return response()->json([
                     'status'  => 1,
                     'message' => 'Application Submitted successfully.',
@@ -217,11 +232,7 @@ class UserIncentiveApplicationController extends Controller
             return response()->json([
                 'status'  => 1,
                 'message' => 'Draft saved successfully.',
-                'data'    => [
-                    'application_id'  => $application->id,
-                    'application_no'  => $application->application_no,
-                    'workflow_status' => $application->workflow_status,
-                ],
+                'data'    => $application,
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
