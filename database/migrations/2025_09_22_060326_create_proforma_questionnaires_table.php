@@ -14,7 +14,10 @@ return new class extends Migration
         Schema::create('proforma_questionnaires', function (Blueprint $table) {
             $table->id();
             $table->bigInteger('proforma_id');
-            $table->string('question_label');                 
+            $table->string('question_label'); 
+            $table->enum('is_claim',['yes','no'])->nullable();
+            $table->integer('claim_percentage')->nullable();
+            $table->integer('claim_per_unit')->nullable();
             $table->string('question_type');                 
             $table->enum('is_required', ['yes', 'no']);
             $table->text('options')->nullable();

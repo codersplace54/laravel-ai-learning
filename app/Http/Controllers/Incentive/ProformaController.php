@@ -19,22 +19,30 @@ class ProformaController extends Controller
             }
 
             $request->validate([
-                'scheme_id'     => ['required', 'integer', 'exists:schemes,id'],
-                'code'          => [
-                    'required',
-                    'string',
-                    'max:64',
-                    Rule::unique('proformas', 'code')->where(fn($q) => $q->where('scheme_id', $request->scheme_id)),
-                ],
-                'title'         => ['required', 'string', 'max:200'],
-                'proforma_type' => ['required', Rule::in(['eligibility', 'claim'])],
-                'claim_type'    => [Rule::requiredIf($request->proforma_type === 'claim'), Rule::in(['one_time', 'monthly', 'quarterly'])],
-                'description'   => ['nullable', 'string'],
-                'display_order' => ['nullable', 'integer'],
-                'status'        => ['nullable', 'integer'],
+                'scheme_id'     => 'required|integer|exists:schemes,id',
+                'code'          => 'required|string|max:64|' .
+                    Rule::unique('proformas', 'code')->where(
+                        fn($q) => $q->where('scheme_id', $request->scheme_id)
+                    ),
+                'title'         => 'required|string|max:200',
+                'proforma_type' => 'required|in:eligibility,claim',
+                'claim_type'    => Rule::requiredIf($request->proforma_type === 'claim') . '|in:one_time,monthly,quarterly,half_yearly,annually',
+                'description'   => 'nullable|string',
+                'display_order' => 'nullable|integer',
+                'status'        => 'nullable|integer|in:0,1',
+                'depends_on_proforma_ids'   => 'nullable|array',
+                'depends_on_proforma_ids.*' => 'integer|' .
+                    Rule::exists('proformas', 'id')->where(
+                        fn($q) =>
+                        $q->where('scheme_id', $request->scheme_id)
+                            ->where('proforma_type', 'eligibility')
+                    ),
             ]);
 
+
             DB::beginTransaction();
+
+            $depends_on_proforma_ids = $request->filled('depends_on_proforma_ids') ? json_encode($request->depends_on_proforma_ids) : null;
 
             $proforma = Proforma::create([
                 'scheme_id'     => $request->scheme_id,
@@ -45,7 +53,10 @@ class ProformaController extends Controller
                 'description'   => $request->description,
                 'display_order' => $request->display_order,
                 'status'        => $request->status ?? 1,
+                'depends_on_proforma_ids' => $depends_on_proforma_ids,
             ]);
+
+            $proforma->depends_on_proforma_ids = $proforma->depends_on_proforma_ids ? json_decode($proforma->depends_on_proforma_ids) : null;
 
             DB::commit();
 
@@ -59,7 +70,7 @@ class ProformaController extends Controller
             DB::rollBack();
 
             return response()->json(['status' => 0, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
 
             DB::rollBack();
 
@@ -84,23 +95,34 @@ class ProformaController extends Controller
             $request->validate([
                 'proforma_id'   => 'required|integer|exists:proformas,id',
                 'scheme_id'     => 'sometimes|integer|exists:schemes,id',
-                'code'          => ['sometimes','string','max:64',
-                        Rule::unique('proformas', 'code')
+                'code'          => [
+                    'sometimes',
+                    'string',
+                    'max:64',
+                    Rule::unique('proformas', 'code')
                         ->ignore($request->proforma_id)
                         ->where(fn($q) => $q->where('scheme_id', $scheme_id)),
                 ],
                 'title'         => 'sometimes|string|max:200',
                 'proforma_type' => 'sometimes|in:eligibility,claim',
-                'claim_type'    => 'nullable|in:one_time,monthly,quarterly',
+                'claim_type'    => 'nullable|in:one_time,monthly,quarterly,half_yearly,annually',
                 'description'   => 'nullable|string',
                 'display_order' => 'nullable|integer',
                 'status'        => 'nullable|integer',
+                'depends_on_proforma_ids.*' => 'integer|' .
+                    Rule::exists('proformas', 'id')->where(
+                        fn($q) =>
+                        $q->where('scheme_id', $request->scheme_id)
+                            ->where('proforma_type', 'eligibility')
+                    ),
             ]);
 
 
             DB::beginTransaction();
 
             $proforma = Proforma::where('id', $request->proforma_id)->first();
+
+            $depends_on_proforma_ids = $request->filled('depends_on_proforma_ids') ? json_encode($request->depends_on_proforma_ids) : null;
 
             $proforma->update([
                 'scheme_id'     => $request->scheme_id,
@@ -111,13 +133,12 @@ class ProformaController extends Controller
                 'description'   => $request->description,
                 'display_order' => $request->display_order,
                 'status'        => $request->status,
+                'depends_on_proforma_ids' => $depends_on_proforma_ids,
             ]);
 
-            if ($proforma->proforma_type !== 'claim') {
-                $proforma->claim_type = null;
-            }
-
             $proforma->save();
+
+            $proforma->depends_on_proforma_ids = $proforma->depends_on_proforma_ids ? json_decode($proforma->depends_on_proforma_ids) : null;
 
             DB::commit();
 
@@ -126,14 +147,12 @@ class ProformaController extends Controller
                 'message' => 'Proforma updated successfully.',
                 'data'    => $proforma,
             ]);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
 
             DB::rollBack();
 
             return response()->json(['status' => 0, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
-
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
 
             DB::rollBack();
 
@@ -157,16 +176,22 @@ class ProformaController extends Controller
                 ->orderByDesc('id')
                 ->get();
 
+            foreach ($proformas as $proforma) {
+                $proforma->depends_on_proforma_ids = $proforma->depends_on_proforma_ids
+                    ? json_decode($proforma->depends_on_proforma_ids, true)
+                    : null;
+            }
+
             return response()->json([
                 'status'  => 1,
                 'message' => 'Proformas fetched successfully.',
                 'data'    => $proformas,
             ]);
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
 
             return response()->json([
-                'status' => 0, 
-                'message' => 'Something went wrong.', 
+                'status' => 0,
+                'message' => 'Something went wrong.',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -187,6 +212,10 @@ class ProformaController extends Controller
             ]);
 
             $proforma = Proforma::where('id', $request->proforma_id)->first();
+
+            $proforma->depends_on_proforma_ids = $proforma->depends_on_proforma_ids
+                    ? json_decode($proforma->depends_on_proforma_ids, true)
+                    : null;
 
             return response()->json([
                 'status' => 1,
@@ -257,6 +286,7 @@ class ProformaController extends Controller
                 'status' => 0,
                 'message' => $e->getMessage(),
             ], 500);
+            
         }
     }
 }

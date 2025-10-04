@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\ProformaQuestionnaire;
 
+
 class ProformaQuestionnaireController extends Controller
 {
     public function proforma_questionnaire_store(Request $request)
@@ -31,8 +32,11 @@ class ProformaQuestionnaireController extends Controller
                 'display_width'         => 'nullable|string',
                 'status'                => 'nullable|integer',
                 'validation_required'   => 'required|in:yes,no',
+                'is_claim'              => 'required|in:yes,no',
+                'claim_per_unit'        => 'nullable|numeric|min:0',
+                'claim_percentage'      => 'nullable|numeric|min:0|max:100',
                 'upload_rule'           => 'nullable',
-            ]);
+            ]); 
 
             DB::beginTransaction();
 
@@ -50,7 +54,10 @@ class ProformaQuestionnaireController extends Controller
                 'display_width'         => $request->display_width,
                 'status'                => $request->status ?? 1,
                 'validation_required'   => $request->validation_required,
-                'upload_rule' => $request->upload_rule ? json_encode($request->upload_rule) : null,
+                'is_claim'              => $request->is_claim,
+                'claim_per_unit'        => $request->claim_per_unit,
+                'claim_percentage'      => $request->claim_percentage,
+                'upload_rule'           => $request->upload_rule ? json_encode($request->upload_rule) : null,
             ]);
 
             $proforma_questionnaire->upload_rule = $proforma_questionnaire->upload_rule
@@ -69,7 +76,7 @@ class ProformaQuestionnaireController extends Controller
             DB::rollBack();
 
             return response()->json(['status' => 0, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
 
             DB::rollBack();
 
@@ -99,6 +106,9 @@ class ProformaQuestionnaireController extends Controller
                 'display_width'         => 'nullable|string',
                 'status'                => 'nullable|boolean',
                 'validation_required'   => 'required|in:yes,no',
+                'is_claim'              => 'required|in:yes,no',
+                'claim_per_unit'        => 'nullable|integer',
+                'claim_percentage'      => 'nullable|integer',
                 'upload_rule'           => 'nullable',
             ]);
 
@@ -120,6 +130,9 @@ class ProformaQuestionnaireController extends Controller
                 'display_width'         => $request->display_width ?? $proforma_question->display_width,
                 'status'                => $request->status ? $request->status : $proforma_question->status,
                 'validation_required'   => $request->validation_required,
+                'is_claim'              => $request->is_claim ?? $proforma_question->is_claim,
+                'claim_per_unit'        => $request->claim_per_unit ?? $proforma_question->claim_per_unit,
+                'claim_percentage'      => $request->claim_percentage ?? $proforma_question->claim_percentage,
                 'upload_rule'           => $request->upload_rule ? json_encode($request->upload_rule) : $proforma_question->upload_rule,
             ]);
 
@@ -139,7 +152,7 @@ class ProformaQuestionnaireController extends Controller
             DB::rollBack();
 
             return response()->json(['status' => 0, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
 
             DB::rollBack();
 
@@ -172,7 +185,7 @@ class ProformaQuestionnaireController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
 
             return response()->json(['status' => 0, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
 
             DB::rollBack();
 
@@ -207,7 +220,7 @@ class ProformaQuestionnaireController extends Controller
                 'message' => 'Proforma questionnaires fetched successfully.',
                 'data'    => $proforma_questionnaires,
             ]);
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
 
             return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
         }
@@ -235,7 +248,7 @@ class ProformaQuestionnaireController extends Controller
                 'message' => 'Proforma questionnaires details fetched successfully.',
                 'data'    => $proforma_questionnaire,
             ]);
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
             return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
         }
     }
