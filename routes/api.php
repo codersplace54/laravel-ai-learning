@@ -126,6 +126,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);
         Route::post('service-master-delete', [ServiceMasterController::class, 'service_master_delete']);
         Route::post('store-service-third-party-params', [ServiceMasterController::class, 'store_service_third_party_params']);
+        Route::post('service-third-party-params-view', [ServiceMasterController::class, 'service_third_party_params_view']);
+        Route::post('service-third-party-params-delete', [ServiceMasterController::class, 'service_third_party_params_delete']);
 
 
         Route::post('renewal-cycle-store', [RenewalCycleController::class, 'renewal_cycle_store']);
@@ -150,6 +152,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('fetch-all-business-users', [AdminController::class, 'fetch_all_business_users']);
         Route::post('fetch-all-department-users', [AdminController::class, 'fetch_all_department_users']);
+        Route::post('get-department-user-details', [UserController::class, 'get_department_user_details']);
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);

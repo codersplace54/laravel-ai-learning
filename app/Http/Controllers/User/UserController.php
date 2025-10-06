@@ -475,8 +475,8 @@ class UserController extends Controller
                 'mobile_no' => $user->mobile_no,
                 'pan' => $user->pan,
                 'bin' => $user->bin,
-                'district'                     => $user->district->district_name,
-                'district_code'                => $user->district->district_code,
+                'district'                     => $user->district->district_name ?? null,
+                'district_code'                => $user->district->district_code ?? null,
                 'subdivision_name'                 => $user->subdivision->sub_division ?? null,
                 'subdivision_code'               => $user->subdivision->sub_lgd_code ?? null,
                 'ulb_name'                          => $user->ulb->ulb_name ?? null,
@@ -484,8 +484,8 @@ class UserController extends Controller
                 'ward_name'                         => $user->ward->name_of_gp_vc_or_ward ?? null,
                 'ward_code'                      => $user->ward->gp_vc_ward_lgd_code ?? null,
                 'user_type' => $user->user_type,
-                'registered_enterprise_address' => $user->registered_enterprise_address,
-                'registered_enterprise_city' => $user->registered_enterprise_city,
+                'registered_enterprise_address' => $user->registered_enterprise_address ?? null,
+                'registered_enterprise_city' => $user->registered_enterprise_city ?? null,
                 'is_active'                    => $user->is_active,
                 'department_id'   => $user->department_user->department_id   ?? null,
                 'hierarchy_level' => $user->department_user->hierarchy_level ?? null,
@@ -580,6 +580,68 @@ class UserController extends Controller
 
             return response()->json([
                 'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function get_department_user_details(Request $request)
+    {
+        try {
+
+
+            $user = Auth::user();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized.'
+                ], 401);
+            }
+
+            $request->validate(
+                [
+                    'id' => 'required|exists:users,id',
+                ]
+            );
+
+            $department_user = User::where('id', $request->id)->first();
+
+            $data = [
+                'name_of_enterprise' => $department_user->name_of_enterprise,
+                'authorized_person_name' => $department_user->authorized_person_name,
+                'email_id' => $department_user->email_id,
+                'mobile_no' => $department_user->mobile_no,
+                'pan' => $department_user->pan,
+                'bin' => $department_user->bin,
+                'district'                     => $department_user->district->district_name,
+                'district_code'                => $department_user->district->district_code,
+                'subdivision_name'                 => $department_user->subdivision->sub_division ?? null,
+                'subdivision_code'               => $department_user->subdivision->sub_lgd_code ?? null,
+                'ulb_name'                          => $department_user->ulb->ulb_name ?? null,
+                'ulb_code'                 => $department_user->ulb->ulb_lgd_code ?? null,
+                'ward_name'                         => $department_user->ward->name_of_gp_vc_or_ward ?? null,
+                'ward_code'                      => $department_user->ward->gp_vc_ward_lgd_code ?? null,
+                'user_type' => $department_user->user_type,
+                'registered_enterprise_address' => $department_user->registered_enterprise_address,
+                'registered_enterprise_city' => $department_user->registered_enterprise_city,
+                'is_active'                    => $department_user->department_user->is_active,
+                'department_id'   => $department_user->department_user->department_id   ?? null,
+                'hierarchy_level' => $department_user->department_user->hierarchy_level ?? null,
+                'designation'     => $department_user->department_user->designation     ?? null,
+
+
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $data
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
                 'message' => 'Something went wrong.',
                 'error' => $e->getMessage()
             ], 500);

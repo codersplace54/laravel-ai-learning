@@ -244,6 +244,7 @@ class ServiceMasterController extends Controller
             DB::beginTransaction();
 
             $service = ServiceMaster::where('id', $request->id)->first();
+            $Service_third_party_param = ServiceThirdPartyParam::where('service_id', $request->id)->first();
 
             if (!$service) {
 
@@ -256,6 +257,9 @@ class ServiceMasterController extends Controller
             }
 
             $service->delete();
+
+            if ($Service_third_party_param)
+                $Service_third_party_param->delete();
 
             DB::commit();
 
@@ -495,6 +499,102 @@ class ServiceMasterController extends Controller
                 'status' => 0,
                 'message' => 'Failed to create Service third party params.',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function service_third_party_params_view(Request $request)
+    {
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'service_id' => 'required|integer|exists:service_third_party_params,service_id',
+            ]);
+
+            $third_party_parameters = ServiceThirdPartyParam::where('service_id', $request->service_id)->first();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Service details fetched successfully.',
+                'data' => $third_party_parameters
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function service_third_party_params_delete(Request $request)
+    {
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'service_id' => 'required|integer|exists:service_third_party_params,service_id',
+            ]);
+
+            DB::beginTransaction();
+
+            $service = ServiceThirdPartyParam::where('service_id', $request->service_id)->first();
+
+            if (!$service) {
+
+                DB::rollBack();
+
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Service third party params not found.'
+                ], 404);
+            }
+
+            $service->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Service third party params deleted successfully.',
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' => $e->getMessage(),
             ], 500);
         }
     }

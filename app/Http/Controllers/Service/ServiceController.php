@@ -711,7 +711,7 @@ class ServiceController extends Controller
                         'status'       => 'approved',
                         'updated_at' => now(),
                     ]);
-                    
+
                     if($application->service->form_template){
                         $this->generate_dynamic_pdf($application, $user);
                     }
@@ -1100,13 +1100,13 @@ class ServiceController extends Controller
                 'dpi'                  => 110,
             ]);
 
-            
+
         $filename = uniqid('license_') . '.pdf';
         $path     = "uploads/{$user->id}/application/{$filename}";
 
         Storage::disk('public')->put($path, $pdf->output());
         $application->update(['NOC_certificate' => $path]);
-            
+
         }
     public function get_total_applications_by_department(Request $request)
     {
@@ -1146,7 +1146,7 @@ class ServiceController extends Controller
                 ->count('application_id');
 
 
-            $total_count_approved_application_in_department = ApplicationWorkflowAssignment::where('status', 'approved')
+            $total_count_approved_application_in_department = ApplicationWorkflowAssignment::where('status', 'approved');
 
             $percentage_pending_application = ($total_count_pending_application_in_department / $total_applications_for_this_department) * 100;
 
