@@ -26,7 +26,7 @@ class ProformaController extends Controller
                     ),
                 'title'         => 'required|string|max:200',
                 'proforma_type' => 'required|in:eligibility,claim',
-                'claim_type'    => Rule::requiredIf($request->proforma_type === 'claim') . '|in:one_time,monthly,quarterly,half_yearly,annually',
+                'claim_type'    => Rule::requiredIf($request->proforma_type === 'claim') . '|in:one_time,monthly,quarterly,half_yearly,annually,biennially,triennially,quinquenially',
                 'description'   => 'nullable|string',
                 'display_order' => 'nullable|integer',
                 'status'        => 'nullable|integer|in:0,1',
@@ -105,7 +105,7 @@ class ProformaController extends Controller
                 ],
                 'title'         => 'sometimes|string|max:200',
                 'proforma_type' => 'sometimes|in:eligibility,claim',
-                'claim_type'    => 'nullable|in:one_time,monthly,quarterly,half_yearly,annually',
+                'claim_type'    => 'nullable|in:one_time,monthly,quarterly,half_yearly,annually,biennially,triennially,quinquenially',
                 'description'   => 'nullable|string',
                 'display_order' => 'nullable|integer',
                 'status'        => 'nullable|integer',
@@ -116,7 +116,6 @@ class ProformaController extends Controller
                             ->where('proforma_type', 'eligibility')
                     ),
             ]);
-
 
             DB::beginTransaction();
 
@@ -135,8 +134,6 @@ class ProformaController extends Controller
                 'status'        => $request->status,
                 'depends_on_proforma_ids' => $depends_on_proforma_ids,
             ]);
-
-            $proforma->save();
 
             $proforma->depends_on_proforma_ids = $proforma->depends_on_proforma_ids ? json_decode($proforma->depends_on_proforma_ids) : null;
 
