@@ -144,9 +144,12 @@ class AdminController extends Controller
                     'registered_enterprise_address' => $user->registered_enterprise_address,
                     'registered_enterprise_city' => $user->registered_enterprise_city,
                     'user_type' => $user->user_type,
+                    'hierarchy_level'  => $user->department_user->hierarchy_level,
                     'status' => $user->status,
                     'created_at'  => $user->created_at,
-                    'updated_at'  => $user->updated_at
+                    'updated_at'  => $user->updated_at,
+                    'created_by'  => $user->department_user->created_by  ?? null,
+                    'updated_by'  => $user->department_user->updated_by ?? null
                 ];
             });
 

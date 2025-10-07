@@ -22,6 +22,8 @@ class RenewalFeeRuleController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
+            $admin = Auth::user();
+
             $request->validate([
                 'rules' => 'required|array',
                 'rules.*.service_id' => 'nullable|integer|exists:service_masters,id',
@@ -59,6 +61,7 @@ class RenewalFeeRuleController extends Controller
                     'per_unit_fee' => $rule['per_unit_fee'] ?? null,
                     'priority' => $rule['priority'] ?? null,
                     'status' => $rule['status'] ?? 1,
+                    'created_by' => $admin->email_id
                 ]);
 
                 $renewal_fee_rules[] = $renewal_fee_rule;
@@ -93,6 +96,8 @@ class RenewalFeeRuleController extends Controller
             if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
+
+            $admin = Auth::user();
 
             $request->validate([
                 'rules' => 'required|array',
@@ -134,6 +139,7 @@ class RenewalFeeRuleController extends Controller
                     'per_unit_fee' => $rule['per_unit_fee'] ?? null,
                     'priority' => $rule['priority'] ?? null,
                     'status' => $rule['status'] ?? 1,
+                    'updated_by' => $admin->email_id
                 ]);
 
                 $renewal_fee_rules[] = $renewal_fee_rule;

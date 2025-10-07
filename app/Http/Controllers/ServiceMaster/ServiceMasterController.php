@@ -24,6 +24,8 @@ class ServiceMasterController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
+            $admin = Auth::user();
+
             $request->validate([
                 'department_id' => 'required|integer|exists:departments,id',
                 'service_title_or_description' => 'required|string|max:255',
@@ -93,7 +95,8 @@ class ServiceMasterController extends Controller
                 'third_party_redirect_url' => $request->third_party_redirect_url,
                 'third_party_return_url' => $request->third_party_return_url,
                 'third_party_status_api_url' => $request->third_party_status_api_url,
-                'is_active' => $request->is_active ?? 1
+                'is_active' => $request->is_active ?? 1,
+                'created_by' => $admin->email_id
             ]);
 
             DB::commit();
@@ -125,6 +128,8 @@ class ServiceMasterController extends Controller
             if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
+
+            $admin = Auth::user();
 
             $request->validate([
                 'id' => 'required|integer|exists:service_masters,id',
@@ -205,6 +210,7 @@ class ServiceMasterController extends Controller
                 'third_party_return_url' => $request->third_party_return_url,
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? $service->is_active,
+                'updated_by' => $admin->email_id
             ]);
 
             DB::commit();
@@ -344,7 +350,7 @@ class ServiceMasterController extends Controller
 
             $services = ServiceMaster::with(['department:id,name', 'applications' => function ($query) use ($user) {
                 $query->where('user_id', $user->id)->select('id', 'service_id', 'status');
-            }])->get(['id', 'service_title_or_description', 'department_id', 'noc_type', 'target_days', 'noc_payment_type', 'allow_repeat_application', 'service_mode', 'third_party_portal_name']);
+            }])->get(['id', 'service_title_or_description', 'department_id', 'noc_type', 'target_days', 'noc_payment_type', 'allow_repeat_application', 'service_mode', 'third_party_portal_name','created_by','updated_by']);
 
             $services = $services->map(function ($service) {
                 return [
@@ -360,6 +366,8 @@ class ServiceMasterController extends Controller
                     'allow_repeat_application' => $service->allow_repeat_application,
                     'service_mode' => $service->service_mode,
                     'third_party_portal_name' => $service->third_party_portal_name,
+                    'created_by' => $service->created_by,
+                    'updated_by' => $service->updated_by,
                 ];
             });
 

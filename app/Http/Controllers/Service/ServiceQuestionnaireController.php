@@ -21,6 +21,8 @@ class ServiceQuestionnaireController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
+            $admin = Auth::user();
+
             $request->validate([
                 'questionnaires' => 'required|array',
                 'questionnaires.*.service_id' => 'required|integer|exists:service_masters,id',
@@ -59,6 +61,7 @@ class ServiceQuestionnaireController extends Controller
                     'status' => $questionnaire['status'] ?? 1,
                     'validation_required' => $questionnaire['validation_required'],
                     'validation_rule' => json_encode($questionnaire['validation_rule'] ?? null),
+                    'created_by' => $admin->email_id
 
                 ]);
             }
@@ -97,6 +100,8 @@ class ServiceQuestionnaireController extends Controller
             if (!Auth::check()) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated user.'], 401);
             }
+
+            $admin = Auth::user();
 
             $request->validate([
                 'questionnaires' => 'required|array',
@@ -139,6 +144,7 @@ class ServiceQuestionnaireController extends Controller
                     'status' => $questionnaire['status'] ?? 1,
                     'validation_required' => $questionnaire['validation_required'],
                     'validation_rule' => json_encode($questionnaire['validation_rule'] ?? null),
+                    'updated_by' => $admin->email_id
                 ]);
 
                 $service_questionnaire[] = $service_question;
