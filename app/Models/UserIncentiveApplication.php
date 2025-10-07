@@ -37,5 +37,7 @@ class UserIncentiveApplication extends Model
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
     
-
+    public function proforma(){
+        return $this->belongsTo(Proforma::class);
+    }
 }

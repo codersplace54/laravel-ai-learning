@@ -173,6 +173,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::prefix('incentive')->group(function () {
             Route::post('scheme-list', [UserIncentiveApplicationController::class, 'user_incentive_scheme_list']);
             Route::post('eligibility-proforma-list', [UserIncentiveApplicationController::class, 'user_eligibility_proforma_list']);
+            Route::post('claim-proforma-list', [UserIncentiveApplicationController::class, 'user_claim_proforma_list']);
             Route::post('proforma-questionnaire-view',   [UserIncentiveApplicationController::class, 'user_proforma_questionnaire_view']);
             Route::post('proforma-application-store', [UserIncentiveApplicationController::class, 'user_proforma_application_store']);
 
