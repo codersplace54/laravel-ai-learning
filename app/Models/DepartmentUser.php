@@ -17,7 +17,9 @@ class DepartmentUser extends Model
         'hierarchy_level',
         'is_active',
         'created_at',
-        'updated_at'
+        'updated_at',
+        'created_by',
+        'updated_by'
     ];
 
     protected $casts = [

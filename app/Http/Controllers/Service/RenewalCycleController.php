@@ -20,6 +20,8 @@ class RenewalCycleController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
+            $admin = Auth::user();
+
             $request->validate([
                 'renewals' => 'required|array',
                 'renewals.*.service_id' => 'required|integer|exists:service_masters,id',
@@ -58,6 +60,7 @@ class RenewalCycleController extends Controller
                     'late_fee_calculated_amount' => $renewal['late_fee_calculated_amount'] ?? null,
                     'allow_renewal_input_form' => $renewal['allow_renewal_input_form'],
                     'is_active' => $renewal['is_active'] ?? 1,
+                    'created_by' => $admin->email_id
                 ]);
             }
 
@@ -90,6 +93,8 @@ class RenewalCycleController extends Controller
             if (!Auth::check()) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated user.'], 401);
             }
+
+            $admin = Auth::user();
 
             $request->validate([
                 'renewals' => 'required|array',
@@ -132,6 +137,8 @@ class RenewalCycleController extends Controller
                     'late_fee_calculated_amount' => $renewal['late_fee_calculated_amount'] ?? null,
                     'allow_renewal_input_form' => $renewal['allow_renewal_input_form'],
                     'is_active' => $renewal['is_active'] ?? 1,
+                    'updated_by' => $admin->email_id
+
                 ]);
 
                 $renewal_cycles[] = $renewal_cycle;

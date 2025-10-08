@@ -1,0 +1,87 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+
+    public function up(): void
+    {
+
+        Schema::table('department_users', function (Blueprint $table) {
+            $table->string('created_by')->nullable();
+            $table->string('updated_by')->nullable();
+        });
+
+        Schema::table('service_masters', function (Blueprint $table) {
+            $table->string('created_by')->nullable();
+            $table->string('updated_by')->nullable();
+        });
+
+        Schema::table('service_fee_rules', function (Blueprint $table) {
+            $table->string('created_by')->nullable();
+            $table->string('updated_by')->nullable();
+        });
+
+        Schema::table('service_approval_flows', function (Blueprint $table) {
+            $table->string('created_by')->nullable();
+            $table->string('updated_by')->nullable();
+        });
+
+        Schema::table('service_questionnaires', function (Blueprint $table) {
+            $table->string('created_by')->nullable();
+            $table->string('updated_by')->nullable();
+        });
+
+        Schema::table('renewal_cycles', function (Blueprint $table) {
+            $table->string('created_by')->nullable();
+            $table->string('updated_by')->nullable();
+        });
+
+        Schema::table('renewal_fee_rules', function (Blueprint $table) {
+            $table->string('created_by')->nullable();
+            $table->string('updated_by')->nullable();
+        });
+    }
+
+
+    public function down(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn('created_by');
+            $table->dropColumn('updated_by');
+        });
+
+        Schema::table('service_masters', function (Blueprint $table) {
+            $table->dropColumn('created_by');
+            $table->dropColumn('updated_by');
+        });
+
+        Schema::table('service_fee_rules', function (Blueprint $table) {
+            $table->dropColumn('created_by');
+            $table->dropColumn('updated_by');
+        });
+
+        Schema::table('service_approval_flows', function (Blueprint $table) {
+            $table->dropColumn('created_by');
+            $table->dropColumn('updated_by');
+        });
+
+        Schema::table('service_questionnaires', function (Blueprint $table) {
+            $table->dropColumn('created_by');
+            $table->dropColumn('updated_by');
+        });
+
+        Schema::table('renewal_cycles', function (Blueprint $table) {
+            $table->dropColumn('created_by');
+            $table->dropColumn('updated_by');
+        });
+
+        Schema::table('renewal_fee_rules', function (Blueprint $table) {
+            $table->dropColumn('created_by');
+            $table->dropColumn('updated_by');
+        });
+    }
+};

@@ -21,13 +21,15 @@ class ServiceApprovalFlowController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
+            $admin = Auth::user();
+
             $request->validate([
                 'flows' => 'required|array',
                 'flows.*.service_id' => 'required|integer|exists:service_masters,id',
                 'flows.*.step_number' => 'required|integer',
                 'flows.*.step_type' => 'required|in:validation,review,screening,scrutiny,approval',
                 'flows.*.department_id' => 'required|integer|exists:departments,id',
-                'flows.*.hierarchy_level' => 'required|in:block,subdivision,district,state1,state2,state3'
+                'flows.*.hierarchy_level' => 'required|in:block,subdivision,district,state1,state2,state3',
             ]);
 
             DB::beginTransaction();
@@ -56,6 +58,7 @@ class ServiceApprovalFlowController extends Controller
                     'step_type'       => $flow['step_type'],
                     'department_id'   => $flow['department_id'],
                     'hierarchy_level' => $flow['hierarchy_level'],
+                    'created_by'      => $admin->email_id
                 ]);
 
                 $service_approval_flows[] = $service_approval_flow;
@@ -101,6 +104,8 @@ class ServiceApprovalFlowController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
+            $admin = Auth::user();
+
             $request->validate([
                 'flows' => 'required|array',
                 'flows.*.id' => 'nullable|integer|exists:service_approval_flows,id',
@@ -139,6 +144,7 @@ class ServiceApprovalFlowController extends Controller
                     'step_type'       => $flow['step_type'],
                     'department_id'   => $flow['department_id'],
                     'hierarchy_level' => $flow['hierarchy_level'],
+                    'updated_by'      => $admin->email_id
                 ]);
 
                 $service_approval_flows[] = $service_approval_flow;

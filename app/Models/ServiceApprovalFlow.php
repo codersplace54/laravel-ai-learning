@@ -15,7 +15,9 @@ class ServiceApprovalFlow extends Model
         'department_id',
         'hierarchy_level',
         'created_at',
-        'updated_at'
+        'updated_at',
+        'created_by',
+        'updated_by'
     ];
 
     protected $casts = [

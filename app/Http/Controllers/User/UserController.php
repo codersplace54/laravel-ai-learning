@@ -80,6 +80,12 @@ class UserController extends Controller
 
             DB::beginTransaction();
 
+            if ($request->user_type == "department") {
+                $admin = Auth::user();
+                if (!$admin) {
+                    return response()->json(['status' => 0, 'message' => 'Only a logged-in admin can register a departmental user.'], 401);
+                }
+            }
 
             $user = User::create([
                 'name_of_enterprise' => $request->name_of_enterprise,
@@ -109,7 +115,9 @@ class UserController extends Controller
                     'subdivision_id' => $request->subdivision_id,
                     'district_id' => $request->district_id,
                     'hierarchy_level' => $request->hierarchy_level,
-                    'is_active' => 1
+                    'is_active' => 1,
+                    'created_by' => $admin->email_id,
+                    'updated_by' => null
                 ]);
             }
 
@@ -301,16 +309,16 @@ class UserController extends Controller
             $user->update($update_data);
 
             if ($user->user_type == "department") {
-
+                $admin = Auth::user();
                 $department_user = DepartmentUser::where('user_id', $user->id)->first();
                 if ($department_user) {
-
                     $department_user->update([
                         'department_id' => $request->department_id,
                         'hierarchy_level' => $request->hierarchy_level,
                         'district_id' => $request->district_id,
                         'subdivision_id' => $request->subdivision_id,
                         'block_id' => $request->ulb_id,
+                        'updated_by' =>  $admin->email_id,
                     ]);
                     $user->department_id   = $department_user->department_id;
                     $user->hierarchy_level = $department_user->hierarchy_level;
@@ -324,7 +332,8 @@ class UserController extends Controller
                         'subdivision_id' => $request->subdivision_id,
                         'district_id' => $request->district_id,
                         'hierarchy_level' => $request->hierarchy_level,
-                        'is_active' => 1
+                        'is_active' => 1,
+                        'created_by' =>  $admin->email_id,
                     ]);
                 }
             }
@@ -347,10 +356,12 @@ class UserController extends Controller
                 'user_type' => $user->user_type,
                 'registered_enterprise_address' => $user->registered_enterprise_address,
                 'registered_enterprise_city' => $user->registered_enterprise_city,
-                'is_active'                    => $user->is_active,
+                'is_active'                    => $user->department_user->is_active,
                 'department_id'   => $user->department_user->department_id   ?? null,
                 'hierarchy_level' => $user->department_user->hierarchy_level ?? null,
                 'designation'     => $user->department_user->designation     ?? null,
+                'created_by'     => $user->department_user->created_by    ?? null,
+                'updated_by'     => $user->department_user->updated_by ?? null,
 
 
             ];
