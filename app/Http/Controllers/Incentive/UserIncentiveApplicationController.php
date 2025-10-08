@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class UserIncentiveApplicationController extends Controller
 {
@@ -27,14 +28,14 @@ class UserIncentiveApplicationController extends Controller
             }
 
             $is_save_only = $request->save_data == 1;
-            // dd($request->file());
+
             $request->validate([
                 'save_data'        => 'required|integer|in:0,1',
                 'scheme_id'        => 'required|integer|exists:schemes,id',
                 'proforma_id'      => 'required|integer|exists:proformas,id',
                 'application_type' => 'required|in:eligibility,claim',
                 'eligibility_application_id' => 'exclude_unless:application_type,claim|required_unless:save_data,1|integer|exists:user_incentive_applications,id',
-                'claim_type'                 => 'exclude_unless:application_type,claim|required_unless:save_data,1|in:one_time,monthly,quarterly,half_yearly,annually',
+                'claim_type'                 => 'exclude_unless:application_type,claim|required_unless:save_data,1|in:one_time,monthly,quarterly,half_yearly,annually,biennially,triennially,quinquenially',
                 'claim_period_start'         => 'exclude_unless:application_type,claim|required_unless:save_data,1|date',
                 'claim_period_end'           => 'exclude_unless:application_type,claim|required_unless:save_data,1|date|after_or_equal:claim_period_start',
                 'files'        => 'nullable|array',
@@ -153,7 +154,6 @@ class UserIncentiveApplicationController extends Controller
 
                 $answers[$question_id]['files'] = array_values(array_merge($existing_files, $new_files_for_question));
                 $answers[$question_id]['value'] = $answers[$question_id]['value'] ?? null;
-                
             }
 
 
@@ -342,6 +342,7 @@ class UserIncentiveApplicationController extends Controller
         }
     }
 
+
     public function user_claim_proforma_list(Request $request)
     {
         try {
@@ -349,98 +350,88 @@ class UserIncentiveApplicationController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $request->validate([
-                'scheme_id' => ['required', 'integer', 'exists:schemes,id'],
-            ]);
-
             $user_id = Auth::id();
 
-            // fetch claim proformas + last user application for this scheme
-            $claim_proformas = Proforma::query()
-                ->where('scheme_id', $request->scheme_id)
-                ->where('proforma_type', 'claim')
-                ->where('status', 1)
-                ->orderBy('display_order')
-                ->orderBy('id', 'desc')
-                ->with(['applications' => function ($q) use ($request, $user_id) {
-                    $q->where('user_id', $user_id)
-                        ->where('scheme_id', $request->scheme_id)
-                        ->where('application_type', 'claim')
-                        ->orderByDesc('id')
-                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'claim_type', 'claim_period_start', 'claim_period_end');
-                }])
-                ->select('id', 'scheme_id', 'code', 'title', 'description', 'claim_type', 'depends_on_proforma_ids')
+            // for eligibility
+            $user_eligibility_applications = UserIncentiveApplication::query()
+                ->where('user_id', $user_id)
+                ->where('application_type', 'eligibility')
+                ->where('workflow_status', 'approved')
+                ->orderByDesc('decided_at')
                 ->get();
 
-            if ($claim_proformas->isEmpty()) {
-                return response()->json([
-                    'status' => 0,
-                    'message' => 'No claim proforma found for the given scheme_id.',
-                ], 404);
+            $eligible_claim_proforma_ids = [];
+
+            foreach ($user_eligibility_applications as $application) {
+                $proforma_ids = Proforma::whereJsonContains('depends_on_proforma_ids', $application->proforma_id)
+                    ->where('status', 1)
+                    ->pluck('id')
+                    ->toArray();
+
+                $eligible_claim_proforma_ids = array_merge($eligible_claim_proforma_ids, $proforma_ids);
             }
 
-            $response_data = $claim_proformas->map(function ($proforma) use ($user_id, $request) {
-                $last_application = $proforma->applications->first();
+            // for claim
+            $user_claim_applications = UserIncentiveApplication::query()
+                ->where('user_id', $user_id)
+                ->where('application_type', 'claim')
+                ->where('workflow_status', 'approved')
+                ->orderByDesc('decided_at')
+                ->with('proforma')
+                ->get()
+                ->unique('proforma_id')
+                ->values();
 
-                // decode dependency list (JSON or null)
-                $deps = [];
-                if (!empty($proforma->depends_on_proforma_ids)) {
-                    $tmp = json_decode($proforma->depends_on_proforma_ids, true);
-                    if (is_array($tmp)) {
-                        $deps = $tmp;
-                    }
+            /* 
+                decided_at => newest first
+                unique('proforma_id') => the latest claim
+                values() => reindex
+            */
+
+            $claim_period_months = [
+                'monthly'     => 1,
+                'quarterly'   => 3,
+                'half_yearly' => 6,
+                'annually'    => 12,
+                'biennially'  => 24,
+                'triennially' => 36,
+                'quinquenially' => 60,
+            ];
+
+            foreach ($user_claim_applications as $application) {
+
+                                $claim_type = $application->claim_type;
+
+                if ($application->proforma->status != 1 || $claim_type === 'one_time') {
+                    continue;
                 }
 
-                // does user have approved eligibility from any dependency proforma?
-                $eligible_to_claim = true;
-                if (!empty($deps)) {
-                    $eligible_to_claim = UserIncentiveApplication::query()
-                        ->where('user_id', $user_id)
-                        ->where('scheme_id', $request->scheme_id)
-                        ->where('application_type', 'eligibility')
-                        ->where('workflow_status', 'approved')
-                        ->whereIn('proforma_id', $deps)
-                        ->exists();
+                if (!is_null($application->remaining_claim) && $application->remaining_claim < 1) {
+                    continue;
+                }
+                $months_gap = $claim_period_months[$claim_type] ?? null;
+
+                // Later need to handle for processing application
+                if (!$months_gap || empty($application->decided_at)) {
+                    continue;
                 }
 
-                // already claimed check for one_time (UX flag)
-                $already_claimed_one_time = false;
-                if ($proforma->claim_type === 'one_time') {
-                    $already_claimed_one_time = UserIncentiveApplication::query()
-                        ->where('user_id', $user_id)
-                        ->where('scheme_id', $request->scheme_id)
-                        ->where('proforma_id', $proforma->id)
-                        ->where('application_type', 'claim')
-                        ->where('claim_type', 'one_time')
-                        ->whereIn('workflow_status', [
-                            'draft',
-                            'submitted',
-                            'under_review_da',
-                            'under_review_gm',
-                            'approved',
-                            'sent_back'
-                        ])
-                        ->exists();
-                }
+                $last_claim_approved_on = Carbon::parse($application->decided_at);
+                $next_claim_allowed_on  = $last_claim_approved_on->copy()->addMonths($months_gap);
 
-                return [
-                    'proforma_id'        => $proforma->id,
-                    'application_code'   => $proforma->code,
-                    'application_type'   => $proforma->title,
-                    'claim_type'         => $proforma->claim_type,
-                    'eligible_to_claim'  => $eligible_to_claim,         // frontend: enable/disable Apply
-                    'already_claimed_one_time' => $already_claimed_one_time, // frontend: hide/disable for one-time
-                    'last_application_no' => $last_application?->application_no,
-                    'last_applied_on'    => $last_application?->submitted_at?->format('d/m/Y'),
-                    'last_decided_on'    => $last_application?->decided_at?->format('d/m/Y'),
-                    'last_status'        => $last_application?->workflow_status,
-                ];
-            });
+                if (now()->greaterThanOrEqualTo($next_claim_allowed_on)) {
+                    $eligible_claim_proforma_ids[] = $application->proforma->id;
+                }
+            }
+
+            $eligible_claim_proforma_ids = array_values($eligible_claim_proforma_ids);
+
+            $eligible_proformas = Proforma::whereIn('id', $eligible_claim_proforma_ids)->get();
 
             return response()->json([
                 'status'  => 1,
                 'message' => 'Claim proforma fetched successfully.',
-                'data'    => $response_data,
+                'data'    => $eligible_proformas,
             ]);
         } catch (\Exception $e) {
             return response()->json([

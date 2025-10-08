@@ -13,6 +13,7 @@ class Proforma extends Model
         'title',
         'proforma_type',
         'claim_type',
+        'max_claim_count',
         'description',
         'display_order',
         'status',
