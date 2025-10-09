@@ -51,6 +51,8 @@ class ServiceMasterController extends Controller
                 'valid_for_upload' => 'required|in:yes,no',
                 'nsw_license_id' => 'nullable|string|max:100',
                 'status' => 'nullable|integer',
+                'verification_token' => 'nullable|string',
+                'is_special' => 'nullable|in:yes,no',
 
                 'service_mode' => 'nullable|in:native,third_party',
                 'third_party_portal_name' => 'nullable|string',
@@ -89,6 +91,8 @@ class ServiceMasterController extends Controller
                 'valid_for_upload' => $request->valid_for_upload,
                 'nsw_license_id' => $request->nsw_license_id,
                 'status' => $request->status ?? 1,
+                'verification_token' => $request->verification_token,
+                'is_special' => $request->is_special,
 
                 'service_mode' => $request->service_mode ?? "native",
                 'third_party_portal_name' => $request->third_party_portal_name,
@@ -157,6 +161,8 @@ class ServiceMasterController extends Controller
                 'valid_for_upload' => 'required|in:yes,no',
                 'nsw_license_id' => 'nullable|string|max:100',
                 'status' => 'nullable|integer',
+                'verification_token' => 'nullable|string',
+                'is_special' => 'nullable|in:yes,no',
 
                 'service_mode' => 'nullable|in:native,third_party',
                 'third_party_portal_name' => 'nullable|string',
@@ -203,6 +209,8 @@ class ServiceMasterController extends Controller
                 'valid_for_upload' => $request->valid_for_upload,
                 'nsw_license_id' => $request->nsw_license_id,
                 'status' => $request->status ?? $service->status,
+                'verification_token' => $request->verification_token,
+                'is_special' => $request->is_special,
 
                 'service_mode' => $request->service_mode,
                 'third_party_portal_name' => $request->third_party_portal_name,
@@ -350,7 +358,7 @@ class ServiceMasterController extends Controller
 
             $services = ServiceMaster::with(['department:id,name', 'applications' => function ($query) use ($user) {
                 $query->where('user_id', $user->id)->select('id', 'service_id', 'status');
-            }])->get(['id', 'service_title_or_description', 'department_id', 'noc_type', 'target_days', 'noc_payment_type', 'allow_repeat_application', 'service_mode', 'third_party_portal_name','created_by','updated_by']);
+            }, 'third_party_param:id,service_id'])->get(['id', 'service_title_or_description', 'department_id', 'noc_type', 'target_days', 'noc_payment_type', 'allow_repeat_application', 'service_mode', 'third_party_portal_name', 'created_by', 'updated_by','verification_token','is_special']);
 
             $services = $services->map(function ($service) {
                 return [
@@ -368,6 +376,9 @@ class ServiceMasterController extends Controller
                     'third_party_portal_name' => $service->third_party_portal_name,
                     'created_by' => $service->created_by,
                     'updated_by' => $service->updated_by,
+                    'is_special' => $service->is_special,
+                    'verification_token' => $service->verification_token,
+                    'third_party_params_id' => $service->third_party_param->id ?? null,
                 ];
             });
 
@@ -387,7 +398,7 @@ class ServiceMasterController extends Controller
         }
     }
 
-    public function getDefaultSourceValue(Request $request)
+    public function get_default_source_value(Request $request)
 
     {
 
@@ -427,6 +438,10 @@ class ServiceMasterController extends Controller
                 return response()->json(['message' => 'No data found for this user_id'], 404);
             }
 
+            if (!filter_var($value, FILTER_VALIDATE_URL) && preg_match('/\.[a-zA-Z0-9]+$/', $value)) {
+                $value = asset('storage/' . ltrim($value, '/'));
+            }
+
             return response()->json([
                 'value' => $value,
             ]);
@@ -446,6 +461,8 @@ class ServiceMasterController extends Controller
             if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
+
+            $admin = Auth::user();
 
             $request->validate([
                 'service_id' => 'required|integer|exists:service_masters,id',
@@ -475,6 +492,7 @@ class ServiceMasterController extends Controller
                     'default_source_column' => $request->default_source_column,
                     'data_source'           => $request->data_source,
                     'description'        => $request->description,
+                    'updated_by'        => $admin->email_id
                 ]);
             } else {
 
@@ -487,7 +505,8 @@ class ServiceMasterController extends Controller
                     'default_source_table'   => $request->default_source_table,
                     'default_source_column' => $request->default_source_column,
                     'data_source'       => $request->data_source,
-                    'description'       => $request->description
+                    'description'       => $request->description,
+                    'created_by'        => $admin->email_id
                 ]);
             }
 

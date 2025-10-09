@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Department;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Exception;
 use App\Models\Department;
 
@@ -15,19 +16,19 @@ class DepartmentController extends Controller
         try {
 
 
-            $per_page = $request->input('per_page', 10);
+           // $per_page = $request->input('per_page', 10);
 
-            $departments = Department::paginate($per_page);
+            $departments = Department::all();
 
             return response()->json([
                 'status' => 1,
-                'data' => $departments->items(),
-                'meta' => [
-                    'current_page' => $departments->currentPage(),
-                    'per_page' => $departments->perPage(),
-                    'total' => $departments->total(),
-                    'last_page' => $departments->lastPage(),
-                ],
+                'data' => $departments,
+                // 'meta' => [
+                //     'current_page' => $departments->currentPage(),
+                //     'per_page' => $departments->perPage(),
+                //     'total' => $departments->total(),
+                //     'last_page' => $departments->lastPage(),
+                // ],
             ]);
         } catch (Exception $e) {
 
@@ -60,9 +61,12 @@ class DepartmentController extends Controller
                 ]
             );
 
+            $admin = Auth::user();
+
             $department = Department::create([
                 'name' => $request->name,
                 'details' => $request->details,
+                'created_by' => $admin->email_id
             ]);
 
             DB::commit();
@@ -158,11 +162,14 @@ class DepartmentController extends Controller
                 ]
             );
 
+            $admin = Auth::user();
+
             $department = Department::findOrFail($request->id);
 
             $department->update([
                 'name' => $request->name,
                 'details' => $request->details,
+                'updated_by' => $admin->email_id
             ]);
 
             DB::commit();

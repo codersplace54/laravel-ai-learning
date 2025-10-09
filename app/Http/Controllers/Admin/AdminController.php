@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use App\Models\User;
 
 class AdminController extends Controller
@@ -163,6 +164,41 @@ class AdminController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong.',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function update_user_status(Request $request, $id)
+    {
+
+
+        try {
+
+            DB::beginTransaction();
+
+            $user = User::findOrFail($id);
+
+            $user->status = $user->status === 'active' ? 'blocked' : 'active';
+            $user->save();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Status updated successfully.',
+                'updated_status' => $user->status,
+            ]);
+
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while updating status.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
