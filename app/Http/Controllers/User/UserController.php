@@ -626,6 +626,7 @@ class UserController extends Controller
                 'mobile_no' => $department_user->mobile_no,
                 'pan' => $department_user->pan,
                 'bin' => $department_user->bin,
+                'user_name' => $department_user->user_name,
                 'district'                     => $department_user->district->district_name,
                 'district_code'                => $department_user->district->district_code,
                 'subdivision_name'                 => $department_user->subdivision->sub_division ?? null,

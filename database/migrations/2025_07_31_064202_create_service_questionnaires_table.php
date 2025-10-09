@@ -25,6 +25,7 @@ return new class extends Migration
             $table->boolean('status')->default(1);
             $table->enum('validation_required', ['yes', 'no']);
             $table->string('validation_rule')->nullable();
+            $table->string('sample_format')->nullable();
             $table->timestamps();
         });
     }

@@ -47,7 +47,9 @@ class ServiceMaster extends Model
         'created_at',
         'updated_at',
         'created_by',
-        'updated_by'
+        'updated_by',
+        'verification_token',
+        'is_special'
     ];
 
     protected $casts = [
@@ -65,8 +67,8 @@ class ServiceMaster extends Model
         return $this->hasMany(UserServiceApplication::class, 'service_id', 'id');
     }
 
-    public function thirdPartyParams()
+    public function third_party_param()
     {
-        return $this->hasMany(ServiceThirdPartyParam::class, 'service_id');
+        return $this->hasOne(ServiceThirdPartyParam::class, 'service_id');
     }
 }

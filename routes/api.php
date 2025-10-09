@@ -153,6 +153,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('fetch-all-business-users', [AdminController::class, 'fetch_all_business_users']);
         Route::post('fetch-all-department-users', [AdminController::class, 'fetch_all_department_users']);
         Route::post('get-department-user-details', [UserController::class, 'get_department_user_details']);
+        Route::post('update-user-status/{user_id}', [AdminController::class, 'update_user_status']);
+
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
@@ -221,7 +223,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
-    Route::post('get-default-source', [ServiceMasterController::class, 'getDefaultSourceValue']);
+    Route::post('get-default-source', [ServiceMasterController::class, 'get_default_source_value']);
 });
 
 Route::post('department-get-all-departments', [DepartmentController::class, 'all_departments'])->name('department.all_departments');
