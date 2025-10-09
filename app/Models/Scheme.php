@@ -12,6 +12,8 @@ class Scheme extends Model
         'policy_start_date',
         'policy_end_date',
         'status',
+        'created_by',
+        'updated_by'
     ];
 
     protected $casts = [

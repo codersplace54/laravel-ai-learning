@@ -27,12 +27,14 @@ class SchemeController extends Controller
 
             DB::beginTransaction();
 
+            $user = Auth::user();
             $scheme = Scheme::create([
                 'code' => $request->code,
                 'title' => $request->title,
                 'policy_start_date' => $request->policy_start_date,
                 'policy_end_date' => $request->policy_end_date,
                 'status' => $request->status,
+                'created_by' => $user->email_id
             ]);
 
             DB::commit();
@@ -78,13 +80,14 @@ class SchemeController extends Controller
             DB::beginTransaction();
 
             $scheme = Scheme::where('id',$request->scheme_id)->first();
-
+            $user = Auth::user();
             $scheme->update([
                 'code'              => $request->code ,
                 'title'             => $request->title,
                 'policy_start_date' => $request->policy_start_date,
                 'policy_end_date'   => $request->policy_end_date,
-                'status'            => $request->status ,
+                'status'            => $request->status,
+                'updated_by'        => $user->email_id
             ]);
 
 
