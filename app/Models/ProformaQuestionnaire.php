@@ -24,7 +24,9 @@ class ProformaQuestionnaire extends Model
         'status',
         'validation_required',
         'field_rules',
-        'upload_rule'
+        'upload_rule',
+        'created_by',
+        'updated_by'
     ];
 
     protected $casts = [

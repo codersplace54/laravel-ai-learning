@@ -48,6 +48,8 @@ class ProformaController extends Controller
 
             $depends_on_proforma_ids = $request->filled('depends_on_proforma_ids') ? json_encode($request->depends_on_proforma_ids) : null;
 
+            $user = Auth::user();
+
             $proforma = Proforma::create([
                 'scheme_id'     => $request->scheme_id,
                 'code'          => $request->code,
@@ -59,6 +61,7 @@ class ProformaController extends Controller
                 'max_claim_count' => $request->max_claim_count,
                 'status'        => $request->status ?? 1,
                 'depends_on_proforma_ids' => $depends_on_proforma_ids,
+                'created_by'    => $user->email_id
             ]);
 
             $proforma->depends_on_proforma_ids = $proforma->depends_on_proforma_ids ? json_decode($proforma->depends_on_proforma_ids) : null;
@@ -125,6 +128,7 @@ class ProformaController extends Controller
 
             DB::beginTransaction();
 
+            $user = Auth::user();
             $proforma = Proforma::where('id', $request->proforma_id)->first();
 
             $depends_on_proforma_ids = $request->filled('depends_on_proforma_ids') ? json_encode($request->depends_on_proforma_ids) : null;
@@ -140,6 +144,7 @@ class ProformaController extends Controller
                 'display_order' => $request->display_order,
                 'status'        => $request->status,
                 'depends_on_proforma_ids' => $depends_on_proforma_ids,
+                'updated_by'    => $user->email_id
             ]);
 
             $proforma->depends_on_proforma_ids = $proforma->depends_on_proforma_ids ? json_decode($proforma->depends_on_proforma_ids) : null;

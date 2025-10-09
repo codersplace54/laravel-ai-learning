@@ -17,7 +17,9 @@ class Proforma extends Model
         'description',
         'display_order',
         'status',
-        'depends_on_proforma_ids'
+        'depends_on_proforma_ids',
+        'created_by',
+        'updated_by'
     ];
 
     protected $casts = [

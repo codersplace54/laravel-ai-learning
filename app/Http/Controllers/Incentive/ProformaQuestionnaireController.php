@@ -39,6 +39,7 @@ class ProformaQuestionnaireController extends Controller
             ]); 
 
             DB::beginTransaction();
+            $user = Auth::user();
 
             $proforma_questionnaire = ProformaQuestionnaire::create([
                 'proforma_id'           => $request->proforma_id,
@@ -58,6 +59,7 @@ class ProformaQuestionnaireController extends Controller
                 'claim_per_unit'        => $request->claim_per_unit,
                 'claim_percentage'      => $request->claim_percentage,
                 'upload_rule'           => $request->upload_rule ? json_encode($request->upload_rule) : null,
+                'created_by'            => $user->email_id
             ]);
 
             $proforma_questionnaire->upload_rule = $proforma_questionnaire->upload_rule
@@ -113,6 +115,7 @@ class ProformaQuestionnaireController extends Controller
             ]);
 
             DB::beginTransaction();
+            $user = Auth::user();
 
             $proforma_question = ProformaQuestionnaire::where('id', $request->id)->first();
 
@@ -134,6 +137,7 @@ class ProformaQuestionnaireController extends Controller
                 'claim_per_unit'        => $request->claim_per_unit ?? $proforma_question->claim_per_unit,
                 'claim_percentage'      => $request->claim_percentage ?? $proforma_question->claim_percentage,
                 'upload_rule'           => $request->upload_rule ? json_encode($request->upload_rule) : $proforma_question->upload_rule,
+                'updated_by'            => $user->email_id
             ]);
 
             $proforma_question->upload_rule = $proforma_question->upload_rule

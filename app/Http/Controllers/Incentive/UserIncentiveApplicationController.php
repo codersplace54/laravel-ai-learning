@@ -53,11 +53,6 @@ class UserIncentiveApplicationController extends Controller
                 'application_type' => $request->application_type,
             ];
 
-            if ($request->application_type === 'claim' && $request->save_data === 0) {
-                $find_application['claim_period_start'] = $request->claim_period_start;
-                $find_application['claim_period_end']   = $request->claim_period_end;
-            }
-
             $application = UserIncentiveApplication::firstOrNew($find_application);
 
             $existing_answers = $application->form_answers_json;
@@ -68,7 +63,7 @@ class UserIncentiveApplicationController extends Controller
             if (!is_array($existing_answers)) {
                 $existing_answers = [];
             }
-            // dd("hello");
+
             $incoming_answers = $request->form_answers_json
                 ? json_decode($request->form_answers_json, true)
                 : [];
@@ -400,7 +395,7 @@ class UserIncentiveApplicationController extends Controller
 
             foreach ($user_claim_applications as $application) {
 
-                                $claim_type = $application->claim_type;
+                $claim_type = $application->claim_type;
 
                 if ($application->proforma->status != 1 || $claim_type === 'one_time') {
                     continue;
@@ -446,33 +441,135 @@ class UserIncentiveApplicationController extends Controller
     public function user_proforma_questionnaire_view(Request $request)
     {
         try {
-
             if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
             $request->validate([
-                'proforma_id' => 'required|integer|exists:proformas,id',
+                'application_id' => 'required_without:proforma_id|nullable|integer|exists:user_incentive_applications,id',
+                'proforma_id'    => 'required_without:application_id|nullable|integer|exists:proformas,id',
             ]);
 
-            $proforma_questionnaires = ProformaQuestionnaire::where('proforma_id', $request->proforma_id)
+            $application = null;
+            $proforma    = null;
+            $answers     = [];
+
+            if ($request->filled('application_id')) {
+                $application = UserIncentiveApplication::where('id', $request->application_id)
+                    ->with('proforma')
+                    ->first();
+
+                $proforma = $application->proforma;
+
+                $answers = $application->form_answers_json ?? [];
+            } else {
+                $proforma = Proforma::where('id', $request->proforma_id)->first();
+            }
+
+            $questions = ProformaQuestionnaire::where('proforma_id', $proforma->id)
                 ->orderBy('display_order')
                 ->orderBy('id')
                 ->get();
 
-            foreach ($proforma_questionnaires as $question) {
-                $question->upload_rule = $question->upload_rule
-                    ? json_decode($question->upload_rule, true)
-                    : null;
-            }
+            $questions_with_answers = $questions->map(function ($question) use ($answers) {
+                return [
+                    'id'             => $question->id,
+                    'question_label' => $question->question_label,
+                    'question_type'  => $question->question_type,
+                    'is_required'    => $question->is_required,
+                    'options'        => $question->options,
+                    'default_value'  => $question->default_value,
+                    'group_label'    => $question->group_label,
+                    'display_width'  => $question->display_width,
+                    'display_order'  => $question->display_order,
+                    'upload_rule'    => $question->upload_rule ? json_decode($question->upload_rule, true) : null,
+                    'value'          => $answers[$question->id]['value'] ?? null,
+                    'files'          => $answers[$question->id]['files'] ?? [],
+                ];
+            });
 
             return response()->json([
                 'status'  => 1,
-                'message' => 'Proforma questionnaires fetched successfully.',
-                'data'    => $proforma_questionnaires,
+                'message' => 'Proforma questions with user answers fetched successfully.',
+                'data'    => [
+                    'application' => $application ? [
+                        'application_id'   => $application->id,
+                        'application_no'   => $application->application_no,
+                        'workflow_status'  => $application->workflow_status,
+                        'application_type' => $application->application_type,
+                    ] : null,
+                    'questions' => $questions_with_answers,
+                ],
             ]);
         } catch (\Exception $e) {
             return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
         }
+    }
+
+
+    public function get_all_applications(Request $request)
+    {
+        try {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'application_id' => 'required|integer|exists:user_incentive_applications,id',
+            ]);
+
+            $applications = UserIncentiveApplication::query()
+                ->orderByDesc('submitted_at')
+                ->with(['proforma:id,code,title,proforma_type,claim_type'])
+                ->get();
+
+            $data = $applications->map(function ($application) {
+                return [
+                    'application_id'  => $application->id,
+                    'application_no'  => $application->application_no,
+                    'application_type' => $application->application_type,
+                    'workflow_status' => $application->workflow_status,
+                    'current_reviewer_user_id' => $application->current_reviewer_user_id,
+                    'submitted_at'    => optional($application->submitted_at)->toDateTimeString(),
+                    'decided_at'      => optional($application->decided_at)->toDateTimeString(),
+                    'proforma'        => [
+                        'id'          => $application->proforma?->id,
+                        'code'        => $application->proforma?->code,
+                        'title'       => $application->proforma?->title,
+                        'proforma_type' => $application->proforma?->proforma_type,
+                        'claim_type'  => $application->proforma?->claim_type,
+                    ],
+                ];
+            });
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Applications fetched successfully.',
+                'data'    => $data,
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+
+    public function update_application_status(Request $request)
+    {
+        if (!Auth::check()) {
+            return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+        }
+
+        $request->validate([
+            'application_id' => 'required|integer|exists:user_incentive_applications,id',
+            'status'         => 'required|in:one_time,monthly,quarterly,half_yearly,annually,biennially,triennially,quinquenially',
+        ]);
+
+        $application = UserIncentiveApplication::where('id',$request->application_id)->first();
+        $application->workflow_status = $request->status;
+        $application->update([
+            'workflow_status' => $request->status,
+        ]);
+
     }
 }
