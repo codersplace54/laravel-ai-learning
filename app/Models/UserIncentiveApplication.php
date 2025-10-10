@@ -40,8 +40,4 @@ class UserIncentiveApplication extends Model
     public function proforma(){
         return $this->belongsTo(Proforma::class);
     }
-
-    public function user(){
-        return $this->belongsTo(User::class);
-    }
 }
