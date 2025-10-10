@@ -26,7 +26,10 @@ class ServiceQuestionnaire extends Model
         'updated_at',
         'created_by',
         'updated_by',
-        'sample_format'
+        'sample_format',
+        'is_section',
+        'section_name',
+        'upload_rule',
     ];
 
     protected $casts = [

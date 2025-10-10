@@ -23,7 +23,7 @@ class UserIncentiveApplication extends Model
         'claim_period_start',
         'claim_period_end',
         'claim_calculated',
-        'form_answers_json'
+        'form_answers_json',
     ];
 
     protected $casts = [
@@ -39,5 +39,9 @@ class UserIncentiveApplication extends Model
     
     public function proforma(){
         return $this->belongsTo(Proforma::class);
+    }
+
+    public function user(){
+        return $this->belongsTo(User::class);
     }
 }

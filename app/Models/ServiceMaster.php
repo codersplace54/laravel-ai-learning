@@ -43,6 +43,7 @@ class ServiceMaster extends Model
         'third_party_status_api_url',
         'third_party_payment_mode',
         'is_active',
+        'fixed_expiry_date',
 
         'created_at',
         'updated_at',

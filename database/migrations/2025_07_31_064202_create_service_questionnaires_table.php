@@ -12,7 +12,7 @@ return new class extends Migration
         Schema::create('service_questionnaires', function (Blueprint $table) {
             $table->id();
             $table->bigInteger('service_id');
-            $table->string('question_label');
+            $table->text('question_label');
             $table->string('question_type');
             $table->enum('is_required', ['yes', 'no']);
             $table->text('options')->nullable();

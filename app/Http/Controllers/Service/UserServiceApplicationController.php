@@ -23,7 +23,6 @@ class UserServiceApplicationController extends Controller
 {
     public function user_service_application_store(Request $request)
     {
-
         try {
 
             $user = Auth::user();
@@ -99,6 +98,7 @@ class UserServiceApplicationController extends Controller
             if ($service_data->service_mode === "native") {
 
                 $final_fee = $this->calculate_final_fee($request->service_id, $request->application_data);
+                $final_fee = 32;
                 $approval_flow = ServiceApprovalFlow::where('service_id', $request->service_id)
                     ->orderBy('step_number', 'asc')
                     ->first();
@@ -143,6 +143,33 @@ class UserServiceApplicationController extends Controller
                         }
                     }
 
+                    $current_application_data = $user_service_application->application_data ?: [];
+
+                    $application_data = $request->application_data;
+                    
+                    $removed_question_ids = json_decode((string) ($request->input('remove_file_question_ids') ?? '[]'), true) ?? [];
+                    
+                    foreach ($removed_question_ids as $question_id) {
+                        
+                            $old_file_path = $current_application_data[$question_id] ?? null;
+                        if ($old_file_path) {
+                            Storage::disk('public')->delete($old_file_path);
+                            unset($application_data[$question_id]);
+                        }
+                    }
+
+                    foreach ($request->file('files', []) as $question_id => $uploaded_file) {
+                        $old_file_path = $current_application_data[$question_id] ?? null;
+                        if ($old_file_path) {
+                            Storage::disk('public')->delete($old_file_path);
+                        }
+                        $file = $uploaded_file;
+                        $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                        $path = $file->storeAs("uploads/$user->id/applications", $filename, 'public');
+
+                        $application_data[$question_id] = $path;
+                    }
+
                     $user_service_application->update([
                         'renewal_cycle_id'      => $request->renewal_cycle_id,
                         'renewal'               => $request->renewal,
@@ -150,7 +177,7 @@ class UserServiceApplicationController extends Controller
                         'applicationId'         => $application_number,
                         'application_date'      => $request->application_date ?? now(),
                         'status'                => $request->status ?? 'submitted',
-                        'application_data'      => json_encode($request->application_data ?? null),
+                        'application_data'      => json_encode($application_data ?? null),
                         'applied_fee'           => $request->applied_fee,
                         'approved_fee'          => $request->approved_fee,
                         'payment_status'        => $request->payment_status ?? 'pending',
@@ -203,6 +230,7 @@ class UserServiceApplicationController extends Controller
                         'remarks'            => null,
                     ]);
 
+                    $user_service_application->application_data = json_decode($user_service_application->application_data);
                     DB::commit();
 
                     return response()->json([
@@ -211,6 +239,21 @@ class UserServiceApplicationController extends Controller
                         'data' => $user_service_application
                     ], 200);
                 } else {
+
+                    $application_data = (array) $request->input('application_data', []);
+
+                    foreach ($request->file('files', []) as $question_id => $uploaded_file) {
+                       
+                        if (!$uploaded_file) {
+                            continue;
+                        }
+
+                        $filename = uniqid() . '.' . $uploaded_file->getClientOriginalExtension();
+                        $path = $uploaded_file->storeAs("uploads/$user->id/applications", $filename, 'public');
+                        $application_data[$question_id] = $path;
+                    }
+                    $request->merge(['application_data' => $application_data]);
+
 
                     $user_service_application = UserServiceApplication::create([
                         'user_id'               => $user->id,
@@ -221,7 +264,7 @@ class UserServiceApplicationController extends Controller
                         'applicationId'         => $application_number,
                         'application_date'      => $request->application_date ?? now(),
                         'status'                => $request->status ?? 'submitted',
-                        'application_data'      => json_encode($request->application_data ?? null),
+                        'application_data'      => json_encode($application_data ?: null),
                         'applied_fee'           => $request->applied_fee,
                         'approved_fee'          => $request->approved_fee,
                         'payment_status'        => $request->payment_status ?? 'pending',
@@ -839,7 +882,7 @@ class UserServiceApplicationController extends Controller
         } else {
 
             ThirdPartyStatusLog::create([
-                 'service_id'        => $user_service_application->service_id,
+                'service_id'        => $user_service_application->service_id,
                 'application_id'     => $user_service_application->applicationId,
                 'swaagat_user_id'    => $user_service_application->user_id,
                 'service_status'     => $user_service_application->status,
