@@ -11,6 +11,7 @@ use App\Models\Proforma;
 use App\Models\Scheme;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
@@ -507,7 +508,7 @@ class UserIncentiveApplicationController extends Controller
     }
 
 
-    public function get_all_applications(Request $request)
+    public function get_department_applications(Request $request)
     {
         try {
             if (!Auth::check()) {
@@ -515,30 +516,68 @@ class UserIncentiveApplicationController extends Controller
             }
 
             $request->validate([
-                'application_id' => 'required|integer|exists:user_incentive_applications,id',
+                'department'     => 'nullable|string|in:DA,GM',
+                'status'         => 'nullable|string|in:submitted,approved_by_da,rejected_by_da,sent_back_by_da,approved_by_gm,rejected_by_gm,sent_back_by_gm',
+                'scheme_id'      => 'nullable|integer|exists:schemes,id',
+                'proforma_id'    => 'nullable|integer|exists:proformas,id',
+                'applicant_name' => 'nullable|string|max:255',
+                'applicant_phone' => 'nullable|string|max:20',
+                'date_from'      => 'nullable|date',
+                'date_to'        => 'nullable|date|after_or_equal:date_from',
             ]);
 
-            $applications = UserIncentiveApplication::query()
-                ->orderByDesc('submitted_at')
-                ->with(['proforma:id,code,title,proforma_type,claim_type'])
-                ->get();
+            $applications = UserIncentiveApplication::with(['proforma', 'user']);
+            if ($request->department) {
+                if ($request->department == 'DA') {
+                    $applications->whereIn('workflow_status', ['submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da']);
+                } elseif ($request->department == "GM") {
+                    $applications->whereIn('workflow_status', ['approved_by_da', 'approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm']);
+                }
+            }
+
+            if ($request->status) {
+                $applications->where('workflow_status', $request->status);
+            }
+
+            if ($request->scheme_id) {
+                $applications->where('scheme_id', $request->scheme_id);
+            }
+
+            if ($request->proforma_id) {
+                $applications->where('proforma_id', $request->proforma_id);
+            }
+
+            if ($request->applicant_name) {
+                $applications->whereHas('user', function ($user) use ($request) {
+                    $user->where('authorized_person_name', 'like', '%' . $request->applicant_name . '%');
+                });
+            }
+            if ($request->applicant_phone) {
+                $applications->whereHas('user', function ($user) use ($request) {
+                    $user->where('mobile_no', 'like', '%' . $request->applicant_phone . '%');
+                });
+            }
+
+            if ($request->date_from && $request->date_to) {
+                $applications->whereBetween('submitted_at', [$request->date_from, $request->date_to]);
+            } elseif ($request->date_from) {
+                $applications->whereDate('submitted_at', '>=', $request->date_from);
+            } elseif ($request->date_to) {
+                $applications->whereDate('submitted_at', '<=', $request->date_to);
+            }
+
+            $applications = $applications->orderByDesc('submitted_at')->get();
 
             $data = $applications->map(function ($application) {
                 return [
                     'application_id'  => $application->id,
                     'application_no'  => $application->application_no,
+                    'applicant_name'  => $application->user->authorized_person_name,
                     'application_type' => $application->application_type,
                     'workflow_status' => $application->workflow_status,
                     'current_reviewer_user_id' => $application->current_reviewer_user_id,
                     'submitted_at'    => optional($application->submitted_at)->toDateTimeString(),
                     'decided_at'      => optional($application->decided_at)->toDateTimeString(),
-                    'proforma'        => [
-                        'id'          => $application->proforma?->id,
-                        'code'        => $application->proforma?->code,
-                        'title'       => $application->proforma?->title,
-                        'proforma_type' => $application->proforma?->proforma_type,
-                        'claim_type'  => $application->proforma?->claim_type,
-                    ],
                 ];
             });
 
@@ -556,20 +595,93 @@ class UserIncentiveApplicationController extends Controller
 
     public function update_application_status(Request $request)
     {
-        if (!Auth::check()) {
-            return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+        try {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $allowed_by_department = [
+                'DA' => ['approved_by_da', 'rejected_by_da', 'sent_back_by_da'],
+                'GM' => ['approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm'],
+            ];
+
+            $request->validate([
+                'application_id' => 'required|integer|exists:user_incentive_applications,id',
+                'department'     => 'required|string|in:DA,GM',
+                'new_status'     => ['required', 'string', Rule::in($allowed_by_department[$request->department] ?? [])],
+                'remarks'        => 'nullable|string|required_if:new_status,rejected_by_da|required_if:new_status,sent_back_by_da|required_if:new_status,rejected_by_gm|required_if:new_status,sent_back_by_gm',
+            ]);
+
+            DB::beginTransaction();
+
+            $application = UserIncentiveApplication::with('proforma')->find($request->application_id);
+
+            $previous_status = $application->workflow_status;
+            $new_status      = $request->new_status;
+
+            $application->workflow_status         = $new_status;
+            $application->current_reviewer_user_id = Auth::id();
+
+            $final_statuses = ['approved_by_gm', 'rejected_by_da', 'rejected_by_gm'];
+            if (in_array($new_status, $final_statuses, true)) {
+                $application->decided_at = now();
+            }
+
+            if ($new_status === 'approved_by_gm' && $application->application_type === 'eligibility') {
+                if (empty($application->eligibility_certificate_no)) {
+                    $application->eligibility_certificate_no = 'ELG-' . date('y') . '-' . str_pad((string)$application->id, 6, '0', STR_PAD_LEFT);
+                }
+            }
+
+            $application->save();
+
+            $action_map = [
+                'approved_by_da'  => 'da_approved',
+                'rejected_by_da'  => 'da_rejected',
+                'sent_back_by_da' => 'da_sent_back',
+                'approved_by_gm'  => 'gm_approved',
+                'rejected_by_gm'  => 'gm_rejected',
+                'sent_back_by_gm' => 'gm_sent_back',
+            ];
+
+            IncentiveWorkflowHistory::create([
+                'application_id'  => $application->id,
+                'from_status'     => $previous_status,
+                'to_status'       => $new_status,
+                'action'          => $action_map[$new_status] ?? 'status_updated',
+                'action_taken_by' => Auth::id(),
+                'remarks'         => $request->input('remarks'),
+                'meta'            => null,
+                'action_taken_at' => now(),
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Application status updated successfully.',
+                'data'    => [
+                    'application_id'  => $application->id,
+                    'application_no'  => $application->application_no,
+                    'application_type' => $application->application_type,
+                    'workflow_status' => $application->workflow_status,
+                    'decided_at'      => optional($application->decided_at)->toDateTimeString(),
+                    'eligibility_certificate_no' => $application->eligibility_certificate_no,
+                ],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong.',
+                'error'   => $e->getMessage(),
+            ], 500);
         }
-
-        $request->validate([
-            'application_id' => 'required|integer|exists:user_incentive_applications,id',
-            'status'         => 'required|in:one_time,monthly,quarterly,half_yearly,annually,biennially,triennially,quinquenially',
-        ]);
-
-        $application = UserIncentiveApplication::where('id',$request->application_id)->first();
-        $application->workflow_status = $request->status;
-        $application->update([
-            'workflow_status' => $request->status,
-        ]);
-
     }
 }

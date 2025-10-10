@@ -200,6 +200,11 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     });
 
     Route::prefix('department')->group(function () {
+        Route::prefix('incentive')->group(function () {
+            Route::post('applications', [UserIncentiveApplicationController::class, 'get_department_applications']);
+            Route::post('update-application-status', [UserIncentiveApplicationController::class, 'update_application_status']);
+        });
+
         Route::post('/services', [ServiceController::class, 'get_services_by_department']);
         Route::post('/applications', [ServiceController::class, 'get_department_applications']);
         Route::post('/applications/{id}', [ServiceController::class, 'get_application_details']);
