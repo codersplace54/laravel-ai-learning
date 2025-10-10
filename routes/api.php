@@ -137,6 +137,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-questionnaire-store', [ServiceQuestionnaireController::class, 'service_questionnaire_store']);
         Route::post('service-questionnaire-update', [ServiceQuestionnaireController::class, 'service_questionnaire_update']);
         Route::post('service-questionnaire-delete', [ServiceQuestionnaireController::class, 'service_questionnaire_delete']);
+        Route::post('fetch-questionnaire-section', [ServiceQuestionnaireController::class, 'fetch_questionnaire_section']);
 
         Route::post('service-fee-rule-store', [ServiceFeeRuleController::class, 'service_fee_rule_store']);
         Route::post('service-fee-rule-update', [ServiceFeeRuleController::class, 'service_fee_rule_update']);
@@ -202,6 +203,11 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     });
 
     Route::prefix('department')->group(function () {
+        Route::prefix('incentive')->group(function () {
+            Route::post('applications', [UserIncentiveApplicationController::class, 'get_department_applications']);
+            Route::post('update-application-status', [UserIncentiveApplicationController::class, 'update_application_status']);
+        });
+        
         Route::post('/services', [ServiceController::class, 'get_services_by_department']);
         Route::post('/applications', [ServiceController::class, 'get_department_applications']);
         Route::post('/applications/{id}', [ServiceController::class, 'get_application_details']);
