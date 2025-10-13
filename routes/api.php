@@ -182,6 +182,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
             Route::post('claim-proforma-list', [UserIncentiveApplicationController::class, 'user_claim_proforma_list']);
             Route::post('proforma-questionnaire-view',   [UserIncentiveApplicationController::class, 'user_proforma_questionnaire_view']);
             Route::post('proforma-application-store', [UserIncentiveApplicationController::class, 'user_proforma_application_store']);
+            Route::post('application-workflow-history', [UserIncentiveApplicationController::class, 'application_workflow_history']);
 
         });
     });

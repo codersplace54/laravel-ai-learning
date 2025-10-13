@@ -9,6 +9,7 @@ use App\Models\UserIncentiveApplication;
 use App\Models\ProformaQuestionnaire;
 use App\Models\Proforma;
 use App\Models\Scheme;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -677,6 +678,58 @@ class UserIncentiveApplicationController extends Controller
             ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function application_workflow_history(Request $request)
+    {
+        try {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'application_id' => 'required|integer|exists:user_incentive_applications,id',
+            ]);
+
+            $status_labels = [
+                'draft'            => 'Draft',
+                'submitted'        => 'Submitted to DA',
+                'under_review_da'  => 'Under Review (DA)',
+                'approved_by_da'   => 'Forwarded to GM',
+                'sent_back_by_da'  => 'Query raised by DA',
+                'rejected_by_da'   => 'Rejected by DA',
+                'under_review_gm'  => 'Under Review (GM)',
+                'approved_by_gm'   => 'Approved',
+                'sent_back_by_gm'  => 'Query raised by GM',
+                'rejected_by_gm'   => 'Rejected by GM',
+            ];
+
+            $history = IncentiveWorkflowHistory::where('application_id', $request->application_id)
+                ->orderBy('action_taken_at')
+                ->with(['user:id,name,authorized_person_name,email'])
+                ->get()
+                ->map(function ($history) use ($status_labels) {
+                    return [
+                        'date'        => $history->action_taken_at->format('d/m/Y'),
+                        'user_name'   => optional($history->user)->authorized_person_name,
+                        'from_status' => $status_labels[$history->from_status] ?? $history->from_status,
+                        'to_status'   => $status_labels[$history->to_status]   ?? $history->to_status,
+                        'remarks'     => $history->remarks ?? null,
+                    ];
+                });
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Application history fetched successfully.',
+                'data'    => $history,
+            ]);
+        } catch (\Exception $e) {
             return response()->json([
                 'status'  => 0,
                 'message' => 'Something went wrong.',
