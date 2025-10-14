@@ -182,6 +182,13 @@ class RenewalCycleController extends Controller
 
             $renewal_cycle = RenewalCycle::where('id', $request->id)->first();
 
+            if ($renewal_cycle->feerule()->exists()) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Renewal cycle cannot be deleted because it is assigned to service fee rule.',
+                ], 400);
+            }
+
             if (!$renewal_cycle) {
 
                 DB::rollBack();

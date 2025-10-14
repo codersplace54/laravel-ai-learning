@@ -31,6 +31,8 @@ use App\Http\Controllers\Incentive\ProformaQuestionnaireController;
 use App\Http\Controllers\Incentive\UserIncentiveApplicationController;
 use App\Http\Controllers\SchemaController;
 use App\Http\Middleware\JWTActivityMiddleware;
+use App\Http\Controllers\Report\ReportController;
+
 
 
 
@@ -125,9 +127,11 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
         Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);
         Route::post('service-master-delete', [ServiceMasterController::class, 'service_master_delete']);
-        Route::post('store-service-third-party-params', [ServiceMasterController::class, 'store_service_third_party_params']);
+        Route::post('service-third-party-params-store', [ServiceMasterController::class, 'service_third_party_params_store']);
+        Route::post('service-third-party-params-update', [ServiceMasterController::class, 'service_third_party_params_update']);
         Route::post('service-third-party-params-view', [ServiceMasterController::class, 'service_third_party_params_view']);
         Route::post('service-third-party-params-delete', [ServiceMasterController::class, 'service_third_party_params_delete']);
+        Route::post('update-service-status/{id}', [ServiceMasterController::class, 'update_service_status']);
 
 
         Route::post('renewal-cycle-store', [RenewalCycleController::class, 'renewal_cycle_store']);
@@ -155,7 +159,6 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('fetch-all-department-users', [AdminController::class, 'fetch_all_department_users']);
         Route::post('get-department-user-details', [UserController::class, 'get_department_user_details']);
         Route::post('update-user-status/{user_id}', [AdminController::class, 'update_user_status']);
-
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
@@ -240,3 +243,7 @@ Route::post('/tripura/get-all-districts', [TripuraMasterDataController::class, '
 Route::post('/tripura/get-sub-subdivisions', [TripuraMasterDataController::class, 'get_subdivisions']);
 Route::post('/tripura/get-block-names', [TripuraMasterDataController::class, 'get_ulbs']);
 Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'get_wards']);
+
+Route::prefix('report')->group(function () {
+    Route::post('online-single-windows', [ReportController::class, 'online_single_windows']);
+});
