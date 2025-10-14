@@ -69,6 +69,6 @@ class ServiceMaster extends Model
 
     public function third_party_param()
     {
-        return $this->hasOne(ServiceThirdPartyParam::class, 'service_id');
+        return $this->hasMany(ServiceThirdPartyParam::class, 'service_id');
     }
 }
