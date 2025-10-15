@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Crypt;
 use App\Models\ServiceMaster;
 use Illuminate\Support\Facades\Schema;
 use App\Models\ServiceThirdPartyParam;
+use App\Models\ServiceApprovalFlow;
+use App\Models\User;
 
 
 class ServiceMasterController extends Controller
@@ -36,7 +39,8 @@ class ServiceMasterController extends Controller
                 'target_days' => 'nullable|integer',
                 'allow_repeat_application' => 'required|in:yes,no',
                 'has_input_form' => 'required|in:yes,no',
-                'depends_on_services' => 'nullable|string',
+                'depends_on_services' => 'nullable|array',
+                'depends_on_services.*' => 'string',
                 'generate_id' => 'required|in:yes,no',
                 'generate_pdf' => 'required|in:yes,no',
                 'generated_id_format' => 'nullable|string|max:255',
@@ -60,7 +64,8 @@ class ServiceMasterController extends Controller
                 'third_party_return_url' => 'nullable|string',
                 'third_party_status_api_url' => 'nullable|string',
                 'third_party_payment_mode' => 'nullable|in:unified,external',
-                'is_active' => 'nullable|integer'
+                'is_active' => 'nullable|integer',
+                'fixed_expiry_date' => 'nullable|date'
             ]);
 
             DB::beginTransaction();
@@ -76,7 +81,7 @@ class ServiceMasterController extends Controller
                 'target_days' => $request->target_days,
                 'allow_repeat_application' => $request->allow_repeat_application,
                 'has_input_form' => $request->has_input_form,
-                'depends_on_services' => $request->depends_on_services,
+                'depends_on_services' => json_encode($request->depends_on_services),
                 'generate_id' => $request->generate_id,
                 'generate_pdf' => $request->generate_pdf,
                 'generated_id_format' => $request->generated_id_format,
@@ -93,6 +98,7 @@ class ServiceMasterController extends Controller
                 'status' => $request->status ?? 1,
                 'verification_token' => $request->verification_token,
                 'is_special' => $request->is_special,
+                'fixed_expiry_date' => $request->fixed_expiry_date,
 
                 'service_mode' => $request->service_mode ?? "native",
                 'third_party_portal_name' => $request->third_party_portal_name,
@@ -102,6 +108,8 @@ class ServiceMasterController extends Controller
                 'is_active' => $request->is_active ?? 1,
                 'created_by' => $admin->email_id
             ]);
+
+            $service_master->depends_on_services = json_decode($service_master->depends_on_services, true);
 
             DB::commit();
 
@@ -146,7 +154,8 @@ class ServiceMasterController extends Controller
                 'target_days' => 'nullable|integer',
                 'allow_repeat_application' => 'required|in:yes,no',
                 'has_input_form' => 'required|in:yes,no',
-                'depends_on_services' => 'nullable|string',
+                'depends_on_services' => 'nullable|array',
+                'depends_on_services.*' => 'string',
                 'generate_id' => 'required|in:yes,no',
                 'generate_pdf' => 'required|in:yes,no',
                 'generated_id_format' => 'nullable|string|max:255',
@@ -163,6 +172,7 @@ class ServiceMasterController extends Controller
                 'status' => 'nullable|integer',
                 'verification_token' => 'nullable|string',
                 'is_special' => 'nullable|in:yes,no',
+                'fixed_expiry_date' => 'nullable|date',
 
                 'service_mode' => 'nullable|in:native,third_party',
                 'third_party_portal_name' => 'nullable|string',
@@ -194,7 +204,7 @@ class ServiceMasterController extends Controller
                 'target_days' => $request->target_days,
                 'allow_repeat_application' => $request->allow_repeat_application,
                 'has_input_form' => $request->has_input_form,
-                'depends_on_services' => $request->depends_on_services,
+                'depends_on_services' => $request->depends_on_services ?? [],
                 'generate_id' => $request->generate_id,
                 'generate_pdf' => $request->generate_pdf,
                 'generated_id_format' => $request->generated_id_format,
@@ -211,6 +221,7 @@ class ServiceMasterController extends Controller
                 'status' => $request->status ?? $service->status,
                 'verification_token' => $request->verification_token,
                 'is_special' => $request->is_special,
+                'fixed_expiry_date' => $request->fixed_expiry_date,
 
                 'service_mode' => $request->service_mode,
                 'third_party_portal_name' => $request->third_party_portal_name,
@@ -356,12 +367,46 @@ class ServiceMasterController extends Controller
 
             $user = Auth::user();
 
-            $services = ServiceMaster::with(['department:id,name', 'applications' => function ($query) use ($user) {
-                $query->where('user_id', $user->id)->select('id', 'service_id', 'status');
-            }, 'third_party_param:id,service_id'])->get(['id', 'service_title_or_description', 'department_id', 'noc_type', 'target_days', 'noc_payment_type', 'allow_repeat_application', 'service_mode', 'third_party_portal_name', 'created_by', 'updated_by','verification_token','is_special']);
+            $approval_flow_service = ServiceApprovalFlow::with('service_approval_flows')->pluck('service_id')->toArray();
 
-            $services = $services->map(function ($service) {
-                return [
+            $services = ServiceMaster::with([
+                'department:id,name',
+                'applications' => function ($query) use ($user) {
+                    $query->where('user_id', $user->id)->select('id', 'service_id', 'status');
+                },
+                'third_party_param'
+            ])
+                ->select([
+                    'id',
+                    'service_title_or_description',
+                    'department_id',
+                    'noc_type',
+                    'target_days',
+                    'noc_payment_type',
+                    'allow_repeat_application',
+                    'service_mode',
+                    'third_party_portal_name',
+                    'third_party_redirect_url',
+                    'third_party_return_url',
+                    'third_party_status_api_url',
+                    'created_by',
+                    'updated_by',
+                    'status',
+                    'verification_token',
+                    'is_special'
+                ])
+                ->when($user->user_type === 'individual', function ($query) use ($approval_flow_service) {
+                    $query->where(function ($q) use ($approval_flow_service) {
+                        $q->where('service_mode', 'third_party')
+                            ->orWhereIn('id', $approval_flow_service);
+                    })
+                    ->where('status', 1);
+                })
+                ->get();
+
+
+            $services = $services->map(function ($service) use ($user) {
+                $data = [
                     'id' => $service->id,
                     'service_title_or_description' => $service->service_title_or_description,
                     'department_id' => $service->department_id,
@@ -373,13 +418,66 @@ class ServiceMasterController extends Controller
                     'application_status' => $service->applications->first() ? $service->applications->first()->status : null,
                     'allow_repeat_application' => $service->allow_repeat_application,
                     'service_mode' => $service->service_mode,
-                    'third_party_portal_name' => $service->third_party_portal_name,
                     'created_by' => $service->created_by,
                     'updated_by' => $service->updated_by,
+                    'status' => $service->status,
                     'is_special' => $service->is_special,
                     'verification_token' => $service->verification_token,
-                    'third_party_params_id' => $service->third_party_param->id ?? null,
                 ];
+
+                if ($service->service_mode === 'third_party') {
+                    $params = collect($service->third_party_param);
+                    $post_params = [];
+
+                    foreach ($params as $param) {
+                        $param_name = $param->param_name;
+                        $value = null;
+
+                        if (isset($user->{$param_name}) && !is_null($user->{$param_name})) {
+                            $value = $user->{$param_name};
+                        } elseif (!empty($param->default_source_table) && !empty($param->default_source_column)) {
+                            try {
+                                $query = DB::table($param->default_source_table);
+
+                                if ($param->default_source_table === 'users') {
+                                    $query->where('id', $user->id);
+                                } else {
+                                    $query->where('user_id', $user->id);
+                                }
+
+                                $value = $query->value($param->default_source_column);
+                            } catch (\Exception $e) {
+                                $value = null;
+                            }
+                        } elseif (!is_null($param->default_value)) {
+                            $value = $param->default_value;
+                        }
+
+                        if (!is_null($value)) {
+                            $post_params[$param_name] = $value;
+                        }
+                    }
+
+                    if (!empty($service->verification_token)) {
+                        $post_params['verificationToken'] = base64_encode($service->verification_token);
+                    }
+
+                    if (!empty($service->third_party_return_url)) {
+                        $post_params['returnUrl'] = $service->third_party_return_url;
+                    }
+
+                    $data['thirdPartyPortal'] = [
+                        'thirdPartyPortalName' => $service->third_party_portal_name,
+                        'thirdPartyRedirectUrl' => $service->third_party_redirect_url,
+                        'thirdPartyReturnUrl' => $service->third_party_return_url,
+                        'thirdPartyStatusApiUrl' => $service->third_party_status_api_url,
+                        'thirdPartyPostParams' => $post_params,
+                    ];
+                }
+
+
+
+                return $data;
             });
 
             return response()->json([
@@ -399,7 +497,6 @@ class ServiceMasterController extends Controller
     }
 
     public function get_default_source_value(Request $request)
-
     {
 
 
@@ -452,7 +549,7 @@ class ServiceMasterController extends Controller
         }
     }
 
-    public function store_service_third_party_params(Request $request)
+    public function service_third_party_params_store(Request $request)
     {
 
         try {
@@ -465,49 +562,38 @@ class ServiceMasterController extends Controller
             $admin = Auth::user();
 
             $request->validate([
-                'service_id' => 'required|integer|exists:service_masters,id',
-                'param_name'            => 'nullable|string',
-                'param_type'     => 'nullable|string|in:request,response',
-                'param_required' => 'nullable|integer|in:0,1',
-                'default_value' => 'nullable|string',
-                'default_source_table' => 'nullable|string',
-                'default_source_column' => 'nullable|string',
-                'data_source'     => 'nullable|string|in:user_input,system_generated',
-                'description' => 'nullable|string',
+                'params' => 'required|array',
+                'params.*.service_id' => 'required|integer|exists:service_masters,id',
+                'params.*.param_name' => 'required|string',
+                'params.*.param_type' => 'nullable|string|in:request,response',
+                'params.*.param_required' => 'nullable|integer|in:0,1',
+                'params.*.default_value' => 'nullable|string',
+                'params.*.default_source_table' => 'nullable|string',
+                'params.*.default_source_column' => 'nullable|string',
+                'params.*.data_source' => 'nullable|string|in:user_input,system_generated',
+                'params.*.description' => 'nullable|string',
             ]);
 
             DB::beginTransaction();
 
-            $service_third_party_params = ServiceThirdPartyParam::where('service_id', $request->service_id)->first();
+            $service_third_party_params = [];
 
-            if ($service_third_party_params) {
+            foreach ($request->params as $param) {
 
-                $service_third_party_params->update([
-                    'service_id'         => $request->service_id,
-                    'param_name'         => $request->param_name,
-                    'param_type'         => $request->param_type,
-                    'param_required'     => $request->param_required,
-                    'default_value'      => $request->default_value,
-                    'default_source_table'   => $request->default_source_table,
-                    'default_source_column' => $request->default_source_column,
-                    'data_source'           => $request->data_source,
-                    'description'        => $request->description,
-                    'updated_by'        => $admin->email_id
+                $new_param = ServiceThirdPartyParam::create([
+                    'service_id' => $param['service_id'] ?? null,
+                    'param_name' => $param['param_name'] ?? null,
+                    'param_type' => $param['param_type'] ?? null,
+                    'param_required' => $param['param_required'] ?? null,
+                    'default_value' => $param['default_value'] ?? null,
+                    'default_source_table' => $param['default_source_table'] ?? null,
+                    'default_source_column' => $param['default_source_column'] ?? null,
+                    'data_source' => $param['data_source'] ?? null,
+                    'description' => $param['description'] ?? null,
+                    'created_by' => $admin->email_id,
                 ]);
-            } else {
 
-                $service_third_party_params = ServiceThirdPartyParam::create([
-                    'service_id'        => $request->service_id,
-                    'param_name'        => $request->param_name,
-                    'param_type'        => $request->param_type,
-                    'param_required'    => $request->param_required,
-                    'default_value'     => $request->default_value,
-                    'default_source_table'   => $request->default_source_table,
-                    'default_source_column' => $request->default_source_column,
-                    'data_source'       => $request->data_source,
-                    'description'       => $request->description,
-                    'created_by'        => $admin->email_id
-                ]);
+                $service_third_party_params[] = $new_param;
             }
 
             DB::commit();
@@ -530,6 +616,72 @@ class ServiceMasterController extends Controller
         }
     }
 
+    public function service_third_party_params_update(Request $request)
+    {
+        try {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $admin = Auth::user();
+
+            $request->validate([
+                'params' => 'required|array',
+                'params.*.id' => 'required|integer|exists:service_third_party_params,id',
+                'params.*.service_id' => 'required|integer|exists:service_masters,id',
+                'params.*.param_name' => 'required|string',
+                'params.*.param_type' => 'nullable|string|in:request,response',
+                'params.*.param_required' => 'nullable|integer|in:0,1',
+                'params.*.default_value' => 'nullable|string',
+                'params.*.default_source_table' => 'nullable|string',
+                'params.*.default_source_column' => 'nullable|string',
+                'params.*.data_source' => 'nullable|string|in:user_input,system_generated',
+                'params.*.description' => 'nullable|string',
+            ]);
+
+            DB::beginTransaction();
+
+            $updated_params = [];
+
+            foreach ($request->params as $param) {
+                $existing_param = ServiceThirdPartyParam::find($param['id']);
+
+                if ($existing_param) {
+                    $existing_param->update([
+                        'service_id' => $param['service_id'],
+                        'param_name' => $param['param_name'],
+                        'param_type' => $param['param_type'] ?? null,
+                        'param_required' => $param['param_required'] ?? null,
+                        'default_value' => $param['default_value'] ?? null,
+                        'default_source_table' => $param['default_source_table'] ?? null,
+                        'default_source_column' => $param['default_source_column'] ?? null,
+                        'data_source' => $param['data_source'] ?? null,
+                        'description' => $param['description'] ?? null,
+                        'updated_by' => $admin->email_id,
+                    ]);
+
+                    $updated_params[] = $existing_param;
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Service third party params updated successfully.',
+                'data' => $updated_params
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to update Service third party params.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function service_third_party_params_view(Request $request)
     {
 
@@ -541,10 +693,17 @@ class ServiceMasterController extends Controller
             }
 
             $request->validate([
-                'service_id' => 'required|integer|exists:service_third_party_params,service_id',
+                'service_id' => 'required|integer',
             ]);
 
-            $third_party_parameters = ServiceThirdPartyParam::where('service_id', $request->service_id)->first();
+            $third_party_parameters = ServiceThirdPartyParam::where('service_id', $request->service_id)->get();
+
+            if ($third_party_parameters->isEmpty()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No third party parameters available for this service.',
+                ], 404);
+            }
 
             return response()->json([
                 'status' => 1,
@@ -581,12 +740,12 @@ class ServiceMasterController extends Controller
             }
 
             $request->validate([
-                'service_id' => 'required|integer|exists:service_third_party_params,service_id',
+                'id' => 'required|integer|exists:service_third_party_params,id',
             ]);
 
             DB::beginTransaction();
 
-            $service = ServiceThirdPartyParam::where('service_id', $request->service_id)->first();
+            $service = ServiceThirdPartyParam::where('id', $request->id)->first();
 
             if (!$service) {
 
@@ -622,6 +781,39 @@ class ServiceMasterController extends Controller
             return response()->json([
                 'status' => 0,
                 'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function update_service_status($id)
+    {
+
+
+        try {
+
+            DB::beginTransaction();
+
+            $service = ServiceMaster::findOrFail($id);
+
+            $service->status = $service->status === 1 ? 0 : 1;
+            $service->save();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Status updated successfully.',
+                'updated_status' => $service->status,
+            ]);
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while updating status.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

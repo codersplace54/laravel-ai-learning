@@ -26,7 +26,6 @@ class ServiceApprovalFlowController extends Controller
             $request->validate([
                 'flows' => 'required|array',
                 'flows.*.service_id' => 'required|integer|exists:service_masters,id',
-                'flows.*.step_number' => 'required|integer',
                 'flows.*.step_type' => 'required|in:validation,review,screening,scrutiny,approval',
                 'flows.*.department_id' => 'required|integer|exists:departments,id',
                 'flows.*.hierarchy_level' => 'required|in:block,subdivision,district,state1,state2,state3',
@@ -38,23 +37,14 @@ class ServiceApprovalFlowController extends Controller
 
             foreach ($request->flows as $flow) {
 
-                $service = ServiceMaster::where('id', $flow['service_id'])
-                    ->where('department_id', $flow['department_id'])
-                    ->first();
+                $last_step = ServiceApprovalFlow::where('service_id', $flow['service_id'])
+                    ->max('step_number');
 
-                if (!$service) {
-
-                    DB::rollBack();
-
-                    return response()->json([
-                        'status' => 0,
-                        'message' => "Service ID {$flow['service_id']} does not belong to Department ID {$flow['department_id']}.",
-                    ], 422);
-                }
+                $next_step = $last_step ? $last_step + 1 : 1;
 
                 $service_approval_flow = ServiceApprovalFlow::create([
                     'service_id'      => $flow['service_id'],
-                    'step_number'     => $flow['step_number'],
+                    'step_number'     => $next_step,
                     'step_type'       => $flow['step_type'],
                     'department_id'   => $flow['department_id'],
                     'hierarchy_level' => $flow['hierarchy_level'],
@@ -110,7 +100,6 @@ class ServiceApprovalFlowController extends Controller
                 'flows' => 'required|array',
                 'flows.*.id' => 'nullable|integer|exists:service_approval_flows,id',
                 'flows.*.service_id' => 'required|integer|exists:service_masters,id',
-                'flows.*.step_number' => 'required|integer',
                 'flows.*.step_type' => 'required|in:validation,review,screening,scrutiny,approval',
                 'flows.*.department_id' => 'required|integer|exists:departments,id',
                 'flows.*.hierarchy_level' => 'required|in:block,subdivision,district,state1,state2,state3',
@@ -126,21 +115,18 @@ class ServiceApprovalFlowController extends Controller
                     ->where('department_id', $flow['department_id'])
                     ->first();
 
-                if (!$service) {
-
-                    DB::rollBack();
-
-                    return response()->json([
-                        'status' => 0,
-                        'message' => "Service ID {$flow['service_id']} does not belong to Department ID {$flow['department_id']}.",
-                    ], 422);
-                }
-
                 $service_approval_flow = ServiceApprovalFlow::findOrFail($flow['id']);
+
+                $step_number = $flow['step_number'] ?? $service_approval_flow->step_number;
+                if (!$step_number) {
+                    $last_step = ServiceApprovalFlow::where('service_id', $flow['service_id'])
+                        ->max('step_number');
+                    $step_number = $last_step ? $last_step + 1 : 1;
+                }
 
                 $service_approval_flow->update([
                     'service_id'      => $flow['service_id'],
-                    'step_number'     => $flow['step_number'],
+                    'step_number'     => $step_number,
                     'step_type'       => $flow['step_type'],
                     'department_id'   => $flow['department_id'],
                     'hierarchy_level' => $flow['hierarchy_level'],
@@ -194,7 +180,9 @@ class ServiceApprovalFlowController extends Controller
                 'service_id' => 'required|integer|exists:service_masters,id',
             ]);
 
-            $service_approval_flows = ServiceApprovalFlow::where('service_id', $request->service_id)->get();
+            $service_approval_flows = ServiceApprovalFlow::where('service_id', $request->service_id)
+            ->orderBy('id', 'asc')
+            ->get();
 
             if ($service_approval_flows->isEmpty()) {
                 return response()->json([

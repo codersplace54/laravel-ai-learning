@@ -43,6 +43,7 @@ class ServiceMaster extends Model
         'third_party_status_api_url',
         'third_party_payment_mode',
         'is_active',
+        'fixed_expiry_date',
 
         'created_at',
         'updated_at',
@@ -69,6 +70,6 @@ class ServiceMaster extends Model
 
     public function third_party_param()
     {
-        return $this->hasOne(ServiceThirdPartyParam::class, 'service_id');
+        return $this->hasMany(ServiceThirdPartyParam::class, 'service_id');
     }
 }
