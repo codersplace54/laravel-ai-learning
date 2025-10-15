@@ -46,6 +46,8 @@ class UserIncentiveApplicationController extends Controller
                 'form_answers_json'  => 'required_unless:save_data,1',
             ]);
 
+            $this->validate_proforma_file_inputs($request);
+
             DB::beginTransaction();
 
             $find_application = [
@@ -247,6 +249,64 @@ class UserIncentiveApplicationController extends Controller
                 'message' => 'Something went wrong.',
                 'error'   => $e->getMessage(),
             ], 500);
+        }
+    }
+
+    private function validate_proforma_file_inputs(Request $request): void
+    {
+        $proforma_id = $request->proforma_id;
+
+        $file_questions = ProformaQuestionnaire::where('proforma_id', $proforma_id)
+            ->whereIn('question_type', ['file'])
+            ->where('status', 1)
+            ->get(['id', 'question_type', 'upload_rule']);
+
+        if ($file_questions->isEmpty()) {
+            return;
+        }
+
+        $rules = [];
+
+        foreach ($file_questions as $question) {
+
+            $field_key_list  = 'files.' . $question->id;      
+            $field_key_items = 'files.' . $question->id . '.*'; 
+
+            $list_rules  = 'nullable|array';
+            $item_rules  = 'file';
+
+            $upload_rule = $question->upload_rule;
+            if ($upload_rule) {
+                $upload_rule = json_decode($upload_rule, true);
+            }
+
+            $allowed_mimes = (!empty($upload_rule['mimes'])) ? $upload_rule['mimes'] : [];
+
+            $max_size_mb = isset($upload_rule['max_size_mb']) ? $upload_rule['max_size_mb'] : null;
+            $min_files   = isset($upload_rule['min_files'])   ? $upload_rule['min_files']   : null;
+            $max_files   = isset($upload_rule['max_files'])   ? $upload_rule['max_files']   : null;
+            
+            if (!empty($min_files) && $min_files > 0) {
+                $list_rules = 'nullable|array|min:' . $min_files;
+            }
+            if (!empty($max_files) && $max_files > 0) {
+                $list_rules .= '|max:' . $max_files;
+            }
+
+            if (!empty($allowed_mimes)) {
+                $item_rules .= '|mimes:' . implode(',', $allowed_mimes);
+            }
+
+            if (!empty($max_size_mb) && $max_size_mb > 0) {
+                $item_rules .= '|max:' . ($max_size_mb * 1024);
+            }
+
+            $rules[$field_key_list]  = $list_rules;
+            $rules[$field_key_items] = $item_rules;
+        }
+
+        if (!empty($rules)) {
+            $request->validate($rules);
         }
     }
 

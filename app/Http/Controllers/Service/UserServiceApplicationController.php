@@ -75,6 +75,8 @@ class UserServiceApplicationController extends Controller
                 'external_remarks'   => 'nullable|string',
                 'is_third_party'   => 'nullable|integer|in:0,1',
             ]);
+            
+            $this->validate_questionnaire_file_inputs($request);
 
             DB::beginTransaction();
 
@@ -93,7 +95,7 @@ class UserServiceApplicationController extends Controller
             }
 
             $service_data = ServiceMaster::where('id', $request->service_id)
-                ->first(['noc_name', 'service_mode']);
+                ->first(['noc_name', 'service_mode','target_days']);
 
             if ($service_data->service_mode === "native") {
 
@@ -115,10 +117,11 @@ class UserServiceApplicationController extends Controller
                 }
 
                 $application_date = Carbon::parse($request->NOC_application_date ?? now());
-                $target_days = $service->target_days ?? 0;
+                $target_days = $service_data->target_days ?? 0;
+                
                 $max_processing_date = $this->add_working_days($application_date, $target_days);
                 $total_fee =  $final_fee + $request->extra_payment;
-
+                
                 $user_service_application = UserServiceApplication::where('user_id', $user->id)
                     ->where('service_id', $request->service_id)
                     ->first();
@@ -146,12 +149,12 @@ class UserServiceApplicationController extends Controller
                     $current_application_data = $user_service_application->application_data ?: [];
 
                     $application_data = $request->application_data;
-                    
+
                     $removed_question_ids = json_decode((string) ($request->input('remove_file_question_ids') ?? '[]'), true) ?? [];
-                    
+
                     foreach ($removed_question_ids as $question_id) {
-                        
-                            $old_file_path = $current_application_data[$question_id] ?? null;
+
+                        $old_file_path = $current_application_data[$question_id] ?? null;
                         if ($old_file_path) {
                             Storage::disk('public')->delete($old_file_path);
                             unset($application_data[$question_id]);
@@ -243,7 +246,7 @@ class UserServiceApplicationController extends Controller
                     $application_data = (array) $request->input('application_data', []);
 
                     foreach ($request->file('files', []) as $question_id => $uploaded_file) {
-                       
+
                         if (!$uploaded_file) {
                             continue;
                         }
@@ -354,6 +357,51 @@ class UserServiceApplicationController extends Controller
             ], 500);
         }
     }
+
+    private function validate_questionnaire_file_inputs(Request $request): void
+    {
+        $service_id = $request->service_id;
+
+        $file_questions = ServiceQuestionnaire::where('service_id', $service_id)
+            ->whereIn('question_type', ['file', 'image'])
+            ->where('status', 1)
+            ->get(['id', 'question_type', 'upload_rule']);
+
+        if ($file_questions->isEmpty()) {
+            return;
+        }
+
+        $rules = [];
+
+        foreach ($file_questions as $question) {
+            $field_key   = 'files.' . $question->id;
+            $rule_string = 'nullable|file';
+
+            $upload_rule = $question->upload_rule;
+            if ($upload_rule) {
+                $upload_rule = json_decode($upload_rule, true);
+            }
+
+            $allowed_mimes = (!empty($upload_rule['mimes'])) ? $upload_rule['mimes'] : [];
+
+            $max_size_mb = isset($upload_rule['max_size_mb']) ? (int) $upload_rule['max_size_mb'] : null;
+
+            if (!empty($allowed_mimes)) {
+                $rule_string .= '|mimes:' . implode(',', $allowed_mimes);
+            }
+
+            if (!empty($max_size_mb) && $max_size_mb > 0) {
+                $rule_string .= '|max:' . ($max_size_mb * 1024);
+            }
+
+            $rules[$field_key] = $rule_string;
+        }
+
+        if (!empty($rules)) {
+            $request->validate($rules);
+        }
+    }
+
 
     // public function user_service_application_update(Request $request)
     // {
