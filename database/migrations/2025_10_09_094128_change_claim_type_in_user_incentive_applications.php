@@ -24,8 +24,11 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('user_incentive_applications', function (Blueprint $table) {
-            //
-        });
+        DB::statement("ALTER TABLE `proformas`
+        MODIFY COLUMN `claim_type` ENUM(
+            'one_time',
+            'monthly',
+            'quarterly'
+        ) NULL DEFAULT NULL");
     }
 };

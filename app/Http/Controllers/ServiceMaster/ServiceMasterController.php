@@ -64,7 +64,8 @@ class ServiceMasterController extends Controller
                 'third_party_return_url' => 'nullable|string',
                 'third_party_status_api_url' => 'nullable|string',
                 'third_party_payment_mode' => 'nullable|in:unified,external',
-                'is_active' => 'nullable|integer'
+                'is_active' => 'nullable|integer',
+                'fixed_expiry_date' => 'nullable|date'
             ]);
 
             DB::beginTransaction();
@@ -97,6 +98,7 @@ class ServiceMasterController extends Controller
                 'status' => $request->status ?? 1,
                 'verification_token' => $request->verification_token,
                 'is_special' => $request->is_special,
+                'fixed_expiry_date' => $request->fixed_expiry_date,
 
                 'service_mode' => $request->service_mode ?? "native",
                 'third_party_portal_name' => $request->third_party_portal_name,
@@ -170,6 +172,7 @@ class ServiceMasterController extends Controller
                 'status' => 'nullable|integer',
                 'verification_token' => 'nullable|string',
                 'is_special' => 'nullable|in:yes,no',
+                'fixed_expiry_date' => 'nullable|date',
 
                 'service_mode' => 'nullable|in:native,third_party',
                 'third_party_portal_name' => 'nullable|string',
@@ -218,6 +221,7 @@ class ServiceMasterController extends Controller
                 'status' => $request->status ?? $service->status,
                 'verification_token' => $request->verification_token,
                 'is_special' => $request->is_special,
+                'fixed_expiry_date' => $request->fixed_expiry_date,
 
                 'service_mode' => $request->service_mode,
                 'third_party_portal_name' => $request->third_party_portal_name,
