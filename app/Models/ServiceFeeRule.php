@@ -32,4 +32,14 @@ class ServiceFeeRule extends Model
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    public function renewalCycles()
+    {
+        return $this->belongsTo(RenewalCycle::class, 'service_id');
+    }
+
+    public function questions()
+    {
+        return $this->belongsTo(ServiceQuestionnaire::class, 'service_id');
+    }
 }

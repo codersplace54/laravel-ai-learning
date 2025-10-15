@@ -132,7 +132,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-third-party-params-view', [ServiceMasterController::class, 'service_third_party_params_view']);
         Route::post('service-third-party-params-delete', [ServiceMasterController::class, 'service_third_party_params_delete']);
         Route::post('update-service-status/{id}', [ServiceMasterController::class, 'update_service_status']);
-
+        Route::post('export-services', [ServiceMasterController::class, 'export_services']);
 
         Route::post('renewal-cycle-store', [RenewalCycleController::class, 'renewal_cycle_store']);
         Route::post('renewal-cycle-update', [RenewalCycleController::class, 'renewal_cycle_update']);
@@ -178,6 +178,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-all-user-service-applications', [UserServiceApplicationController::class, 'get_all_user_service_applications']);
         Route::post('get-details-user-service-applications', [UserServiceApplicationController::class, 'get_details_user_service_applications']);
         Route::post('download-user-application-pdf',  [ServiceController::class, 'download_user_application_pdf']);
+
+        Route::post('/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
 
         Route::prefix('incentive')->group(function () {
             Route::post('scheme-list', [UserIncentiveApplicationController::class, 'user_incentive_scheme_list']);

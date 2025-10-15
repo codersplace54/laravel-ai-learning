@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Schema;
 use App\Models\ServiceThirdPartyParam;
 use App\Models\ServiceApprovalFlow;
 use App\Models\User;
+use App\Exports\ServiceMasterExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 
 class ServiceMasterController extends Controller
@@ -396,7 +398,7 @@ class ServiceMasterController extends Controller
                         $q->where('service_mode', 'third_party')
                             ->orWhereIn('id', $approval_flow_service);
                     })
-                    ->where('status', 1);
+                        ->where('status', 1);
                 })
                 ->get();
 
@@ -810,6 +812,103 @@ class ServiceMasterController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong while updating status.',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+    public function third_party_apply($id)
+    {
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $user = Auth::user();
+
+            $service = ServiceMaster::with('third_party_param')->find($id);
+
+            if (!$service || $service->service_mode !== 'third_party') {
+                return response()->json(['status' => 0, 'message' => 'Invalid third-party service.'], 404);
+            }
+
+            $params = collect($service->third_party_param);
+            $postParams = [];
+
+            foreach ($params as $param) {
+                $paramName = $param->param_name;
+                $value = null;
+
+                if (isset($user->{$paramName}) && !is_null($user->{$paramName})) {
+                    $value = $user->{$paramName};
+                } elseif (!empty($param->default_source_table) && !empty($param->default_source_column)) {
+                    try {
+                        $query = DB::table($param->default_source_table);
+
+                        if ($param->default_source_table === 'users') {
+                            $query->where('id', $user->id);
+                        } else {
+                            $query->where('user_id', $user->id);
+                        }
+
+                        $value = $query->value($param->default_source_column);
+                    } catch (\Exception $e) {
+                        $value = null;
+                    }
+                } elseif (!is_null($param->default_value)) {
+                    $value = $param->default_value;
+                }
+
+                if (!is_null($value)) {
+                    $postParams[$paramName] = $value;
+                }
+            }
+
+            if (!empty($service->verification_token)) {
+                $postParams['verificationToken'] = base64_encode($service->verification_token);
+            }
+
+            if (!empty($service->third_party_return_url)) {
+                $postParams['returnUrl'] = $service->third_party_return_url;
+            }
+
+
+            $html = '<html><body onload="document.forms[0].submit()">';
+            $html .= '<form method="POST" action="' . e($service->third_party_redirect_url) . '">';
+
+            foreach ($postParams as $key => $value) {
+                $html .= '<input type="hidden" name="' . e($key) . '" value="' . e($value) . '">';
+            }
+
+            $html .= '</form>';
+            $html .= '<p>Redirecting to third-party portal...</p>';
+            $html .= '</body></html>';
+
+            return response($html);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function export_services()
+    {
+        try {
+
+
+            return Excel::download(new ServiceMasterExport, 'service_masters.xlsx');
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate Excel file',
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }

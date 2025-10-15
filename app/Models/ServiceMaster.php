@@ -71,4 +71,29 @@ class ServiceMaster extends Model
     {
         return $this->hasMany(ServiceThirdPartyParam::class, 'service_id');
     }
+
+    public function renewalCycles()
+    {
+        return $this->hasMany(RenewalCycle::class, 'service_id');
+    }
+
+    public function questions()
+    {
+        return $this->hasMany(ServiceQuestionnaire::class, 'service_id');
+    }
+
+    public function service_fee_rule()
+    {
+        return $this->hasMany(ServiceFeeRule::class, 'service_id');
+    }
+
+    public function service_approval_flow()
+    {
+        return $this->hasMany(ServiceApprovalFlow::class, 'service_id');
+    }
+
+    public function renewal_fee_rule()
+    {
+        return $this->hasMany(RenewalFeeRule::class, 'service_id');
+    }
 }
