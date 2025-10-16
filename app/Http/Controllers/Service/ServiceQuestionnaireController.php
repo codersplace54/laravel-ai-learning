@@ -43,7 +43,6 @@ class ServiceQuestionnaireController extends Controller
                 'questionnaires.*.is_section' => 'nullable|in:yes,no',
                 'questionnaires.*.section_name' => 'nullable|required_if:questionnaires.*.is_section,yes|string',
                 'questionnaires.*.sample_format' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
-                'questionnaires.*.upload_rule'   => 'nullable|array',
             ]);
 
             DB::beginTransaction();
@@ -56,9 +55,10 @@ class ServiceQuestionnaireController extends Controller
                 $sample_format = null;
                 if ($request->hasFile("questionnaires.$index.sample_format")) {
                     $file = $request->file("questionnaires.$index.sample_format");
-                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                    $extension = $file->getClientOriginalExtension();
+                    $filename = 'sample_format.' . $extension;
                     $sample_format = $file->storeAs(
-                        "uploads/service_questions/{$questionnaire['service_id']}/sample_format",
+                        "uploads/service_questions/{$questionnaire['id']}/sample_format",
                         $filename,
                         'public'
                     );
@@ -83,13 +83,11 @@ class ServiceQuestionnaireController extends Controller
                     'section_name' => $questionnaire['section_name'] ?? null,
                     'created_by' => $admin->email_id,
                     'sample_format' => $sample_format,
-                    'upload_rule' => json_encode($questionnaire['upload_rule'] ?? null),
                 ]);
             }
 
             foreach ($service_questionnaire as &$service) {
                 $service->validation_rule = json_decode($service->validation_rule, true);
-                $service->upload_rule = $service->upload_rule ? json_decode($service->upload_rule, true) : null;;
 
                 if ($service->sample_format) {
                     $service->sample_format = asset(Storage::url($service->sample_format));
@@ -149,8 +147,6 @@ class ServiceQuestionnaireController extends Controller
                 'questionnaires.*.is_section' => 'nullable|in:yes,no',
                 'questionnaires.*.section_name' => 'nullable|required_if:questionnaires.*.is_section,yes|string',
                 'questionnaires.*.sample_format' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
-                'questionnaires.*.upload_rule'   => 'nullable|array',
-
             ]);
 
             DB::beginTransaction();
@@ -168,8 +164,9 @@ class ServiceQuestionnaireController extends Controller
                     }
 
                     $file = $request->file("questionnaires.$index.sample_format");
-                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
-                    $sample_format = $file->storeAs("uploads/service_questions/{$questionnaire['service_id']}/sample_format", $filename, 'public');
+                    $extension = $file->getClientOriginalExtension();
+                    $filename = 'sample_format.' . $extension;
+                    $sample_format = $file->storeAs("uploads/service_questions/{$questionnaire['id']}/sample_format", $filename, 'public');
                 }
 
                 $service_question->update([
@@ -192,7 +189,6 @@ class ServiceQuestionnaireController extends Controller
 
                     'updated_by' => $admin->email_id,
                     'sample_format' => $sample_format,
-                    'upload_rule' => json_encode($questionnaire['upload_rule'] ?? null),
                 ]);
 
                 $service_questionnaire[] = $service_question;
@@ -200,7 +196,6 @@ class ServiceQuestionnaireController extends Controller
 
             foreach ($service_questionnaire as &$service) {
                 $service->validation_rule = json_decode($service->validation_rule, true);
-                $service->upload_rule = $service->upload_rule ? json_decode($service->upload_rule, true) : null;;
 
                 if ($service->sample_format) {
                     $service->sample_format = asset('storage/' . $service->sample_format);
@@ -309,7 +304,6 @@ class ServiceQuestionnaireController extends Controller
 
             foreach ($service_questionnaires as $service) {
                 $service->validation_rule = json_decode($service->validation_rule, true);
-                $service->upload_rule = $service->upload_rule ? json_decode($service->upload_rule, true) : null;;
 
                 if ($service->sample_format) {
                     $service->sample_format = asset('storage/' . $service->sample_format);

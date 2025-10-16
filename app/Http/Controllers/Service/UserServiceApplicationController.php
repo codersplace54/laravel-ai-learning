@@ -74,8 +74,9 @@ class UserServiceApplicationController extends Controller
                 'external_valid_till'   => 'nullable|date',
                 'external_remarks'   => 'nullable|string',
                 'is_third_party'   => 'nullable|integer|in:0,1',
+                'removed_question_ids'   => 'nullable|array',
             ]);
-            
+
             $this->validate_questionnaire_file_inputs($request);
 
             DB::beginTransaction();
@@ -95,12 +96,12 @@ class UserServiceApplicationController extends Controller
             }
 
             $service_data = ServiceMaster::where('id', $request->service_id)
-                ->first(['noc_name', 'service_mode','target_days']);
+                ->first(['noc_name', 'service_mode', 'target_days']);
 
             if ($service_data->service_mode === "native") {
 
                 $final_fee = $this->calculate_final_fee($request->service_id, $request->application_data);
-                $final_fee = 32;
+
                 $approval_flow = ServiceApprovalFlow::where('service_id', $request->service_id)
                     ->orderBy('step_number', 'asc')
                     ->first();
@@ -118,10 +119,10 @@ class UserServiceApplicationController extends Controller
 
                 $application_date = Carbon::parse($request->NOC_application_date ?? now());
                 $target_days = $service_data->target_days ?? 0;
-                
+
                 $max_processing_date = $this->add_working_days($application_date, $target_days);
                 $total_fee =  $final_fee + $request->extra_payment;
-                
+
                 $user_service_application = UserServiceApplication::where('user_id', $user->id)
                     ->where('service_id', $request->service_id)
                     ->first();
@@ -365,7 +366,7 @@ class UserServiceApplicationController extends Controller
         $file_questions = ServiceQuestionnaire::where('service_id', $service_id)
             ->whereIn('question_type', ['file', 'image'])
             ->where('status', 1)
-            ->get(['id', 'question_type', 'upload_rule']);
+            ->get(['id', 'question_type', 'validation_rule']);
 
         if ($file_questions->isEmpty()) {
             return;
@@ -377,16 +378,18 @@ class UserServiceApplicationController extends Controller
             $field_key   = 'files.' . $question->id;
             $rule_string = 'nullable|file';
 
-            $upload_rule = $question->upload_rule;
-            if ($upload_rule) {
-                $upload_rule = json_decode($upload_rule, true);
+            $validation_rule = $question->validation_rule;
+            if ($validation_rule) {
+                $validation_rule = json_decode($validation_rule, true);
+            } else {
+                return;
             }
 
-            $allowed_mimes = (!empty($upload_rule['mimes'])) ? $upload_rule['mimes'] : [];
+            $allowed_mimes = (!empty($validation_rule['mimes'])) ? $validation_rule['mimes'] : [];
 
-            $max_size_mb = isset($upload_rule['max_size_mb']) ? (int) $upload_rule['max_size_mb'] : null;
+            $max_size_mb = isset($validation_rule['max_size_mb']) ? (int) $validation_rule['max_size_mb'] : null;
 
-            if (!empty($allowed_mimes)) {
+            if (is_array($allowed_mimes) && !empty($allowed_mimes)) {
                 $rule_string .= '|mimes:' . implode(',', $allowed_mimes);
             }
 
@@ -840,62 +843,69 @@ class UserServiceApplicationController extends Controller
 
     public function get_details_user_service_applications(Request $request)
     {
-
         try {
-
-
             if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
             $request->validate([
-                'service_id' => 'required|integer|exists:service_masters,id',
+                'service_id'     => 'required|integer|exists:service_masters,id',
                 'application_id' => 'required|integer|exists:user_service_applications,id',
             ]);
 
-            $service_user_application = UserServiceApplication::where('service_id', $request->service_id)
+            $application = UserServiceApplication::where('service_id', $request->service_id)
                 ->where('id', $request->application_id)
-                ->get();
+                ->first();
 
-            if ($service_user_application->isEmpty()) {
+            if (!$application) {
                 return response()->json([
-                    'status' => 0,
-                    'message' => 'No service user application found for the given service_id.',
+                    'status'  => 0,
+                    'message' => 'Application not found for this service.',
                 ], 404);
             }
 
-            $formatted_data = [];
-            foreach ($service_user_application as $service) {
-                $application_data = json_decode($service->application_data, true);
-                if (!empty($application_data)) {
-                    $questions = ServiceQuestionnaire::whereIn('id', array_keys($application_data))
-                        ->pluck('question_label', 'id');
-                    foreach ($application_data as $question_id => $answer) {
-                        $formatted_data[] = [
-                            'id' => $question_id ?? null,
-                            'question' => $questions[$question_id] ?? 'Question not found',
-                            'answer'   => $answer ?? null,
-                        ];
+            $application->application_data = json_decode($application->application_data, true) ?: [];
+
+            $application_data = $application->application_data; 
+            $formatted_data   = [];
+
+            if (!empty($application_data)) {
+                $question_ids = array_keys($application_data);
+
+                $questions = ServiceQuestionnaire::whereIn('id', $question_ids)
+                    ->get(['id', 'question_label', 'question_type'])
+                    ->keyBy('id');
+
+                foreach ($application_data as $question_id => $answer) {
+                    $question = $questions->get($question_id);
+
+                    if ($question && $question->question_type === 'file' && $answer) {
+                        $answer = asset('storage/' . $answer);
                     }
+
+                    $formatted_data[] = [
+                        'id'       => $question_id,
+                        'question' => $question->question_label ?? 'Question not found',
+                        'answer'   => $answer ?? null,
+                    ];
                 }
             }
 
             return response()->json([
-                'status' => 1,
-                'message' => 'Service user application fetched successfully.',
-                'data' => $service_user_application,
-                'application_data' => $formatted_data ?? [],
+                'status'            => 1,
+                'message'           => 'Service user application fetched successfully.',
+                'data'              => $application,      
+                'application_data'  => $formatted_data,  
             ]);
         } catch (\Exception $e) {
-
-
             return response()->json([
-                'status' => 0,
+                'status'  => 0,
                 'message' => 'Something went wrong.',
-                'error' => $e->getMessage(),
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
+
 
     public function store_third_party_status_logs(Request $request, $user_service_application)
     {
