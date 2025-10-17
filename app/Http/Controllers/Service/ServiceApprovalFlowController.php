@@ -28,7 +28,7 @@ class ServiceApprovalFlowController extends Controller
                 'flows.*.service_id' => 'required|integer|exists:service_masters,id',
                 'flows.*.step_type' => 'required|in:validation,review,screening,scrutiny,approval',
                 'flows.*.department_id' => 'required|integer|exists:departments,id',
-                'flows.*.hierarchy_level' => 'required|in:block,subdivision,district,state1,state2,state3',
+                'flows.*.hierarchy_level' => 'required|in:block,subdivision1,subdivision2,subdivision3,district1,district2,district3,state1,state2,state3',
             ]);
 
             DB::beginTransaction();
@@ -102,7 +102,7 @@ class ServiceApprovalFlowController extends Controller
                 'flows.*.service_id' => 'required|integer|exists:service_masters,id',
                 'flows.*.step_type' => 'required|in:validation,review,screening,scrutiny,approval',
                 'flows.*.department_id' => 'required|integer|exists:departments,id',
-                'flows.*.hierarchy_level' => 'required|in:block,subdivision,district,state1,state2,state3',
+                'flows.*.hierarchy_level' => 'required|in:block,subdivision1,subdivision2,subdivision3,district1,district2,district3,state1,state2,state3',
             ]);
 
             DB::beginTransaction();

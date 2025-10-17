@@ -40,7 +40,7 @@ class UserController extends Controller
                     'pan' => 'nullable|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
 
                     'department_id'   => 'required_if:user_type,department|integer|exists:departments,id',
-                    'hierarchy_level' => 'required_if:user_type,department|in:block,subdivision,district,state1,state2,state3',
+                    'hierarchy_level' => 'required_if:user_type,department|in:block,subdivision1,subdivision2,subdivision3,district1,district2,district3,state1,state2,state3',
                     'designation'      => 'nullable|string',
                     'is_active'      => 'nullable|integer'
                 ],
@@ -72,7 +72,7 @@ class UserController extends Controller
                     'department_id.integer'  => 'The department must be a valid number.',
                     'department_id.exists'   => 'The selected department does not exist in our records.',
                     'hierarchy_level.required' => 'The hierarchy level is required.',
-                    'hierarchy_level.in'       => 'The hierarchy level must be one of: block, subdivision, district, state1, state2, or state3.',
+                    'hierarchy_level.in'       => 'The hierarchy level must be one of: block, subdivision1, subdivision2, subdivision3, district1, district2, district3, state1, state2, or state3.',
                     'is_active.integer'        => 'The status must be a valid number (0 or 1).',
                 ]
             );
@@ -223,7 +223,7 @@ class UserController extends Controller
                 $rules['ulb_id'] = 'nullable|integer|exists:tripura_master_data,ulb_lgd_code';
             }
             if ($request->hierarchy_level !== null) {
-                $rules['hierarchy_level'] = 'nullable|in:block,subdivision,district,state1,state2,state3';
+                $rules['hierarchy_level'] = 'nullable|in:block,subdivision1,subdivision2,subdivision3,district1,district2,district3,state1,state2,state3';
             }
             if ($request->department_id !== null) {
                 $rules['department_id'] = 'nullable|integer|exists:departments,id';
@@ -252,7 +252,7 @@ class UserController extends Controller
                 'ulb_id.exists'  => 'Selected ULB is invalid.',
                 'department_id.integer'  => 'The department must be a valid number.',
                 'department_id.exists'   => 'The selected department does not exist in our records.',
-                'hierarchy_level.in' => 'The hierarchy level must be one of: block, subdivision, district, state1, state2, or state3.',
+                'hierarchy_level.in' => 'The hierarchy level must be one of: block, subdivision1, subdivision2, subdivision3, district1, district2, district3, state1, state2, or state3.',
             ]);
 
             DB::beginTransaction();
@@ -356,7 +356,7 @@ class UserController extends Controller
                 'user_type' => $user->user_type,
                 'registered_enterprise_address' => $user->registered_enterprise_address,
                 'registered_enterprise_city' => $user->registered_enterprise_city,
-                'is_active'                    => $user->department_user->is_active,
+                'is_active'                    => $user->department_user->is_active ?? null,
                 'department_id'   => $user->department_user->department_id   ?? null,
                 'hierarchy_level' => $user->department_user->hierarchy_level ?? null,
                 'designation'     => $user->department_user->designation     ?? null,
@@ -627,8 +627,8 @@ class UserController extends Controller
                 'pan' => $department_user->pan,
                 'bin' => $department_user->bin,
                 'user_name' => $department_user->user_name,
-                'district'                     => $department_user->district->district_name,
-                'district_code'                => $department_user->district->district_code,
+                'district'                     => $department_user->district->district_name ?? null,
+                'district_code'                => $department_user->district->district_code ?? null,
                 'subdivision_name'                 => $department_user->subdivision->sub_division ?? null,
                 'subdivision_code'               => $department_user->subdivision->sub_lgd_code ?? null,
                 'ulb_name'                          => $department_user->ulb->ulb_name ?? null,

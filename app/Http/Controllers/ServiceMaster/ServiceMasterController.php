@@ -841,6 +841,9 @@ class ServiceMasterController extends Controller
             $params = collect($service->third_party_param);
             $postParams = [];
 
+            $postParams['user_id'] = $user->id;
+            $postParams['bin'] = $user->bin ?? null;
+
             foreach ($params as $param) {
                 $paramName = $param->param_name;
                 $value = null;
