@@ -1090,7 +1090,7 @@ class ServiceController extends Controller
         if (stripos($filled, '<html') === false) {
             $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
         }
-        // dd($filled);
+        
         $pdf = Pdf::loadHTML($filled)
             ->setPaper('a4', 'portrait')
             ->setOptions([
