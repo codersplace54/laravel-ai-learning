@@ -32,6 +32,7 @@ use App\Http\Controllers\Incentive\UserIncentiveApplicationController;
 use App\Http\Controllers\SchemaController;
 use App\Http\Middleware\JWTActivityMiddleware;
 use App\Http\Controllers\Report\ReportController;
+use App\Http\Controllers\Report\UserFeedbackController;
 
 
 
@@ -249,3 +250,5 @@ Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'ge
 Route::prefix('report')->group(function () {
     Route::post('online-single-windows', [ReportController::class, 'online_single_windows']);
 });
+
+Route::post('user-feed-back-store', [UserFeedbackController::class, 'user_feedback_store']);

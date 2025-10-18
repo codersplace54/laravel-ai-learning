@@ -165,7 +165,7 @@ class UserServiceApplicationController extends Controller
                         }
                     }
 
-                    foreach ($request->file('files', []) as $question_id => $uploaded_file) {
+                    foreach ($request->file('application_data', []) as $question_id => $uploaded_file) {
                         $old_file_path = $current_application_data[$question_id] ?? null;
                         if ($old_file_path) {
                             Storage::disk('public')->delete($old_file_path);
@@ -249,7 +249,7 @@ class UserServiceApplicationController extends Controller
 
                     $application_data = (array) $request->input('application_data', []);
 
-                    foreach ($request->file('files', []) as $question_id => $uploaded_file) {
+                    foreach ($request->file('application_data', []) as $question_id => $uploaded_file) {
 
                         if (!$uploaded_file) {
                             continue;
@@ -378,7 +378,7 @@ class UserServiceApplicationController extends Controller
         $rules = [];
 
         foreach ($file_questions as $question) {
-            $field_key   = 'files.' . $question->id;
+            $field_key   = 'application_data.' . $question->id;
             $rule_string = 'nullable|file';
 
             $validation_rule = $question->validation_rule;
@@ -506,7 +506,7 @@ class UserServiceApplicationController extends Controller
                 'renewalYear'           => $request->renewalYear,
                 'applicationId'         => $request->applicationId,
                 'application_date'      => $request->application_date ?? now(),
-                'status'                => $request->status ?? 'submitted',
+                'status'                => $request->status ?? 're_submitted',
                 'application_data'      => json_encode($request->application_data ?? null),
                 'applied_fee'           => $request->applied_fee,
                 'approved_fee'          => $request->approved_fee,
