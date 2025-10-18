@@ -46,8 +46,6 @@ return new class extends Migration
             $table->string('current_step_number')->nullable();
             $table->string('max_processing_date')->nullable();
             $table->timestamps();
-
-            $table->unique(['user_id', 'service_id'], 'user_service_unique');
         });
     }
 

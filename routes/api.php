@@ -32,6 +32,7 @@ use App\Http\Controllers\Incentive\UserIncentiveApplicationController;
 use App\Http\Controllers\SchemaController;
 use App\Http\Middleware\JWTActivityMiddleware;
 use App\Http\Controllers\Report\ReportController;
+use App\Http\Controllers\Report\UserFeedbackController;
 
 
 
@@ -178,7 +179,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-all-user-service-applications', [UserServiceApplicationController::class, 'get_all_user_service_applications']);
         Route::post('get-details-user-service-applications', [UserServiceApplicationController::class, 'get_details_user_service_applications']);
         Route::post('download-user-application-pdf',  [ServiceController::class, 'download_user_application_pdf']);
-
+        Route::post('get-user-applications-per-service', [UserServiceApplicationController::class, 'get_user_applications_per_service']);
         Route::post('/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
 
         Route::prefix('incentive')->group(function () {
@@ -213,7 +214,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
             Route::post('applications', [UserIncentiveApplicationController::class, 'get_department_applications']);
             Route::post('update-application-status', [UserIncentiveApplicationController::class, 'update_application_status']);
         });
-        
+
         Route::post('/services', [ServiceController::class, 'get_services_by_department']);
         Route::post('/applications', [ServiceController::class, 'get_department_applications']);
         Route::post('/applications/{id}', [ServiceController::class, 'get_application_details']);
@@ -249,3 +250,5 @@ Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'ge
 Route::prefix('report')->group(function () {
     Route::post('online-single-windows', [ReportController::class, 'online_single_windows']);
 });
+
+Route::post('user-feed-back-store', [UserFeedbackController::class, 'user_feedback_store']);

@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('external_noc_url')->nullable()->after('external_payment_status');
             $table->string('external_noc_file')->nullable()->after('external_noc_url');
             $table->enum('source', ['native', 'third_party'])->default('native')->after('external_noc_file');
+            $table->string('status_file')->nullable()->after('status');
         });
     }
 

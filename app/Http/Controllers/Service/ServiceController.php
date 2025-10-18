@@ -377,8 +377,8 @@ class ServiceController extends Controller
             foreach ($services as $service) {
                 $service->total_applications = UserServiceApplication::where('service_id', $service->service_id)->count();
                 $service->pending_applications = UserServiceApplication::where('service_id', $service->service_id)
-                     ->where('status', '!=', 'approved')
-                     ->count();
+                    ->where('status', '!=', 'approved')
+                    ->count();
             }
 
             return response()->json([
@@ -445,6 +445,7 @@ class ServiceController extends Controller
             $applications = $data->get()->map(function ($application) {
                 return [
                     'application_id'      => $application->id,
+                    'application_number'  => $application->applicationId,
                     'service_name'        => $application->service->service_title_or_description,
                     'applicant_name'      => $application->user->authorized_person_name,
                     'applicant_phone'     => $application->user->mobile_no,
@@ -464,7 +465,7 @@ class ServiceController extends Controller
                     'ulb_name' => $application->user->ulb->ulb_name ?? null,
                     'ward_code'   => $application->user->ward->gp_vc_ward_lgd_code ?? null,
                     'ward_name' => $application->user->ward->name_of_gp_vc_or_ward ?? null,
-                    'hierarchy'            => $application->user->department_user->hierarchy_level ?? null,
+                    'hierarchy'   => $application->user->department_user->hierarchy_level ?? null,
                 ];
             });
 
@@ -660,6 +661,7 @@ class ServiceController extends Controller
 
             $request->validate([
                 'status'         => 'required|in:pending,approved,rejected,under_review,send_back,extra_payment',
+                'status_file'    => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:3072',
                 'remarks'        => 'nullable|string'
             ]);
 
@@ -686,6 +688,13 @@ class ServiceController extends Controller
                 'action_taken_at' => now(),
             ]);
 
+            $status_file = null;
+            if ($request->hasFile('status_file')) {
+                $file = $request->file('status_file');
+                $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                $status_file = $file->storeAs("uploads/$user->id/application_status", $filename, 'public');
+            }
+
             ApplicationWorkflowHistory::create([
                 'application_id'  => $application->id,
                 'service_id'      => $application->service_id,
@@ -694,6 +703,7 @@ class ServiceController extends Controller
                 'department_id'   => $current_step->department_id,
                 'hierarchy_level' => $current_step->hierarchy_level,
                 'status'          => $request->status,
+                'status_file'     => $status_file,
                 'action_taken_by' => $user->id,
                 'action_taken_at' => now(),
                 'remarks'         => $request->remarks,
@@ -712,7 +722,7 @@ class ServiceController extends Controller
                         'updated_at' => now(),
                     ]);
 
-                    if($application->service->form_template){
+                    if ($application->service->form_template) {
                         $this->generate_dynamic_pdf($application, $user);
                     }
                     return response()->json([
@@ -952,6 +962,7 @@ class ServiceController extends Controller
                     'status'         => $entry->status,
                     'hierarchy_level' => $entry->hierarchy_level,
                     'remarks'        => $entry->remarks,
+                    'status_file'    => asset(Storage::url($entry->status_file)),
                     'timestamp'      => $entry->action_taken_at,
                 ];
             }
@@ -1090,7 +1101,7 @@ class ServiceController extends Controller
         if (stripos($filled, '<html') === false) {
             $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
         }
-        
+
         $pdf = Pdf::loadHTML($filled)
             ->setPaper('a4', 'portrait')
             ->setOptions([
@@ -1106,8 +1117,7 @@ class ServiceController extends Controller
 
         Storage::disk('public')->put($path, $pdf->output());
         $application->update(['NOC_certificate' => $path]);
-
-        }
+    }
     public function get_total_applications_by_department(Request $request)
     {
 
@@ -1311,6 +1321,5 @@ class ServiceController extends Controller
                 'error'   => $e->getMessage()
             ], 500);
         }
-
     }
 }
