@@ -55,13 +55,12 @@ class ServiceQuestionnaireController extends Controller
                 $sample_format = null;
                 if ($request->hasFile("questionnaires.$index.sample_format")) {
                     $file = $request->file("questionnaires.$index.sample_format");
-                    $extension = $file->getClientOriginalExtension();
-                    $filename = 'sample_format.' . $extension;
+                    $filename = str_replace(' ', '_',$file->getClientOriginalName());
                     $sample_format = $file->storeAs(
                         "uploads/service_questions/{$questionnaire['id']}/sample_format",
                         $filename,
                         'public'
-                    );
+                    );  
                 }
 
                 $service_questionnaire[] = ServiceQuestionnaire::create([
@@ -164,8 +163,7 @@ class ServiceQuestionnaireController extends Controller
                     }
 
                     $file = $request->file("questionnaires.$index.sample_format");
-                    $extension = $file->getClientOriginalExtension();
-                    $filename = 'sample_format.' . $extension;
+                    $filename = str_replace(' ', '_',$file->getClientOriginalName());
                     $sample_format = $file->storeAs("uploads/service_questions/{$questionnaire['id']}/sample_format", $filename, 'public');
                 }
 

@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\ProformaQuestionnaire;
-
+use Illuminate\Support\Facades\Storage;
 
 class ProformaQuestionnaireController extends Controller
 {
@@ -36,10 +36,22 @@ class ProformaQuestionnaireController extends Controller
                 'claim_per_unit'        => 'nullable|numeric|min:0',
                 'claim_percentage'      => 'nullable|numeric|min:0|max:100',
                 'upload_rule'           => 'nullable',
-            ]); 
+                'sample_format'         => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
+            ]);
 
             DB::beginTransaction();
             $user = Auth::user();
+
+            $sample_format = null;
+            if ($request->hasFile("sample_format")) {
+                $file = $request->file("sample_format");
+                $filename = str_replace(' ', '_', $file->getClientOriginalName());
+                $sample_format = $file->storeAs(
+                    "uploads/proforma_questions/{$request->proforma_id}/sample_format",
+                    $filename,
+                    'public'
+                );
+            }
 
             $proforma_questionnaire = ProformaQuestionnaire::create([
                 'proforma_id'           => $request->proforma_id,
@@ -59,12 +71,17 @@ class ProformaQuestionnaireController extends Controller
                 'claim_per_unit'        => $request->claim_per_unit,
                 'claim_percentage'      => $request->claim_percentage,
                 'upload_rule'           => $request->upload_rule ? json_encode($request->upload_rule) : null,
-                'created_by'            => $user->email_id
+                'created_by'            => $user->email_id,
+                'sample_format'         => $sample_format,
             ]);
 
             $proforma_questionnaire->upload_rule = $proforma_questionnaire->upload_rule
                 ? json_decode($proforma_questionnaire->upload_rule, true)
                 : null;
+
+            if ($proforma_questionnaire->sample_format) {
+                $proforma_questionnaire->sample_format = asset(Storage::url($proforma_questionnaire->sample_format));
+            }
 
             DB::commit();
 
@@ -112,6 +129,7 @@ class ProformaQuestionnaireController extends Controller
                 'claim_per_unit'        => 'nullable|integer',
                 'claim_percentage'      => 'nullable|integer',
                 'upload_rule'           => 'nullable',
+                'sample_format'         => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
             ]);
 
             DB::beginTransaction();
@@ -119,6 +137,19 @@ class ProformaQuestionnaireController extends Controller
 
             $proforma_question = ProformaQuestionnaire::where('id', $request->id)->first();
 
+            $sample_format = $proforma_question->sample_format;
+            if ($request->hasFile("sample_format")) {
+                if ($sample_format && Storage::disk('public')->exists($sample_format)) {
+                    Storage::disk('public')->delete($sample_format);
+                }
+                $file = $request->file("sample_format");
+                $filename = str_replace(' ', '_', $file->getClientOriginalName());
+                $sample_format = $file->storeAs(
+                    "uploads/proforma_questions/{$request->proforma_id}/sample_format",
+                    $filename,
+                    'public'
+                );
+            }
             $proforma_question->update([
                 'proforma_id'           => $request->proforma_id,
                 'question_label'        => $request->question_label,
@@ -137,12 +168,16 @@ class ProformaQuestionnaireController extends Controller
                 'claim_per_unit'        => $request->claim_per_unit ?? $proforma_question->claim_per_unit,
                 'claim_percentage'      => $request->claim_percentage ?? $proforma_question->claim_percentage,
                 'upload_rule'           => $request->upload_rule ? json_encode($request->upload_rule) : $proforma_question->upload_rule,
-                'updated_by'            => $user->email_id
+                'updated_by'            => $user->email_id,
+                'sample_format'         => $sample_format ?? $proforma_question->sample_format,
             ]);
 
             $proforma_question->upload_rule = $proforma_question->upload_rule
                 ? json_decode($proforma_question->upload_rule, true)
                 : null;
+            if ($proforma_question->sample_format) {
+                $proforma_question->sample_format = asset(Storage::url($proforma_question->sample_format));
+            }
 
             DB::commit();
 
@@ -246,6 +281,10 @@ class ProformaQuestionnaireController extends Controller
             $proforma_questionnaire->upload_rule = $proforma_questionnaire->upload_rule
                 ? json_decode($proforma_questionnaire->upload_rule, true)
                 : null;
+
+            if ($proforma_questionnaire->sample_format) {
+                $proforma_questionnaire->sample_format = asset(Storage::url($proforma_questionnaire->sample_format));
+            }
 
             return response()->json([
                 'status'  => 1,
