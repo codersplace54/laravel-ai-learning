@@ -38,6 +38,8 @@ class RenewalCycleController extends Controller
                 'renewals.*.late_fee_calculated_amount' => 'nullable|string',
                 'renewals.*.allow_renewal_input_form' => 'required|in:yes,no',
                 'renewals.*.is_active' => 'nullable|integer',
+                'renewals.*.late_fee_start_type' => 'nullable|in:fixed_date,date_of_expiry',
+                'renewals.*.late_fee_start_date' => 'nullable|date',
             ]);
 
             DB::beginTransaction();
@@ -60,6 +62,8 @@ class RenewalCycleController extends Controller
                     'late_fee_calculated_amount' => $renewal['late_fee_calculated_amount'] ?? null,
                     'allow_renewal_input_form' => $renewal['allow_renewal_input_form'],
                     'is_active' => $renewal['is_active'] ?? 1,
+                    'late_fee_start_type' => $renewal['late_fee_start_type'] ?? null,
+                    'late_fee_start_date' => $renewal['late_fee_start_date'] ?? null,
                     'created_by' => $admin->email_id
                 ]);
             }
@@ -113,6 +117,8 @@ class RenewalCycleController extends Controller
                 'renewals.*.late_fee_calculated_amount' => 'nullable|string',
                 'renewals.*.allow_renewal_input_form' => 'required|in:yes,no',
                 'renewals.*.is_active' => 'nullable|integer',
+                'renewals.*.late_fee_start_type' => 'nullable|in:fixed_date,date_of_expiry',
+                'renewals.*.late_fee_start_date' => 'nullable|date',
             ]);
 
             DB::beginTransaction();
@@ -137,6 +143,8 @@ class RenewalCycleController extends Controller
                     'late_fee_calculated_amount' => $renewal['late_fee_calculated_amount'] ?? null,
                     'allow_renewal_input_form' => $renewal['allow_renewal_input_form'],
                     'is_active' => $renewal['is_active'] ?? 1,
+                    'late_fee_start_type' => $renewal['late_fee_start_type'] ?? null,
+                    'late_fee_start_date' => $renewal['late_fee_start_date'] ?? null,
                     'updated_by' => $admin->email_id
 
                 ]);
