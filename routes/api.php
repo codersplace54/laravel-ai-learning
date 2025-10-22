@@ -252,4 +252,6 @@ Route::prefix('report')->group(function () {
     Route::post('online-single-windows', [ReportController::class, 'online_single_windows']);
 });
 
-Route::post('user-feed-back-store', [UserFeedbackController::class, 'user_feedback_store']);
+Route::post('user-feedback-store', [UserFeedbackController::class, 'user_feedback_store']);
+Route::post('user-feedback-list', [UserFeedbackController::class, 'user_feedback_list']);
+Route::post('user-feedback-details', [UserFeedbackController::class, 'user_feedback_details']);
