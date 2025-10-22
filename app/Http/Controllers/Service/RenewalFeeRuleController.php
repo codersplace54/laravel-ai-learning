@@ -31,6 +31,9 @@ class RenewalFeeRuleController extends Controller
                 'rules.*.fee_type' => 'nullable|in:hardcoded,calculated,estimated',
                 'rules.*.fixed_fee' => 'nullable|string',
                 'rules.*.question_id' => 'nullable|integer|exists:service_questionnaires,id',
+                'rules.*.condition_label_question_id' => 'nullable|integer|exists:service_questionnaires,id',
+                'rules.*.pre_condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
+                'rules.*.pre_condition_value' => 'nullable|string',
                 'rules.*.condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
                 'rules.*.condition_value_start' => 'nullable|string',
                 'rules.*.condition_value_end' => 'nullable|string',
@@ -39,6 +42,7 @@ class RenewalFeeRuleController extends Controller
                 'rules.*.per_unit_fee' => 'nullable|string',
                 'rules.*.priority' => 'nullable|integer',
                 'rules.*.status' => 'nullable|boolean',
+                'rules.*.multi_condition' => 'nullable|in:yes,no',
             ]);
 
             DB::beginTransaction();
@@ -53,7 +57,10 @@ class RenewalFeeRuleController extends Controller
                     'fee_type' => $rule['fee_type'] ?? null,
                     'fixed_fee' => $rule['fixed_fee'] ?? null,
                     'question_id' => $rule['question_id'] ?? null,
+                    'condition_label_question_id' => $rule['condition_label_question_id'] ?? null,
+                    'pre_condition_operator' => $rule['pre_condition_operator'] ?? null,
                     'condition_operator' => $rule['condition_operator'] ?? null,
+                    'pre_condition_value' => $rule['pre_condition_value'] ?? null,
                     'condition_value_start' => $rule['condition_value_start'] ?? null,
                     'condition_value_end' => $rule['condition_value_end'] ?? null,
                     'calculated_fee' => $rule['calculated_fee'] ?? null,
@@ -61,7 +68,8 @@ class RenewalFeeRuleController extends Controller
                     'per_unit_fee' => $rule['per_unit_fee'] ?? null,
                     'priority' => $rule['priority'] ?? null,
                     'status' => $rule['status'] ?? 1,
-                    'created_by' => $admin->email_id
+                    'created_by' => $admin->email_id,
+                    'multi_condition' => $rule['multi_condition'] ?? "no",
                 ]);
 
                 $renewal_fee_rules[] = $renewal_fee_rule;
@@ -107,6 +115,9 @@ class RenewalFeeRuleController extends Controller
                 'rules.*.fee_type' => 'nullable|in:hardcoded,calculated,estimated',
                 'rules.*.fixed_fee' => 'nullable|string',
                 'rules.*.question_id' => 'nullable|integer|exists:service_questionnaires,id',
+                'rules.*.condition_label_question_id' => 'nullable|integer|exists:service_questionnaires,id',
+                'rules.*.pre_condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
+                'rules.*.pre_condition_value' => 'nullable|string',
                 'rules.*.condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
                 'rules.*.condition_value_start' => 'nullable|string',
                 'rules.*.condition_value_end' => 'nullable|string',
@@ -131,7 +142,10 @@ class RenewalFeeRuleController extends Controller
                     'fee_type' => $rule['fee_type'] ?? null,
                     'fixed_fee' => $rule['fixed_fee'] ?? null,
                     'question_id' => $rule['question_id'] ?? null,
+                    'condition_label_question_id' => $rule['condition_label_question_id'] ?? null,
+                    'pre_condition_operator' => $rule['pre_condition_operator'] ?? null,
                     'condition_operator' => $rule['condition_operator'] ?? null,
+                    'pre_condition_value' => $rule['pre_condition_value'] ?? null,
                     'condition_value_start' => $rule['condition_value_start'] ?? null,
                     'condition_value_end' => $rule['condition_value_end'] ?? null,
                     'calculated_fee' => $rule['calculated_fee'] ?? null,
@@ -188,10 +202,40 @@ class RenewalFeeRuleController extends Controller
                 ], 404);
             }
 
+            $data = $renewal_fee_rules->map(function ($rule) {
+                return [
+                    'id' => $rule->id,
+                    'service_id' => $rule->service_id,
+                    'renewal_cycle_id' => $rule->renewal_cycle_id,
+                    'fee_type' => $rule->fee_type,
+                    'fixed_fee' => $rule->fixed_fee,
+                    'question_id' => $rule->question_id,
+                    'question_label' => $rule->question->question_label ?? null,
+                    'condition_label_question_id' => $rule->condition_label_question_id ?? null,
+                    'condition_label_question' => $rule->conditionQuestion->question_label ?? null,
+                    'pre_condition_value' => $rule->pre_condition_value ?? null,
+                    'pre_condition_operator' => $rule->pre_condition_operator ?? null,
+                    'condition_operator' => $rule->condition_operator,
+                    'condition_value_start' => $rule->condition_value_start,
+                    'condition_value_end' => $rule->condition_value_end,
+                    'fixed_fee' => $rule->fixed_fee,
+                    'calculated_fee' => $rule->calculated_fee,
+                    'fixed_calculated_fee' => $rule->fixed_calculated_fee,
+                    'per_unit_fee' => $rule->per_unit_fee,
+                    'priority' => $rule->priority,
+                    'status' => $rule->status,
+                    'multi_condition' => $rule->multi_condition,
+                    'created_by' => $rule->created_by,
+                    'updated_by' => $rule->updated_by,
+                    'created_at' => $rule->created_at,
+                    'updated_at' => $rule->updated_at,
+                ];
+            });
+
             return response()->json([
                 'status' => 1,
                 'message' => 'Renewal fee rule fetched successfully.',
-                'data' => $renewal_fee_rules,
+                'data' => $data,
             ]);
         } catch (\Exception $e) {
 

@@ -31,7 +31,10 @@ class ServiceFeeRuleController extends Controller
                 'rules.*.fee_type' => 'nullable|in:hardcoded,calculated,estimated',
                 'rules.*.fixed_fee' => 'nullable|string',
                 'rules.*.question_id' => 'nullable|integer|exists:service_questionnaires,id',
+                'rules.*.condition_label_question_id' => 'nullable|integer|exists:service_questionnaires,id',
+                'rules.*.pre_condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
                 'rules.*.condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
+                'rules.*.pre_condition_value' => 'nullable|string',
                 'rules.*.condition_value_start' => 'nullable|string',
                 'rules.*.condition_value_end' => 'nullable|string',
                 'rules.*.calculated_fee' => 'nullable|string',
@@ -39,6 +42,7 @@ class ServiceFeeRuleController extends Controller
                 'rules.*.per_unit_fee' => 'nullable|string',
                 'rules.*.priority' => 'nullable|integer',
                 'rules.*.status' => 'nullable|boolean',
+                'rules.*.multi_condition' => 'nullable|in:yes,no',
             ]);
 
             DB::beginTransaction();
@@ -47,24 +51,35 @@ class ServiceFeeRuleController extends Controller
 
             foreach ($request->rules as $rule) {
 
-                $service_fee_rule = ServiceFeeRule::create([
-                    'service_id' => $rule['service_id'] ?? null,
-                    'renewal_cycle_id' => $rule['renewal_cycle_id'] ?? null,
-                    'fee_type' => $rule['fee_type'] ?? null,
-                    'fixed_fee' => $rule['fixed_fee'] ?? null,
-                    'question_id' => $rule['question_id'] ?? null,
-                    'condition_operator' => $rule['condition_operator'] ?? null,
-                    'condition_value_start' => $rule['condition_value_start'] ?? null,
-                    'condition_value_end' => $rule['condition_value_end'] ?? null,
-                    'calculated_fee' => $rule['calculated_fee'] ?? null,
-                    'fixed_calculated_fee' => $rule['fixed_calculated_fee'] ?? null,
-                    'per_unit_fee' => $rule['per_unit_fee'] ?? null,
-                    'priority' => $rule['priority'] ?? null,
-                    'status' => $rule['status'] ?? 1,
-                    'created_by' => $admin->email_id
-                ]);
+                // $condition_labels = $rule['condition_label'] ?? [null];
+                // if (!is_array($condition_labels)) {
+                //     $condition_labels = [$condition_labels];
+                // }
 
-                $service_fee_rules[] = $service_fee_rule;
+                // foreach ($condition_labels as $label) {
+                    $service_fee_rule = ServiceFeeRule::create([
+                        'service_id' => $rule['service_id'] ?? null,
+                        'renewal_cycle_id' => $rule['renewal_cycle_id'] ?? null,
+                        'fee_type' => $rule['fee_type'] ?? null,
+                        'fixed_fee' => $rule['fixed_fee'] ?? null,
+                        'question_id' => $rule['question_id'] ?? null,
+                        'condition_label_question_id' => $rule['condition_label_question_id'] ?? null,
+                        'pre_condition_operator' => $rule['pre_condition_operator'] ?? null,
+                        'condition_operator' => $rule['condition_operator'] ?? null,
+                        'pre_condition_value' => $rule['pre_condition_value'] ?? null,
+                        'condition_value_start' => $rule['condition_value_start'] ?? null,
+                        'condition_value_end' => $rule['condition_value_end'] ?? null,
+                        'calculated_fee' => $rule['calculated_fee'] ?? null,
+                        'fixed_calculated_fee' => $rule['fixed_calculated_fee'] ?? null,
+                        'per_unit_fee' => $rule['per_unit_fee'] ?? null,
+                        'priority' => $rule['priority'] ?? null,
+                        'status' => $rule['status'] ?? 1,
+                        'created_by' => $admin->email_id,
+                        'multi_condition' => $rule['multi_condition'] ?? "no",
+                    ]);
+
+                    $service_fee_rules[] = $service_fee_rule;
+                // }
             }
 
             DB::commit();
@@ -107,7 +122,10 @@ class ServiceFeeRuleController extends Controller
                 'rules.*.fee_type' => 'nullable|in:hardcoded,calculated,estimated',
                 'rules.*.fixed_fee' => 'nullable|string',
                 'rules.*.question_id' => 'nullable|integer|exists:service_questionnaires,id',
+                'rules.*.condition_label_question_id' => 'nullable|integer|exists:service_questionnaires,id',
                 'rules.*.condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
+                'rules.*.pre_condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
+                'rules.*.pre_condition_value' => 'nullable|string',
                 'rules.*.condition_value_start' => 'nullable|string',
                 'rules.*.condition_value_end' => 'nullable|string',
                 'rules.*.calculated_fee' => 'nullable|string',
@@ -115,6 +133,7 @@ class ServiceFeeRuleController extends Controller
                 'rules.*.per_unit_fee' => 'nullable|string',
                 'rules.*.priority' => 'nullable|integer',
                 'rules.*.status' => 'nullable|boolean',
+                'rules.*.multi_condition' => 'nullable|in:yes,no',
             ]);
 
             DB::beginTransaction();
@@ -131,7 +150,10 @@ class ServiceFeeRuleController extends Controller
                     'fee_type' => $rule['fee_type'] ?? null,
                     'fixed_fee' => $rule['fixed_fee'] ?? null,
                     'question_id' => $rule['question_id'] ?? null,
+                    'condition_label_question_id' => $rule['condition_label_question_id'] ?? null,
+                    'pre_condition_operator' => $rule['pre_condition_operator'] ?? null,
                     'condition_operator' => $rule['condition_operator'] ?? null,
+                    'pre_condition_value' => $rule['pre_condition_value'] ?? null,
                     'condition_value_start' => $rule['condition_value_start'] ?? null,
                     'condition_value_end' => $rule['condition_value_end'] ?? null,
                     'calculated_fee' => $rule['calculated_fee'] ?? null,
@@ -139,7 +161,8 @@ class ServiceFeeRuleController extends Controller
                     'per_unit_fee' => $rule['per_unit_fee'] ?? null,
                     'priority' => $rule['priority'] ?? null,
                     'status' => $rule['status'] ?? 1,
-                    'updated_by' => $admin->email_id
+                    'updated_by' => $admin->email_id,
+                    'multi_condition' => $rule['multi_condition'] ?? $service_fee_rule['multi_condition'],
                 ]);
 
                 $service_fee_rules[] = $service_fee_rule;
@@ -188,10 +211,40 @@ class ServiceFeeRuleController extends Controller
                 ], 404);
             }
 
+            $data = $service_fee_rules->map(function ($rule) {
+                return [
+                    'id' => $rule->id,
+                    'service_id' => $rule->service_id,
+                    'renewal_cycle_id' => $rule->renewal_cycle_id,
+                    'fee_type' => $rule->fee_type,
+                    'fixed_fee' => $rule->fixed_fee,
+                    'question_id' => $rule->question_id,
+                    'question_label' => $rule->question->question_label ?? null,
+                    'condition_label_question_id' => $rule->condition_label_question_id ?? null,
+                    'condition_label_question' => $rule->conditionQuestion->question_label ?? null,
+                    'pre_condition_value' => $rule->pre_condition_value ?? null,
+                    'pre_condition_operator' => $rule->pre_condition_operator ?? null,
+                    'condition_operator' => $rule->condition_operator,
+                    'condition_value_start' => $rule->condition_value_start,
+                    'condition_value_end' => $rule->condition_value_end,
+                    'fixed_fee' => $rule->fixed_fee,
+                    'calculated_fee' => $rule->calculated_fee,
+                    'fixed_calculated_fee' => $rule->fixed_calculated_fee,
+                    'per_unit_fee' => $rule->per_unit_fee,
+                    'priority' => $rule->priority,
+                    'status' => $rule->status,
+                    'multi_condition' => $rule->multi_condition,
+                    'created_by' => $rule->created_by,
+                    'updated_by' => $rule->updated_by,
+                    'created_at' => $rule->created_at,
+                    'updated_at' => $rule->updated_at,
+                ];
+            });
+
             return response()->json([
                 'status' => 1,
                 'message' => 'Service fee rule fetched successfully.',
-                'data' => $service_fee_rules,
+                'data' => $data,
             ]);
         } catch (\Exception $e) {
 

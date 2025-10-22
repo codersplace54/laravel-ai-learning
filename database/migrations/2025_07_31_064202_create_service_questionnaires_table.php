@@ -13,6 +13,7 @@ return new class extends Migration
             $table->id();
             $table->bigInteger('service_id');
             $table->text('question_label');
+            $table->string('condition_label')->nullable();
             $table->string('question_type');
             $table->enum('is_required', ['yes', 'no']);
             $table->text('options')->nullable();

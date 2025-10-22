@@ -10,6 +10,7 @@ class ServiceQuestionnaire extends Model
         'id',
         'service_id',
         'question_label',
+        'condition_label',
         'question_type',
         'is_required',
         'options',
