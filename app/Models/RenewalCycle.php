@@ -25,7 +25,9 @@ class RenewalCycle extends Model
         'created_at',
         'updated_at',
         'created_by',
-        'updated_by'
+        'updated_by',
+        'late_fee_start_type',
+        'late_fee_start_date',
     ];
 
     protected $casts = [

@@ -19,6 +19,8 @@ use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\ServiceApplicationExport;
 
 class ServiceController extends Controller
 {
@@ -1319,6 +1321,21 @@ class ServiceController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong while fetching the application count',
                 'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function export_service_applications()
+    {
+        try {
+
+            return Excel::download(new ServiceApplicationExport, 'service_applications.xlsx');
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate Excel file',
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }

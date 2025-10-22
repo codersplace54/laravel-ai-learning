@@ -86,4 +86,10 @@ class UserServiceApplication extends Model
     {
         return $this->belongsTo(UnitDetail::class, 'user_id', 'user_id');
     }
+
+    public function renewal_cycle()
+    {
+        return $this->belongsTo(RenewalCycle::class, 'renewal_cycle_id');
+    }
+
 }

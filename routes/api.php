@@ -235,6 +235,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('/get-total-applications-by-department', [ServiceController::class, 'get_total_applications_by_department']);
         Route::post('/get-list-of-NOC-issued-by-department', [ServiceController::class, 'get_list_of_NOC_issued_by_department']);
+        Route::post('export-service-applications', [ServiceController::class, 'export_service_applications']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
