@@ -181,6 +181,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('download-user-application-pdf',  [ServiceController::class, 'download_user_application_pdf']);
         Route::post('get-user-applications-per-service', [UserServiceApplicationController::class, 'get_user_applications_per_service']);
         Route::post('/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
+        Route::post('calculate-fee', [UserServiceApplicationController::class, 'calculate_fee']);
 
         Route::prefix('incentive')->group(function () {
             Route::post('scheme-list', [UserIncentiveApplicationController::class, 'user_incentive_scheme_list']);

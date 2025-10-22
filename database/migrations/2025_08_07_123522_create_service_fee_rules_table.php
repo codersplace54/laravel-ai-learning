@@ -16,7 +16,10 @@ return new class extends Migration
             $table->enum('fee_type', ['hardcoded', 'calculated', 'estimated'])->nullable();
             $table->string('fixed_fee')->nullable();
             $table->bigInteger('question_id')->nullable();
+            $table->bigInteger('condition_label_question_id')->nullable();
+            $table->enum('pre_condition_operator', ['=', '!=', '<', '<=', '>', '>=', 'between'])->nullable();
             $table->enum('condition_operator', ['=', '!=', '<', '<=', '>', '>=', 'between'])->nullable();
+            $table->string('pre_condition_value')->nullable();
             $table->string('condition_value_start')->nullable();
             $table->string('condition_value_end')->nullable();
             $table->string('calculated_fee')->nullable();
@@ -24,6 +27,7 @@ return new class extends Migration
             $table->string('per_unit_fee')->nullable();
             $table->integer('priority')->nullable();
             $table->boolean('status')->default(1);
+            $table->enum('multi_condition', ['yes', 'no'])->default('no')->nullable();
             $table->timestamps();
         });
     }

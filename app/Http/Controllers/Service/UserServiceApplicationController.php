@@ -591,52 +591,127 @@ class UserServiceApplicationController extends Controller
     }
 
 
-    public function calculate_final_fee($serviceId, $applicationData)
+    // public function calculate_final_fee($serviceId, $applicationData)
+    // {
+
+    //     $rules = ServiceFeeRule::where('service_id', $serviceId)
+    //         ->get();
+
+    //     $final_fee = 0;
+
+    //     foreach ($rules as $rule) {
+    //         $user_answer = $applicationData[$rule->question_id] ?? null;
+
+    //         if ($user_answer === null) {
+    //             continue;
+    //         }
+
+    //         $match = false;
+
+    //         switch ($rule->condition_operator) {
+    //             case '=':
+    //                 $match = ($user_answer == $rule->condition_value_start);
+    //                 break;
+    //             case '!=':
+    //                 $match = ($user_answer != $rule->condition_value_start);
+    //                 break;
+    //             case '<':
+    //                 $match = ($user_answer < $rule->condition_value_start);
+    //                 break;
+    //             case '<=':
+    //                 $match = ($user_answer <= $rule->condition_value_start);
+    //                 break;
+    //             case '>':
+    //                 $match = ($user_answer > $rule->condition_value_start);
+    //                 break;
+    //             case '>=':
+    //                 $match = ($user_answer >= $rule->condition_value_start);
+    //                 break;
+    //             case 'between':
+    //                 $match = ($user_answer >= $rule->condition_value_start && $user_answer <= $rule->condition_value_end);
+    //                 break;
+    //         }
+
+    //         if ($match) {
+
+    //             if ($rule->fee_type === 'hardcoded') {
+    //                 $final_fee += (float) $rule->fixed_fee;
+    //             } elseif (in_array($rule->fee_type, ['calculated', 'estimated'])) {
+    //                 if (!empty($rule->per_unit_fee)) {
+    //                     $final_fee += $user_answer * (float) $rule->per_unit_fee;
+    //                 } elseif (!empty($rule->fixed_calculated_fee)) {
+    //                     $final_fee += (float) $rule->fixed_calculated_fee;
+    //                 } elseif (!empty($rule->calculated_fee)) {
+    //                     $final_fee += $user_answer * (float) $rule->calculated_fee;
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     return $final_fee;
+    // }
+
+    public function calculate_final_fee($service_id, $application_data)
     {
-
-        $rules = ServiceFeeRule::where('service_id', $serviceId)
-            ->get();
-
+        $rules = ServiceFeeRule::where('service_id', $service_id)->get();
         $final_fee = 0;
 
         foreach ($rules as $rule) {
-            $user_answer = $applicationData[$rule->question_id] ?? null;
 
-            if ($user_answer === null) {
-                continue;
+            if ($rule->condition_label_question_id) {
+                $pre_value = $application_data[$rule->condition_label_question_id] ?? null;
+
+                if ($pre_value === null) {
+                    continue;
+                }
+
+                if (is_numeric($pre_value)) {
+                    $pre_value = (float) $pre_value;
+                }
+
+                $pre_match = match ($rule->pre_condition_operator) {
+                    '='  => $pre_value == $rule->pre_condition_value,
+                    '!=' => $pre_value != $rule->pre_condition_value,
+                    '<'  => $pre_value <  $rule->pre_condition_value,
+                    '<=' => $pre_value <= $rule->pre_condition_value,
+                    '>'  => $pre_value >  $rule->pre_condition_value,
+                    '>=' => $pre_value >= $rule->pre_condition_value,
+                    default => true,
+                };
+
+                if (!$pre_match) {
+                    continue;
+                }
             }
 
-            $match = false;
+            $user_answer = $application_data[$rule->question_id] ?? null;
+            if ($user_answer === null) continue;
 
-            switch ($rule->condition_operator) {
-                case '=':
-                    $match = ($user_answer == $rule->condition_value_start);
-                    break;
-                case '!=':
-                    $match = ($user_answer != $rule->condition_value_start);
-                    break;
-                case '<':
-                    $match = ($user_answer < $rule->condition_value_start);
-                    break;
-                case '<=':
-                    $match = ($user_answer <= $rule->condition_value_start);
-                    break;
-                case '>':
-                    $match = ($user_answer > $rule->condition_value_start);
-                    break;
-                case '>=':
-                    $match = ($user_answer >= $rule->condition_value_start);
-                    break;
-                case 'between':
-                    $match = ($user_answer >= $rule->condition_value_start && $user_answer <= $rule->condition_value_end);
-                    break;
+            if (is_numeric($user_answer)) {
+                $user_answer = (float) $user_answer;
             }
 
-            if ($match) {
+            $match = match ($rule->condition_operator) {
+                '='  => $user_answer == $rule->condition_value_start,
+                '!=' => $user_answer != $rule->condition_value_start,
+                '<'  => $user_answer <  $rule->condition_value_start,
+                '<=' => $user_answer <= $rule->condition_value_start,
+                '>'  => $user_answer >  $rule->condition_value_start,
+                '>=' => $user_answer >= $rule->condition_value_start,
+                'between' => $user_answer >= $rule->condition_value_start &&
+                    $user_answer <= $rule->condition_value_end,
+                default => true,
+            };
 
-                if ($rule->fee_type === 'hardcoded') {
+            if (!$match) continue;
+
+            switch ($rule->fee_type) {
+                case 'hardcoded':
                     $final_fee += (float) $rule->fixed_fee;
-                } elseif (in_array($rule->fee_type, ['calculated', 'estimated'])) {
+                    break;
+
+                case 'calculated':
+                case 'estimated':
                     if (!empty($rule->per_unit_fee)) {
                         $final_fee += $user_answer * (float) $rule->per_unit_fee;
                     } elseif (!empty($rule->fixed_calculated_fee)) {
@@ -644,12 +719,55 @@ class UserServiceApplicationController extends Controller
                     } elseif (!empty($rule->calculated_fee)) {
                         $final_fee += $user_answer * (float) $rule->calculated_fee;
                     }
-                }
+                    break;
             }
         }
 
         return $final_fee;
     }
+
+
+
+    public function calculate_fee(Request $request)
+    {
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'service_id' => 'required|integer|exists:service_masters,id',
+                'application_data' => 'required|array',
+            ]);
+
+            $service_id = $request->service_id;
+            $application_data = $request->application_data;
+
+            $final_fee = $this->calculate_final_fee($service_id, $application_data);
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Fee calculated successfully.',
+                'data' => [
+                    'service_id' => $service_id,
+                    'final_fee' => $final_fee
+                ]
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to calculate fee.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
 
     function add_working_days(Carbon $startDate, int $workingDays)
     {
@@ -1146,8 +1264,8 @@ class UserServiceApplicationController extends Controller
             ]);
 
             $service_user_application = UserServiceApplication::where('user_id', $request->user_id)
-            ->where('service_id', $request->service_id)
-            ->get();
+                ->where('service_id', $request->service_id)
+                ->get();
 
             if ($service_user_application->isEmpty()) {
                 return response()->json([

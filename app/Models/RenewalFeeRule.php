@@ -13,6 +13,9 @@ class RenewalFeeRule extends Model
         'fee_type',
         'fixed_fee',
         'question_id',
+        'condition_label_question_id',
+        'pre_condition_operator',
+        'pre_condition_value',
         'condition_operator',
         'condition_value_start',
         'condition_value_end',
@@ -24,7 +27,8 @@ class RenewalFeeRule extends Model
         'created_at',
         'updated_at',
         'created_by',
-        'updated_by'
+        'updated_by',
+        'multi_condition'
 
     ];
 
@@ -41,5 +45,15 @@ class RenewalFeeRule extends Model
     public function questions()
     {
         return $this->belongsTo(ServiceQuestionnaire::class, 'service_id');
+    }
+
+    public function question()
+    {
+        return $this->belongsTo(ServiceQuestionnaire::class, 'question_id');
+    }
+
+    public function conditionQuestion()
+    {
+        return $this->belongsTo(ServiceQuestionnaire::class, 'condition_label_question_id');
     }
 }

@@ -28,6 +28,7 @@ class ServiceQuestionnaireController extends Controller
                 'questionnaires' => 'required|array',
                 'questionnaires.*.service_id' => 'required|integer|exists:service_masters,id',
                 'questionnaires.*.question_label' => 'required|string',
+                'questionnaires.*.condition_label' => 'nullable',
                 'questionnaires.*.question_type' => 'required|string',
                 'questionnaires.*.is_required' => 'required|in:yes,no',
                 'questionnaires.*.options' => 'nullable|string',
@@ -55,34 +56,42 @@ class ServiceQuestionnaireController extends Controller
                 $sample_format = null;
                 if ($request->hasFile("questionnaires.$index.sample_format")) {
                     $file = $request->file("questionnaires.$index.sample_format");
-                    $filename = str_replace(' ', '_',$file->getClientOriginalName());
+                    $filename = str_replace(' ', '_', $file->getClientOriginalName());
                     $sample_format = $file->storeAs(
                         "uploads/service_questions/{$questionnaire['id']}/sample_format",
                         $filename,
                         'public'
-                    );  
+                    );
                 }
 
-                $service_questionnaire[] = ServiceQuestionnaire::create([
-                    'service_id' => $questionnaire['service_id'],
-                    'question_label' => $questionnaire['question_label'],
-                    'question_type' => $questionnaire['question_type'],
-                    'is_required' => $questionnaire['is_required'],
-                    'options' => $questionnaire['options'] ?? null,
-                    'default_value' => $questionnaire['default_value'] ?? null,
-                    'default_source_table' => $questionnaire['default_source_table'] ?? null,
-                    'default_source_column' => $questionnaire['default_source_column'] ?? null,
-                    'display_order' => $questionnaire['display_order'] ?? null,
-                    'group_label' => $questionnaire['group_label'] ?? null,
-                    'display_width' => $questionnaire['display_width'] ?? null,
-                    'status' => $questionnaire['status'] ?? 1,
-                    'validation_required' => $questionnaire['validation_required'],
-                    'validation_rule' => json_encode($questionnaire['validation_rule'] ?? null),
-                    'is_section' => $questionnaire['is_section'] ?? 'no',
-                    'section_name' => $questionnaire['section_name'] ?? null,
-                    'created_by' => $admin->email_id,
-                    'sample_format' => $sample_format,
-                ]);
+                $conditionLabels = $questionnaire['condition_label'] ?? [null];
+                if (!is_array($conditionLabels)) {
+                    $conditionLabels = [$conditionLabels];
+                }
+
+                foreach ($conditionLabels as $label) {
+                    $service_questionnaire[] = ServiceQuestionnaire::create([
+                        'service_id' => $questionnaire['service_id'],
+                        'question_label' => $questionnaire['question_label'],
+                        'condition_label' => $label,
+                        'question_type' => $questionnaire['question_type'],
+                        'is_required' => $questionnaire['is_required'],
+                        'options' => $questionnaire['options'] ?? null,
+                        'default_value' => $questionnaire['default_value'] ?? null,
+                        'default_source_table' => $questionnaire['default_source_table'] ?? null,
+                        'default_source_column' => $questionnaire['default_source_column'] ?? null,
+                        'display_order' => $questionnaire['display_order'] ?? null,
+                        'group_label' => $questionnaire['group_label'] ?? null,
+                        'display_width' => $questionnaire['display_width'] ?? null,
+                        'status' => $questionnaire['status'] ?? 1,
+                        'validation_required' => $questionnaire['validation_required'],
+                        'validation_rule' => json_encode($questionnaire['validation_rule'] ?? null),
+                        'is_section' => $questionnaire['is_section'] ?? 'no',
+                        'section_name' => $questionnaire['section_name'] ?? null,
+                        'created_by' => $admin->email_id,
+                        'sample_format' => $sample_format,
+                    ]);
+                }
             }
 
             foreach ($service_questionnaire as &$service) {
@@ -163,7 +172,7 @@ class ServiceQuestionnaireController extends Controller
                     }
 
                     $file = $request->file("questionnaires.$index.sample_format");
-                    $filename = str_replace(' ', '_',$file->getClientOriginalName());
+                    $filename = str_replace(' ', '_', $file->getClientOriginalName());
                     $sample_format = $file->storeAs("uploads/service_questions/{$questionnaire['id']}/sample_format", $filename, 'public');
                 }
 
