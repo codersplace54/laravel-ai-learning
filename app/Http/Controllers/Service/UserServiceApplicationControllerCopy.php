@@ -150,30 +150,32 @@ class UserServiceApplicationController extends Controller
                         }
                     }
 
-                    $application_data = (array) $user_service_application->application_data ?: [];
-                    $new_data = (array) $request->input('application_data', []);
+                    $current_application_data = $user_service_application->application_data ?: [];
 
-                    $removed_question_ids = json_decode((string)($request->input('remove_file_question_ids') ?? '[]'), true) ?? [];
+                    $application_data = $request->application_data;
+
+                    $removed_question_ids = json_decode((string) ($request->input('remove_file_question_ids') ?? '[]'), true) ?? [];
+
                     foreach ($removed_question_ids as $question_id) {
-                        $old_file_path = $application_data[$question_id] ?? null;
-                        if ($old_file_path && !str_starts_with($old_file_path, 'http')) {        //change
+
+                        $old_file_path = $current_application_data[$question_id] ?? null;
+                        if ($old_file_path) {
                             Storage::disk('public')->delete($old_file_path);
+                            unset($application_data[$question_id]);
                         }
-                        unset($application_data[$question_id]);
                     }
 
                     foreach ($request->file('application_data', []) as $question_id => $uploaded_file) {
-                        if (!$uploaded_file) continue;
-                        $old_file_path = $application_data[$question_id] ?? null;
-                        if ($old_file_path && !str_starts_with($old_file_path, 'http')) {
+                        $old_file_path = $current_application_data[$question_id] ?? null;
+                        if ($old_file_path) {
                             Storage::disk('public')->delete($old_file_path);
                         }
-                        $filename = uniqid() . '.' . $uploaded_file->getClientOriginalExtension();
-                        $path = $uploaded_file->storeAs("uploads/$user->id/applications", $filename, 'public');
-                        $new_data[$question_id] = $path;
-                    }
+                        $file = $uploaded_file;
+                        $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                        $path = $file->storeAs("uploads/$user->id/applications", $filename, 'public');
 
-                    $application_data = array_merge($application_data, $new_data);
+                        $application_data[$question_id] = $path;
+                    }
 
                     $user_service_application->update([
                         'renewal_cycle_id'      => $request->renewal_cycle_id,
@@ -362,7 +364,6 @@ class UserServiceApplicationController extends Controller
 
     private function validate_questionnaire_file_inputs(Request $request): void
     {
-
         $service_id = $request->service_id;
 
         $file_questions = ServiceQuestionnaire::where('service_id', $service_id)
@@ -377,26 +378,26 @@ class UserServiceApplicationController extends Controller
         $rules = [];
 
         foreach ($file_questions as $question) {
-            $field_key = 'application_data.' . $question->id;
-
-            $existing_value = $request->input($field_key);
-            if (is_string($existing_value) && (
-                str_starts_with($existing_value, 'uploads/') ||
-                str_starts_with($existing_value, 'http://') ||
-                str_starts_with($existing_value, 'https://')
-            )) {
-                continue;
-            }
-
+            $field_key   = 'application_data.' . $question->id;
             $rule_string = 'nullable|file';
-            $validation_rule = $question->validation_rule ? json_decode($question->validation_rule, true) : [];
 
-            if (!empty($validation_rule['mimes'])) {
-                $rule_string .= '|mimes:' . implode(',', $validation_rule['mimes']);
+            $validation_rule = $question->validation_rule;
+            if ($validation_rule) {
+                $validation_rule = json_decode($validation_rule, true);
+            } else {
+                return;
             }
 
-            if (!empty($validation_rule['max_size_mb']) && $validation_rule['max_size_mb'] > 0) {
-                $rule_string .= '|max:' . ($validation_rule['max_size_mb'] * 1024);
+            $allowed_mimes = (!empty($validation_rule['mimes'])) ? $validation_rule['mimes'] : [];
+
+            $max_size_mb = isset($validation_rule['max_size_mb']) ? (int) $validation_rule['max_size_mb'] : null;
+
+            if (is_array($allowed_mimes) && !empty($allowed_mimes)) {
+                $rule_string .= '|mimes:' . implode(',', $allowed_mimes);
+            }
+
+            if (!empty($max_size_mb) && $max_size_mb > 0) {
+                $rule_string .= '|max:' . ($max_size_mb * 1024);
             }
 
             $rules[$field_key] = $rule_string;

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Incentive;
 
 use App\Http\Controllers\Controller;
+use App\Models\EnterpriseDetail;
 use App\Models\IncentiveWorkflowHistory;
 use Illuminate\Http\Request;
 use App\Models\UserIncentiveApplication;
@@ -33,13 +34,8 @@ class UserIncentiveApplicationController extends Controller
 
             $request->validate([
                 'save_data'        => 'required|integer|in:0,1',
-                'scheme_id'        => 'required|integer|exists:schemes,id',
                 'proforma_id'      => 'required|integer|exists:proformas,id',
                 'application_type' => 'required|in:eligibility,claim',
-                'eligibility_application_id' => 'exclude_unless:application_type,claim|required_unless:save_data,1|integer|exists:user_incentive_applications,id',
-                'claim_type'                 => 'exclude_unless:application_type,claim|required_unless:save_data,1|in:one_time,monthly,quarterly,half_yearly,annually,biennially,triennially,quinquenially',
-                'claim_period_start'         => 'exclude_unless:application_type,claim|required_unless:save_data,1|date',
-                'claim_period_end'           => 'exclude_unless:application_type,claim|required_unless:save_data,1|date|after_or_equal:claim_period_start',
                 'files'        => 'nullable|array',
                 'files.*'      => 'array',
                 'files.*.*'    => 'file|max:10240|mimes:pdf,jpg,jpeg,png,avif,webp',
@@ -50,9 +46,10 @@ class UserIncentiveApplicationController extends Controller
 
             DB::beginTransaction();
 
+            $proforma = Proforma::where('id', $request->proforma_id)->first();
             $find_application = [
                 'user_id'          => $user->id,
-                'scheme_id'        => $request->scheme_id,
+                'scheme_id'        => $proforma->scheme->id,
                 'proforma_id'      => $request->proforma_id,
                 'application_type' => $request->application_type,
             ];
@@ -134,7 +131,7 @@ class UserIncentiveApplicationController extends Controller
                     $ext         = $uploaded_file->getClientOriginalExtension();
                     $filename    = $uuid . '.' . ($ext ?: 'bin');
 
-                    $storage_path = $uploaded_file->storeAs("uploads/proformas/{$user->id}", $filename, 'public');
+                    $storage_path = $uploaded_file->storeAs("uploads/{$user->id}/incentive_applications", $filename, 'public');
 
                     $new_files_for_question[] = [
                         'file_id' => $uuid,
@@ -151,19 +148,21 @@ class UserIncentiveApplicationController extends Controller
                     $existing_files = [];
                 }
 
-                $answers[$question_id]['files'] = array_values(array_merge($existing_files, $new_files_for_question));
+                // $answers[$question_id]['files'] = array_values(array_merge($existing_files, $new_files_for_question));
+                $answers[$question_id]['files'] = $new_files_for_question ?: $existing_files;
+
                 $answers[$question_id]['value'] = $answers[$question_id]['value'] ?? null;
             }
 
 
             $application->form_answers_json = $answers;
 
-            if ($request->application_type === 'claim') {
-                $application->eligibility_application_id = $request->input('eligibility_application_id');
-                $application->claim_type = $request->input('claim_type');
-                $application->claim_period_start = $request->input('claim_period_start');
-                $application->claim_period_end   = $request->input('claim_period_end');
-            }
+            $application->claim_type = $proforma->claim_type;
+
+            $answers_array = $answers;
+            $subsidy = $this->build_subsidy_report($request->proforma_id, $answers_array);
+
+            $application->subsidy_report = json_encode($subsidy, JSON_UNESCAPED_UNICODE);
 
             if (!$application->exists) {
                 $application->workflow_status = 'draft';
@@ -202,23 +201,22 @@ class UserIncentiveApplicationController extends Controller
                 }
 
                 $previous_workflow_status = $application->workflow_status ?? 'draft';
-                $application->workflow_status = 'under_review_da';
+                $application->workflow_status = 'submitted';
                 $application->submitted_at    = now();
                 $application->save();
 
                 IncentiveWorkflowHistory::insert([
                     'application_id' => $application->id,
                     'from_status'    => $previous_workflow_status,
-                    'to_status'      => 'under_review_da',
-                    'action'         => 'submitted',
+                    'to_status'      => 'submitted',
                     'action_taken_by' => $user->id,
                     'remarks'        => $request->input('remarks'),
-                    'meta'           => null,
                     'action_taken_at' => now(),
                 ]);
 
                 DB::commit();
 
+                $application->subsidy_report = json_decode($application->subsidy_report, true);
                 return response()->json([
                     'status'  => 1,
                     'message' => 'Application Submitted successfully.',
@@ -252,63 +250,6 @@ class UserIncentiveApplicationController extends Controller
         }
     }
 
-    private function validate_proforma_file_inputs(Request $request): void
-    {
-        $proforma_id = $request->proforma_id;
-
-        $file_questions = ProformaQuestionnaire::where('proforma_id', $proforma_id)
-            ->whereIn('question_type', ['file'])
-            ->where('status', 1)
-            ->get(['id', 'question_type', 'upload_rule']);
-
-        if ($file_questions->isEmpty()) {
-            return;
-        }
-
-        $rules = [];
-
-        foreach ($file_questions as $question) {
-
-            $field_key_list  = 'files.' . $question->id;
-            $field_key_items = 'files.' . $question->id . '.*';
-
-            $list_rules  = 'nullable|array';
-            $item_rules  = 'file';
-
-            $upload_rule = $question->upload_rule;
-            if ($upload_rule) {
-                $upload_rule = json_decode($upload_rule, true);
-            }
-
-            $allowed_mimes = (!empty($upload_rule['mimes'])) ? $upload_rule['mimes'] : [];
-
-            $max_size_mb = isset($upload_rule['max_size_mb']) ? $upload_rule['max_size_mb'] : null;
-            $min_files   = isset($upload_rule['min_files'])   ? $upload_rule['min_files']   : null;
-            $max_files   = isset($upload_rule['max_files'])   ? $upload_rule['max_files']   : null;
-
-            if (!empty($min_files) && $min_files > 0) {
-                $list_rules = 'nullable|array|min:' . $min_files;
-            }
-            if (!empty($max_files) && $max_files > 0) {
-                $list_rules .= '|max:' . $max_files;
-            }
-
-            if (!empty($allowed_mimes)) {
-                $item_rules .= '|mimes:' . implode(',', $allowed_mimes);
-            }
-
-            if (!empty($max_size_mb) && $max_size_mb > 0) {
-                $item_rules .= '|max:' . ($max_size_mb * 1024);
-            }
-
-            $rules[$field_key_list]  = $list_rules;
-            $rules[$field_key_items] = $item_rules;
-        }
-
-        if (!empty($rules)) {
-            $request->validate($rules);
-        }
-    }
 
     public function user_incentive_scheme_list(Request $request)
     {
@@ -317,7 +258,16 @@ class UserIncentiveApplicationController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $data = Scheme::select('id', 'code', 'title')->get();
+            $proposed_date_of_commissioning = EnterpriseDetail::where('user_id', Auth::id())->value('proposed_date_of_commissioning');
+
+            if (!$proposed_date_of_commissioning) {
+                return response()->json(['status' => 0, 'message' => 'Proposed commissioning date not found.'], 422);
+            }
+
+            $data = Scheme::query()
+                ->whereDate('policy_start_date', '<=',  $proposed_date_of_commissioning)
+                ->whereDate('policy_end_date', '>=', $proposed_date_of_commissioning)
+                ->select('id', 'code', 'title')->get();
 
             return response()->json([
                 'status'  => 1,
@@ -378,10 +328,12 @@ class UserIncentiveApplicationController extends Controller
                     'proforma_id'   => $proforma->id,
                     'application_code' => $proforma->code,
                     'application_type' => $proforma->title,
+                    'proforma_details' => $proforma->description,
                     'application_no'   => $application?->application_no,
                     'applied_on'       => $application?->submitted_at?->format('d/m/Y'),
                     'certificate_issued_or_rejected_on' => $application?->decided_at?->format('d/m/Y'),
                     'workflow_status' => $application?->workflow_status,
+                    'is_editable'     => $application  ? $this->is_application_editable($application) : true,
                 ];
             });
 
@@ -414,7 +366,7 @@ class UserIncentiveApplicationController extends Controller
             $user_eligibility_applications = UserIncentiveApplication::query()
                 ->where('user_id', $user_id)
                 ->where('application_type', 'eligibility')
-                ->where('workflow_status', 'approved')
+                ->whereIn('workflow_status', ['approved_by_gm', 'approved_by_slc'])
                 ->orderByDesc('decided_at')
                 ->get();
 
@@ -433,7 +385,7 @@ class UserIncentiveApplicationController extends Controller
             $user_claim_applications = UserIncentiveApplication::query()
                 ->where('user_id', $user_id)
                 ->where('application_type', 'claim')
-                ->where('workflow_status', 'approved')
+                ->whereIn('workflow_status', ['approved_by_gm', 'approved_by_slc'])
                 ->orderByDesc('decided_at')
                 ->with('proforma')
                 ->get()
@@ -469,7 +421,7 @@ class UserIncentiveApplicationController extends Controller
                 }
                 $months_gap = $claim_period_months[$claim_type] ?? null;
 
-                // Later need to handle for processing application
+                // Application not approved by department
                 if (!$months_gap || empty($application->decided_at)) {
                     continue;
                 }
@@ -484,14 +436,45 @@ class UserIncentiveApplicationController extends Controller
 
             $eligible_claim_proforma_ids = array_values($eligible_claim_proforma_ids);
 
-            $eligible_proformas = Proforma::whereIn('id', $eligible_claim_proforma_ids)->get();
+            $claim_proformas = Proforma::query()
+                ->whereIn('id', $eligible_claim_proforma_ids)
+                ->where('status', 1)
+                ->orderBy('display_order')
+                ->orderByDesc('id')
+                ->with(['applications' => function ($q) use ($user_id) {
+                    $q->where('user_id', $user_id)
+                        ->where('application_type', 'claim')
+                        ->orderByDesc('id')
+                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id');
+                }])
+                ->select('id', 'scheme_id', 'code', 'title', 'description')
+                ->get();
+
+            $response_data = $claim_proformas->map(function ($proforma) {
+                $application = $proforma->applications->first();
+
+                return [
+                    'application_id'   => $application?->id,
+                    'scheme_id'        => $proforma->scheme->id,
+                    'proforma_id'      => $proforma->id,
+                    'application_code' => $proforma->code,
+                    'application_type' => $proforma->title,
+                    'proforma_details' => $proforma->description,
+                    'application_no'   => $application?->application_no,
+                    'applied_on'       => $application?->submitted_at?->format('d/m/Y'),
+                    'approved_on'      => $application?->decided_at?->format('d/m/Y'),
+                    'workflow_status'  => $application?->workflow_status,
+                    'is_editable'      => $application ? $this->is_application_editable($application) : true,
+                ];
+            });
 
             return response()->json([
                 'status'  => 1,
                 'message' => 'Claim proforma fetched successfully.',
-                'data'    => $eligible_proformas,
+                'data'    => $response_data,
             ]);
         } catch (\Exception $e) {
+
             return response()->json([
                 'status' => 0,
                 'message' => 'Something went wrong.',
@@ -546,7 +529,7 @@ class UserIncentiveApplicationController extends Controller
 
                 $data['value'] = $answers[$question->id]['value'] ?? null;
                 $data['files'] = $answers[$question->id]['files'] ?? [];
-                
+
                 return $data;
             });
 
@@ -559,6 +542,7 @@ class UserIncentiveApplicationController extends Controller
                         'application_no'   => $application->application_no,
                         'workflow_status'  => $application->workflow_status,
                         'application_type' => $application->application_type,
+                        'is_editable'      => $this->is_application_editable($application),
                     ] : null,
                     'questions' => $questions_with_answers,
                 ],
@@ -587,44 +571,33 @@ class UserIncentiveApplicationController extends Controller
                 'date_to'        => 'nullable|date|after_or_equal:date_from',
             ]);
 
+            $user = User::where('id', auth()->user()->id)->with('department_user')->first();
+            $designation = $user ? $user?->department_user?->designation : null;
+
+            if (!$designation) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'No department/designation mapped to your account. Contact admin to assign one.',
+                ]);
+            }
+
             $applications = UserIncentiveApplication::with(['proforma', 'user']);
-            if ($request->department) {
-                if ($request->department == 'DA') {
-                    $applications->whereIn('workflow_status', ['submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da']);
-                } elseif ($request->department == "GM") {
-                    $applications->whereIn('workflow_status', ['approved_by_da', 'approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm']);
-                }
-            }
 
-            if ($request->status) {
-                $applications->where('workflow_status', $request->status);
-            }
+            if ($designation == 'Dealing Assistant') {
 
-            if ($request->scheme_id) {
-                $applications->where('scheme_id', $request->scheme_id);
-            }
+                $applications->whereIn('workflow_status', ['submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da']);
+            } elseif ($designation == "General Manager") {
 
-            if ($request->proforma_id) {
-                $applications->where('proforma_id', $request->proforma_id);
-            }
+                $applications->whereIn('workflow_status', ['approved_by_da', 'approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm']);
+            } elseif ($designation == "State Level Committee") {
 
-            if ($request->applicant_name) {
-                $applications->whereHas('user', function ($user) use ($request) {
-                    $user->where('authorized_person_name', 'like', '%' . $request->applicant_name . '%');
-                });
-            }
-            if ($request->applicant_phone) {
-                $applications->whereHas('user', function ($user) use ($request) {
-                    $user->where('mobile_no', 'like', '%' . $request->applicant_phone . '%');
-                });
-            }
+                $applications->whereIn('workflow_status', ['under_review_slc', 'approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc']);
+            } else {
 
-            if ($request->date_from && $request->date_to) {
-                $applications->whereBetween('submitted_at', [$request->date_from, $request->date_to]);
-            } elseif ($request->date_from) {
-                $applications->whereDate('submitted_at', '>=', $request->date_from);
-            } elseif ($request->date_to) {
-                $applications->whereDate('submitted_at', '<=', $request->date_to);
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Invalid designation. Only Dealing Assistant, General Manager, or State Level Committee can access applications.',
+                ]);
             }
 
             $applications = $applications->orderByDesc('submitted_at')->get();
@@ -661,29 +634,62 @@ class UserIncentiveApplicationController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $allowed_by_department = [
-                'DA' => ['approved_by_da', 'rejected_by_da', 'sent_back_by_da'],
-                'GM' => ['approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm'],
-            ];
-
             $request->validate([
                 'application_id' => 'required|integer|exists:user_incentive_applications,id',
-                'department'     => 'required|string|in:DA,GM',
-                'new_status'     => ['required', 'string', Rule::in($allowed_by_department[$request->department] ?? [])],
-                'remarks'        => 'nullable|string|required_if:new_status,rejected_by_da|required_if:new_status,sent_back_by_da|required_if:new_status,rejected_by_gm|required_if:new_status,sent_back_by_gm',
+                'new_status'     => 'required | string',
+                'remarks'        => 'nullable|string'
+                    . '|required_if:new_status,rejected_by_da'
+                    . '|required_if:new_status,sent_back_by_da'
+                    . '|required_if:new_status,rejected_by_gm'
+                    . '|required_if:new_status,sent_back_by_gm'
+                    . '|required_if:new_status,rejected_by_slc'
+                    . '|required_if:new_status,sent_back_by_slc',
+                'approved_items' => 'nullable',
+                'review_file' => 'nullable | file',
             ]);
 
             DB::beginTransaction();
+
+            $new_status = $request->new_status;
+
+            $user = User::with('department_user')->find(Auth::id());
+
+            $designation = $user?->department_user?->designation;
+
+            if ($designation === 'Dealing Assistant') {
+
+                $allowed_statuses = ['approved_by_da', 'rejected_by_da', 'sent_back_by_da'];
+            } elseif ($designation === 'General Manager') {
+
+                $allowed_statuses = ['approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm'];
+            } elseif ($designation === 'State Level Committee') {
+
+                $allowed_statuses = ['approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc'];
+            } else {
+
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Invalid designation. Only DA, GM, or SLC can update status.',
+                ], 422);
+            }
+
+            if (!in_array($new_status, $allowed_statuses, true)) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'You do not have authority to set this status.',
+                ], 422);
+            }
+
+            $approved_items = $request->input('approved_items');
 
             $application = UserIncentiveApplication::with('proforma')->find($request->application_id);
 
             $previous_status = $application->workflow_status;
             $new_status      = $request->new_status;
 
-            $application->workflow_status         = $new_status;
             $application->current_reviewer_user_id = Auth::id();
 
-            $final_statuses = ['approved_by_gm', 'rejected_by_da', 'rejected_by_gm'];
+            $final_statuses = ['approved_by_slc', 'rejected_by_slc', 'rejected_by_da', 'rejected_by_gm'];
             if (in_array($new_status, $final_statuses, true)) {
                 $application->decided_at = now();
             }
@@ -694,25 +700,65 @@ class UserIncentiveApplicationController extends Controller
                 }
             }
 
+            if (
+                in_array($new_status, ['approved_by_gm', 'approved_by_slc', 'approved_by_da'], true)
+                && $application->application_type === 'claim'
+                && $application->subsidy_report
+            ) {
+
+                $report = json_decode($application->subsidy_report, true) ?: [];
+
+                if (!empty($report['subsidy_items']) && is_array($report['subsidy_items'])) {
+                    $approved_total = 0.0;
+
+                    foreach ($report['subsidy_items'] as &$item) {
+                        $qid = (string) ($item['question_id'] ?? '');
+
+                        if ($approved_items && array_key_exists($qid, $approved_items)) {
+                            $item['approved'] = $approved_items[$qid];
+                        }
+
+                        $claimed  = ($item['claimed'] ?? 0);
+                        $approved = ($item['approved'] ?? 0);
+
+                        if ($approved <= 0) {
+                            $item['status'] = 'rejected';
+                        } elseif ($approved < $claimed) {
+                            $item['status'] = 'partial';
+                        } else {
+                            $item['status'] = 'approved';
+                        }
+
+                        $approved_total += $approved;
+                    }
+                    unset($item);
+
+                    $report['totals']['approved'] = round($approved_total, 2);
+                    $application->subsidy_report  = json_encode($report, JSON_UNESCAPED_UNICODE);
+                }
+            }
+
+            if ($new_status === 'approved_by_gm' && $approved_total > 500000) {
+                $new_status = 'under_review_slc';
+            }
+
+            $application->workflow_status = $new_status;
             $application->save();
 
-            $action_map = [
-                'approved_by_da'  => 'da_approved',
-                'rejected_by_da'  => 'da_rejected',
-                'sent_back_by_da' => 'da_sent_back',
-                'approved_by_gm'  => 'gm_approved',
-                'rejected_by_gm'  => 'gm_rejected',
-                'sent_back_by_gm' => 'gm_sent_back',
-            ];
+
+            if ($request->file('review_file')) {
+                $file = $request->review_file;
+                $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                $review_file = $file->storeAs("uploads/{$user->id}/incentive_applications", $filename, 'public');
+            }
 
             IncentiveWorkflowHistory::create([
                 'application_id'  => $application->id,
                 'from_status'     => $previous_status,
                 'to_status'       => $new_status,
-                'action'          => $action_map[$new_status] ?? 'status_updated',
+                'review_file'     => $review_file ?? null,
                 'action_taken_by' => Auth::id(),
                 'remarks'         => $request->input('remarks'),
-                'meta'            => null,
                 'action_taken_at' => now(),
             ]);
 
@@ -731,12 +777,16 @@ class UserIncentiveApplicationController extends Controller
                 ],
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
+
+
             return response()->json([
                 'status'  => 0,
                 'message' => 'Validation failed.',
                 'errors'  => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
+
+
             DB::rollBack();
             return response()->json([
                 'status'  => 0,
@@ -760,14 +810,16 @@ class UserIncentiveApplicationController extends Controller
             $status_labels = [
                 'draft'            => 'Draft',
                 'submitted'        => 'Submitted to DA',
-                'under_review_da'  => 'Under Review (DA)',
                 'approved_by_da'   => 'Forwarded to GM',
                 'sent_back_by_da'  => 'Query raised by DA',
                 'rejected_by_da'   => 'Rejected by DA',
-                'under_review_gm'  => 'Under Review (GM)',
                 'approved_by_gm'   => 'Approved',
                 'sent_back_by_gm'  => 'Query raised by GM',
                 'rejected_by_gm'   => 'Rejected by GM',
+                'under_review_slc'  => 'Under Review SLC',
+                'approved_by_slc'   => 'Approved',
+                'sent_back_by_slc'  => 'Query raised by SLC',
+                'rejected_by_slc'   => 'Rejected by SLC',
             ];
 
             $history = IncentiveWorkflowHistory::where('application_id', $request->application_id)
@@ -796,5 +848,243 @@ class UserIncentiveApplicationController extends Controller
                 'error'   => $e->getMessage(),
             ], 500);
         }
+    }
+
+
+    public function application_details(Request $request)
+    {
+        try {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'application_id' => 'required|integer|exists:user_incentive_applications,id',
+            ]);
+
+            $user = User::with('department_user')->find(Auth::id());
+            $designation = $user?->department_user?->designation;
+
+            if (!$designation) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'No department/designation mapped to your account. Contact admin.',
+                ], 422);
+            }
+
+            $application = UserIncentiveApplication::where('id', $request->application_id)->with(['proforma', 'user'])->first();
+
+            if ($designation === 'Dealing Assistant') {
+                $allowed = ['submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da'];
+            } elseif ($designation === 'General Manager') {
+                $allowed = ['approved_by_da', 'approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm'];
+            } elseif ($designation === 'State Level Committee') {
+                $allowed = ['under_review_slc', 'approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc'];
+            } else {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Invalid designation. Only DA, GM, or SLC can view application details.',
+                ], 422);
+            }
+
+            if (!in_array($application->workflow_status, $allowed, true)) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'You do not have authority to view this application.',
+                ], 403);
+            }
+
+            $answers = $application->form_answers_json;
+
+            $questions = ProformaQuestionnaire::where('proforma_id', $application->proforma->id)
+                ->orderBy('display_order')
+                ->orderBy('id')
+                ->get();
+
+            $questions_with_answers = $questions->map(function ($question) use ($answers) {
+                $answer = $answers[$question->id] ?? null;
+                return [
+                    'question_id' => $question->id,
+                    'question'    => $question->question_label,
+                    'answer'      => $answer['value'] ?? null,
+                    'files'       => $answer['files'],
+                ];
+            });
+
+            $subsidy_report = $application->subsidy_report ? json_decode($application->subsidy_report, true) : null;
+
+            $latest_workflow_history = IncentiveWorkflowHistory::where('application_id', $application->id)
+                ->orderByDesc('action_taken_at')
+                ->orderByDesc('id')
+                ->first(['remarks', 'review_file']);
+
+            $data = [
+                'id'                           => $application->id,
+                'application_no'               => $application->application_no,
+                'user_id'                      => $application->user_id,
+                'scheme'                       => $application->proforma->scheme->title,
+                'proforma'                     => $application->proforma->title,
+                'applicant_name'               => $application->user->authorized_person_name,
+                'application_type'             => $application->application_type,
+                'workflow_status'              => $application->workflow_status,
+                'remarks'                      => $latest_workflow_history->remarks,
+                'review_file'                  => $latest_workflow_history?->review_file ? asset('storage/' . $latest_workflow_history->review_file) : null,
+                'current_reviewer_user_id'     => $application->current_reviewer_user_id,
+                'submitted_at'                 => optional($application->submitted_at)->toDateTimeString(),
+                'decided_at'                   => optional($application->decided_at)->toDateTimeString(),
+                'eligibility_certificate_no'   => $application->eligibility_certificate_no,
+                'eligibility_certificate_path' => $application->eligibility_certificate_path,
+                'claim_type'                   => $application->claim_type,
+                'remaining_claim'              => $application->remaining_claim,
+                'claim_calculated'             => $application->claim_calculated,
+                'form_answers_json'            => $questions_with_answers,
+                'subsidy_report'               => $subsidy_report,
+                'created_at'                   => optional($application->created_at)->toDateTimeString(),
+                'updated_at'                   => optional($application->updated_at)->toDateTimeString(),
+            ];
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Application details fetched successfully.',
+                'data'    => $data,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+    private function build_subsidy_report($proformaId, $answers): array
+    {
+
+        $claim_questions = ProformaQuestionnaire::where('proforma_id', $proformaId)
+            ->where('status', 1)
+            ->where('is_claim', 'yes')
+            ->get(['id', 'question_label', 'claim_per_unit', 'claim_percentage']);
+
+        $subsidy_items = [];
+        $claim_total = 0.0;
+
+        foreach ($claim_questions as $q) {
+            $qid = (string)$q->id;
+            $value = $answers[$qid]['value'] ?? null;
+            $base = (int)($value);
+
+            $basis = null;
+            $claimed = 0.0;
+            $rate_per_unit = null;
+            $percentage  = null;
+
+            if (!empty($q->claim_per_unit) && $q->claim_per_unit > 0) {
+                $basis = 'per_unit';
+                $rate_per_unit = $q->claim_per_unit;
+                $claimed = round($base * $rate_per_unit, 2);
+            } elseif (!empty($q->claim_percentage) && $q->claim_percentage > 0) {
+                $basis = 'percentage';
+                $percentage = $q->claim_percentage;
+                $claimed = round($base * ($percentage / 100), 2);
+            } else {
+                continue;
+            }
+
+            $claim_total += $claimed;
+
+            $subsidy_items[] = [
+                'question_id'   => (int)$q->id,
+                'label'         => $q->question_label,
+                'basis'         => $basis,
+                'base_value'    => $base,
+                'rate_per_unit' => $rate_per_unit,
+                'percentage'    => $percentage,
+                'claimed'       => $claimed,
+                'approved'      => null,
+                'status'        => 'eligible',
+                'remarks'       => null,
+            ];
+        }
+
+        return [
+            'subsidy_items' => $subsidy_items,
+            'payments' => [],
+            'totals' => [
+                'claimed'   => round($claim_total, 2),
+                'approved'  => 0.0,
+                'disbursed' => 0.0,
+            ],
+        ];
+    }
+
+    private function validate_proforma_file_inputs(Request $request): void
+    {
+        $proforma_id = $request->proforma_id;
+
+        $file_questions = ProformaQuestionnaire::where('proforma_id', $proforma_id)
+            ->whereIn('question_type', ['file'])
+            ->where('status', 1)
+            ->get(['id', 'question_type', 'upload_rule']);
+
+        if ($file_questions->isEmpty()) {
+            return;
+        }
+
+        $rules = [];
+
+        foreach ($file_questions as $question) {
+
+            $field_key_list  = 'files.' . $question->id;
+            $field_key_items = 'files.' . $question->id . '.*';
+
+            $list_rules  = 'nullable|array';
+            $item_rules  = 'file';
+
+            $upload_rule = $question->upload_rule;
+            if ($upload_rule) {
+                $upload_rule = json_decode($upload_rule, true);
+            }
+
+            $allowed_mimes = (!empty($upload_rule['mimes'])) ? $upload_rule['mimes'] : [];
+
+            $max_size_mb = isset($upload_rule['max_size_mb']) ? $upload_rule['max_size_mb'] : null;
+            $min_files   = isset($upload_rule['min_files'])   ? $upload_rule['min_files']   : null;
+            $max_files   = isset($upload_rule['max_files'])   ? $upload_rule['max_files']   : null;
+
+            if (!empty($min_files) && $min_files > 0) {
+                $list_rules = 'nullable|array|min:' . $min_files;
+            }
+            if (!empty($max_files) && $max_files > 0) {
+                $list_rules .= '|max:' . $max_files;
+            }
+
+            if (!empty($allowed_mimes)) {
+                $item_rules .= '|mimes:' . implode(',', $allowed_mimes);
+            }
+
+            if (!empty($max_size_mb) && $max_size_mb > 0) {
+                $item_rules .= '|max:' . ($max_size_mb * 1024);
+            }
+
+            $rules[$field_key_list]  = $list_rules;
+            $rules[$field_key_items] = $item_rules;
+        }
+
+        if (!empty($rules)) {
+            $request->validate($rules);
+        }
+    }
+
+    private function is_application_editable(UserIncentiveApplication $application): bool
+    {
+        $editable_statuses = ['draft', 'sent_back_by_da', 'sent_back_by_gm', 'sent_back_by_slc'];
+        return in_array($application->workflow_status, $editable_statuses, true);
     }
 }
