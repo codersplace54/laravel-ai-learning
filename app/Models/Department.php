@@ -28,6 +28,11 @@ class Department extends Model
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 
+    public function feedbacks()
+    {
+        return $this->hasMany(UserFeedback::class, 'department_id');
+    }
+
     public function services()
     {
         return $this->hasMany(ServiceMaster::class, 'department_id', 'id');

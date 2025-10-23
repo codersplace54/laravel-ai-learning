@@ -269,8 +269,8 @@ class UserIncentiveApplicationController extends Controller
 
         foreach ($file_questions as $question) {
 
-            $field_key_list  = 'files.' . $question->id;      
-            $field_key_items = 'files.' . $question->id . '.*'; 
+            $field_key_list  = 'files.' . $question->id;
+            $field_key_items = 'files.' . $question->id . '.*';
 
             $list_rules  = 'nullable|array';
             $item_rules  = 'file';
@@ -285,7 +285,7 @@ class UserIncentiveApplicationController extends Controller
             $max_size_mb = isset($upload_rule['max_size_mb']) ? $upload_rule['max_size_mb'] : null;
             $min_files   = isset($upload_rule['min_files'])   ? $upload_rule['min_files']   : null;
             $max_files   = isset($upload_rule['max_files'])   ? $upload_rule['max_files']   : null;
-            
+
             if (!empty($min_files) && $min_files > 0) {
                 $list_rules = 'nullable|array|min:' . $min_files;
             }
@@ -374,10 +374,11 @@ class UserIncentiveApplicationController extends Controller
                 $application = $proforma->applications->first();
 
                 return [
+                    'application_id'   => $application?->id,
                     'proforma_id'   => $proforma->id,
                     'application_code' => $proforma->code,
                     'application_type' => $proforma->title,
-                    'application_id'   => $application?->application_no,
+                    'application_no'   => $application?->application_no,
                     'applied_on'       => $application?->submitted_at?->format('d/m/Y'),
                     'certificate_issued_or_rejected_on' => $application?->decided_at?->format('d/m/Y'),
                     'workflow_status' => $application?->workflow_status,
@@ -534,20 +535,19 @@ class UserIncentiveApplicationController extends Controller
                 ->get();
 
             $questions_with_answers = $questions->map(function ($question) use ($answers) {
-                return [
-                    'id'             => $question->id,
-                    'question_label' => $question->question_label,
-                    'question_type'  => $question->question_type,
-                    'is_required'    => $question->is_required,
-                    'options'        => $question->options,
-                    'default_value'  => $question->default_value,
-                    'group_label'    => $question->group_label,
-                    'display_width'  => $question->display_width,
-                    'display_order'  => $question->display_order,
-                    'upload_rule'    => $question->upload_rule ? json_decode($question->upload_rule, true) : null,
-                    'value'          => $answers[$question->id]['value'] ?? null,
-                    'files'          => $answers[$question->id]['files'] ?? [],
-                ];
+                $data = $question->toArray();
+                $data['upload_rule'] = $question->upload_rule
+                    ? json_decode($question->upload_rule, true)
+                    : null;
+
+                $data['sample_format'] = $question->sample_format
+                    ? asset(Storage::url($question->sample_format))
+                    : null;
+
+                $data['value'] = $answers[$question->id]['value'] ?? null;
+                $data['files'] = $answers[$question->id]['files'] ?? [];
+                
+                return $data;
             });
 
             return response()->json([
