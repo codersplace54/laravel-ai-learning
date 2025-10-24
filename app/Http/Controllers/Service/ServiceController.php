@@ -508,6 +508,19 @@ class ServiceController extends Controller
                 ], 404);
             }
 
+            $current_step = ApplicationWorkflowAssignment::where('application_id', $application->id)
+                ->orderByDesc('id')
+                ->first();
+
+            $max_step = ServiceApprovalFlow::where('service_id', $application->service_id)
+                ->max('step_number');
+
+            $is_just_before_final_step = false;
+
+            if ($current_step->step_number == $max_step) {
+                $is_just_before_final_step = true;
+            }
+
             $formatted_data = [];
             $application_data = json_decode($application->application_data, true);
             if (!empty($application_data)) {
@@ -521,6 +534,26 @@ class ServiceController extends Controller
                     ];
                 }
             }
+
+
+            $history_data = ApplicationWorkflowHistory::where('application_id', $application->id)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($history_data) {
+                $history_data = [
+                    'id'             => $history_data->id,
+                    'step_number'    => $history_data->step_number,
+                    'status'         => $history_data->status,
+                    'remarks'        => $history_data->remarks,
+                    'status_file'    => !empty($history_data->status_file)
+                        ? asset('storage/' . $history_data->status_file)
+                        : null,
+                    'action_taken_at' => $history_data->action_taken_at,
+                    'action_taken_by' => $history_data->action_taken_by,
+                ];
+            }
+
 
             $response = [
                 'application_id'  => $application->id,
@@ -552,6 +585,8 @@ class ServiceController extends Controller
                         'remarks'         => $flow->remarks,
                     ];
                 }),
+                'just_before_final_step'  => $is_just_before_final_step,
+                'history_data'    => $history_data,
             ];
 
             return response()->json([
@@ -715,10 +750,10 @@ class ServiceController extends Controller
 
             if ($request->status === 'approved') {
 
-                $maxStep = ServiceApprovalFlow::where('service_id', $application->service_id)
+                $max_step = ServiceApprovalFlow::where('service_id', $application->service_id)
                     ->max('step_number');
 
-                if ($current_step->step_number == $maxStep) {
+                if ($current_step->step_number == $max_step) {
                     $application->update([
                         'status'       => 'approved',
                         'updated_at' => now(),
@@ -727,6 +762,7 @@ class ServiceController extends Controller
                     if ($application->service->form_template) {
                         $this->generate_dynamic_pdf($application, $user);
                     }
+
                     return response()->json([
                         'status' => 1,
                         'message' => 'Application approved successfully. Final step completed.',
@@ -1120,6 +1156,7 @@ class ServiceController extends Controller
         Storage::disk('public')->put($path, $pdf->output());
         $application->update(['NOC_certificate' => $path]);
     }
+
     public function get_total_applications_by_department(Request $request)
     {
 
@@ -1336,6 +1373,130 @@ class ServiceController extends Controller
                 'success' => false,
                 'message' => 'Failed to generate Excel file',
                 'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    // public function preview_certificate($application_id)
+    // {
+    //     try {
+    //         $application = UserServiceApplication::with('service')->findOrFail($application_id);
+
+    //         if (!$application->service || !$application->service->form_template) {
+    //             return response()->json([
+    //                 'status' => 0,
+    //                 'message' => 'Certificate template not found.'
+    //             ]);
+    //         }
+
+    //         $user = Auth::user();
+
+    //         $this->generate_dynamic_pdf($application, $user);
+
+    //         $pdfPath = $application->fresh()->NOC_certificate;
+
+    //         if (!$pdfPath || !Storage::disk('public')->exists($pdfPath)) {
+    //             return response()->json([
+    //                 'status' => 0,
+    //                 'message' => 'Failed to generate or locate PDF file.'
+    //             ]);
+    //         }
+
+    //         return response()->json([
+    //             'status' => 1,
+    //             'message' => 'Certificate preview generated successfully.',
+    //             'pdf_url' => asset('storage/' . $pdfPath),
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => 0,
+    //             'message' => 'Something went wrong while generating certificate preview.',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+    public function preview_certificate($application_id)
+    {
+
+        try {
+
+
+            $application = UserServiceApplication::with('service')->findOrFail($application_id);
+
+            if (!$application->service || !$application->service->form_template) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Certificate template not found.'
+                ]);
+            }
+
+            $user = Auth::user();
+
+            $template = (string) data_get($application, 'service.form_template', '');
+            $template = html_entity_decode($template, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $template = str_replace("\xC2\xA0", ' ', $template);
+
+            $name = $application->user->authorized_person_name ?? $user->name ?? '—';
+            $verifyUrl = 'https://swaagat.tripura.gov.in/verify';
+
+            $qrPayload = "Name: {$name}\nApplication Id: {$application->id}\n{$verifyUrl}";
+            $qrSvg = QrCode::format('svg')->size(220)->margin(0)->generate($qrPayload);
+            $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
+
+            $data = [
+                'form_title'        => 'FORM VI',
+                'rules_ref'         => '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
+                'government'        => 'Government of Tripura',
+                'issuing_office'    => 'Office of the Licensing Officer',
+                'verify_portal_url' => 'https://swaagat.tripura.gov.in',
+
+                'license_id'          => $application->id ?? '—',
+                'issue_date'          => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
+                'principal_employer'  => $application->user->authorized_person_name ?? '—',
+                'guardian_name'       => $application->user->management_details->owner_details_father_name ?? '—',
+                'address'             => $application->user->management_details->owner_details_residential_details ?? '—',
+                'work_location'       => $application->work_location ?? 'Tripura',
+                'registration_no'     => $application->id ?? '—',
+                'registration_date'   => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
+                'valid_upto'          => $application->NOC_expiry_date ? Carbon::parse($application->NOC_expiry_date)->format('d-m-Y') : '—',
+                'max_contract_labour' => (string) ($application->max_contract_labour ?? 0),
+                'fee_paid'            => (string) ($application->final_fee ?? 0),
+                'security_deposit'    => (string) ($application->security_deposit ?? ''),
+                'designation'         => $application->service->department->department_user->designation ?? '',
+                'spc_code'            => $application->spc_code ?? '—',
+                'signature_note'      => 'Not Required',
+                'user_name'           => $user->authorized_person_name ?? '',
+                'user_id'             => (string) $user->id,
+                'qr_code'             => $qrDataUri,
+            ];
+
+            $filled = preg_replace_callback('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', function ($m) use ($data) {
+                $key = $m[1];
+                return e($data[$key] ?? '');
+            }, $template);
+
+            if (stripos($filled, '<html') === false) {
+                $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
+            }
+
+            $pdf = Pdf::loadHTML($filled)->setPaper('a4', 'portrait');
+
+            $temp_file_name = 'preview_' . uniqid() . '.pdf';
+            $temp_path = storage_path('app/public/temp/' . $temp_file_name);
+            Storage::disk('public')->put('temp/' . $temp_file_name, $pdf->output());
+
+            $previewUrl = asset('storage/temp/' . $temp_file_name);
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Preview generated successfully.',
+                'pdf_url' => $previewUrl,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while generating preview.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
