@@ -153,7 +153,8 @@ class RenewalFeeRuleController extends Controller
                     'per_unit_fee' => $rule['per_unit_fee'] ?? null,
                     'priority' => $rule['priority'] ?? null,
                     'status' => $rule['status'] ?? 1,
-                    'updated_by' => $admin->email_id
+                    'updated_by' => $admin->email_id,
+                    'multi_condition' => $rule['multi_condition'] ?? $renewal_fee_rule['multi_condition'],
                 ]);
 
                 $renewal_fee_rules[] = $renewal_fee_rule;

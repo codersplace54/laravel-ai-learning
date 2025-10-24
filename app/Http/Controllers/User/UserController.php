@@ -576,6 +576,7 @@ class UserController extends Controller
                     'department_id' => $user->department_user->department_id ?? null,
                     'registered_enterprise_address' => $user->registered_enterprise_address,
                     'registered_enterprise_city' => $user->registered_enterprise_city,
+                    'hierarchy_level' => $user->department_user->hierarchy_level ?? null,
                     'user_type' => $user->user_type,
                     'status' => $user->status,
                     'created_at'  => $user->created_at,

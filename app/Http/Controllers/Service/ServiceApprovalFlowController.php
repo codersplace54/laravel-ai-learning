@@ -181,8 +181,8 @@ class ServiceApprovalFlowController extends Controller
             ]);
 
             $service_approval_flows = ServiceApprovalFlow::where('service_id', $request->service_id)
-            ->orderBy('id', 'asc')
-            ->get();
+                ->orderBy('id', 'asc')
+                ->get();
 
             if ($service_approval_flows->isEmpty()) {
                 return response()->json([
@@ -191,10 +191,26 @@ class ServiceApprovalFlowController extends Controller
                 ], 404);
             }
 
+            $data = $service_approval_flows->map(function ($flow) {
+                return [
+                    'id' => $flow->id,
+                    'service_id' => $flow->service_id,
+                    'step_number' => $flow->step_number,
+                    'step_type' => $flow->step_type,
+                    'department_id' => $flow->department_id,
+                    'department_name' => $flow->department->name,
+                    'hierarchy_level' => $flow->hierarchy_level,
+                    'created_by' => $flow->created_by,
+                    'updated_by' => $flow->updated_by,
+                    'created_at' => $flow->created_at,
+                    'updated_at' => $flow->updated_at,
+                ];
+            });
+
             return response()->json([
                 'status' => 1,
                 'message' => 'Service approval flow fetched successfully.',
-                'data' => $service_approval_flows,
+                'data' => $data,
             ]);
         } catch (\Exception $e) {
 
