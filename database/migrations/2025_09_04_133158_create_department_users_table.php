@@ -17,7 +17,7 @@ return new class extends Migration
             $table->bigInteger('block_id')->nullable();
             $table->bigInteger('subdivision_id')->nullable();
             $table->bigInteger('district_id')->nullable();
-            $table->enum('hierarchy_level', ['block', 'subdivision', 'district', 'state1', 'state2', 'state3']);
+            $table->enum('hierarchy_level', ['block', 'subdivision1', 'subdivision2', 'subdivision3', 'district1', 'district2', 'district3', 'state1', 'state2', 'state3']);
             $table->integer('is_active')->default(1);
             $table->timestamps();
         });
