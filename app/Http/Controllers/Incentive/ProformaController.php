@@ -26,7 +26,8 @@ class ProformaController extends Controller
                     ),
                 'title'         => 'required|string|max:200',
                 'proforma_type' => 'required|in:eligibility,claim',
-                'claim_type'    => ['nullable',
+                'claim_type'    => [
+                    'nullable',
                     Rule::requiredIf($request->proforma_type === 'claim'),
                     'in:one_time,monthly,quarterly,half_yearly,annually,biennially,triennially,quinquenially',
                 ],
@@ -34,7 +35,11 @@ class ProformaController extends Controller
                 'max_claim_count' => 'required_if:proforma_type,claim|integer|nullable',
                 'display_order' => 'nullable|integer',
                 'status'        => 'nullable|integer|in:0,1',
-                'depends_on_proforma_ids'   => 'nullable|array',
+                'depends_on_proforma_ids'   => [
+                    'nullable',
+                    Rule::requiredIf($request->proforma_type === 'claim'),
+                    'array'
+                ],
                 'depends_on_proforma_ids.*' => 'integer|' .
                     Rule::exists('proformas', 'id')->where(
                         fn($q) =>

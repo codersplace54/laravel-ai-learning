@@ -36,10 +36,6 @@ class UserIncentiveApplicationController extends Controller
                 'scheme_id'        => 'required|integer|exists:schemes,id',
                 'proforma_id'      => 'required|integer|exists:proformas,id',
                 'application_type' => 'required|in:eligibility,claim',
-                'eligibility_application_id' => 'exclude_unless:application_type,claim|required_unless:save_data,1|integer|exists:user_incentive_applications,id',
-                'claim_type'                 => 'exclude_unless:application_type,claim|required_unless:save_data,1|in:one_time,monthly,quarterly,half_yearly,annually,biennially,triennially,quinquenially',
-                'claim_period_start'         => 'exclude_unless:application_type,claim|required_unless:save_data,1|date',
-                'claim_period_end'           => 'exclude_unless:application_type,claim|required_unless:save_data,1|date|after_or_equal:claim_period_start',
                 'files'        => 'nullable|array',
                 'files.*'      => 'array',
                 'files.*.*'    => 'file|max:10240|mimes:pdf,jpg,jpeg,png,avif,webp',
@@ -50,6 +46,7 @@ class UserIncentiveApplicationController extends Controller
 
             DB::beginTransaction();
 
+            $proforma = Proforma::where('id', $request->proforma_id)->first();
             $find_application = [
                 'user_id'          => $user->id,
                 'scheme_id'        => $request->scheme_id,
@@ -159,10 +156,73 @@ class UserIncentiveApplicationController extends Controller
             $application->form_answers_json = $answers;
 
             if ($request->application_type === 'claim') {
-                $application->eligibility_application_id = $request->input('eligibility_application_id');
-                $application->claim_type = $request->input('claim_type');
-                $application->claim_period_start = $request->input('claim_period_start');
-                $application->claim_period_end   = $request->input('claim_period_end');
+                // $application->eligibility_application_id = $request->input('eligibility_application_id');
+                $application->claim_type = $proforma->proforma_type;
+                $today = now(); 
+
+                switch ($proforma->claim_type) {
+                    case 'one_time':
+                        $claim_start = $today;
+                        $claim_end   = $today;
+                        break;
+
+                    case 'monthly':
+                        $claim_start = $today->copy()->startOfMonth();
+                        $claim_end   = $today->copy()->endOfMonth();
+                        break;
+
+                    case 'quarterly':
+                        $claim_start = $today->copy()->firstOfQuarter();
+                        $claim_end   = $today->copy()->lastOfQuarter();
+                        break;
+
+                    case 'half_yearly':
+                        if ($today->month <= 6) {
+                            $claim_start = now()->year($today->year)->month(1)->startOfMonth();
+                            $claim_end   = now()->year($today->year)->month(6)->endOfMonth();
+                        } else {
+                            $claim_start = now()->year($today->year)->month(7)->startOfMonth();
+                            $claim_end   = now()->year($today->year)->month(12)->endOfMonth();
+                        }
+                        break;
+
+                    case 'annually':
+                        $claim_start = now()->year($today->year)->startOfYear();
+                        $claim_end   = now()->year($today->year)->endOfYear();
+                        break;
+
+                    case 'biennially':
+                        $year_start  = $today->year % 2 === 0 ? $today->year : $today->year - 1;
+                        $claim_start = now()->year($year_start)->startOfYear();
+                        $claim_end   = now()->year($year_start + 1)->endOfYear();
+                        break;
+
+                    case 'triennially':
+                        $year_start  = $today->year - ($today->year % 3);
+                        $claim_start = now()->year($year_start)->startOfYear();
+                        $claim_end   = now()->year($year_start + 2)->endOfYear();
+                        break;
+
+                    case 'quinquenially':
+                        $year_start  = $today->year - ($today->year % 5);
+                        $claim_start = now()->year($year_start)->startOfYear();
+                        $claim_end   = now()->year($year_start + 4)->endOfYear();
+                        break;
+
+                    default:
+                        $claim_start = $today;
+                        $claim_end   = $today;
+                        break;
+                }
+
+                $application->claim_period_start = $claim_start;
+                $application->claim_period_end   = $claim_end;
+
+
+                $answers_array = $answers;
+                $subsidy = $this->build_subsidy_report($request->proforma_id, $answers_array);
+                
+                $application->subsidy_report = json_encode($subsidy, JSON_UNESCAPED_UNICODE);
             }
 
             if (!$application->exists) {
@@ -202,14 +262,14 @@ class UserIncentiveApplicationController extends Controller
                 }
 
                 $previous_workflow_status = $application->workflow_status ?? 'draft';
-                $application->workflow_status = 'under_review_da';
+                $application->workflow_status = 'submitted';
                 $application->submitted_at    = now();
                 $application->save();
 
                 IncentiveWorkflowHistory::insert([
                     'application_id' => $application->id,
                     'from_status'    => $previous_workflow_status,
-                    'to_status'      => 'under_review_da',
+                    'to_status'      => 'submitted',
                     'action'         => 'submitted',
                     'action_taken_by' => $user->id,
                     'remarks'        => $request->input('remarks'),
@@ -219,6 +279,7 @@ class UserIncentiveApplicationController extends Controller
 
                 DB::commit();
 
+                $application->subsidy_report = json_decode($application->subsidy_report, true);
                 return response()->json([
                     'status'  => 1,
                     'message' => 'Application Submitted successfully.',
@@ -250,6 +311,66 @@ class UserIncentiveApplicationController extends Controller
                 'error'   => $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function build_subsidy_report($proformaId, $answers): array
+    {
+        
+        $claim_questions = ProformaQuestionnaire::where('proforma_id', $proformaId)
+            ->where('status', 1)
+            ->where('is_claim', 'yes')
+            ->get(['id', 'question_label', 'claim_per_unit', 'claim_percentage']);
+
+        $subsidy_items = [];
+        $claim_total = 0.0;
+
+        foreach ($claim_questions as $q) {
+            $qid = (string)$q->id;
+            $value = $answers[$qid]['value'] ?? null;
+            $base = (int)($value);
+
+            $basis = null;
+            $claimed = 0.0;
+            $rate_per_unit = null;
+            $percentage  = null;
+
+            if (!empty($q->claim_per_unit) && $q->claim_per_unit > 0) {
+                $basis = 'per_unit';
+                $rate_per_unit = $q->claim_per_unit;
+                $claimed = round($base * $rate_per_unit, 2);
+            } elseif (!empty($q->claim_percentage) && $q->claim_percentage > 0) {
+                $basis = 'percentage';
+                $percentage = $q->claim_percentage;
+                $claimed = round($base * ($percentage / 100), 2);
+            } else {
+                continue;
+            }
+            
+            $claim_total += $claimed;
+
+            $subsidy_items[] = [
+                'question_id'   => (int)$q->id,
+                'label'         => $q->question_label,
+                'basis'         => $basis,
+                'base_value'    => $base,
+                'rate_per_unit' => $rate_per_unit,
+                'percentage'    => $percentage,
+                'claimed'       => $claimed,
+                'approved'      => null,
+                'status'        => 'eligible',
+                'remarks'       => null,
+            ];
+        }
+
+        return [
+            'subsidy_items' => $subsidy_items,
+            'payments' => [],
+            'totals' => [
+                'claimed'   => round($claim_total, 2),
+                'approved'  => 0.0,
+                'disbursed' => 0.0,
+            ],
+        ];
     }
 
     private function validate_proforma_file_inputs(Request $request): void
@@ -414,7 +535,7 @@ class UserIncentiveApplicationController extends Controller
             $user_eligibility_applications = UserIncentiveApplication::query()
                 ->where('user_id', $user_id)
                 ->where('application_type', 'eligibility')
-                ->where('workflow_status', 'approved')
+                ->where('workflow_status', 'approved_by_gm') // Add here for SLC
                 ->orderByDesc('decided_at')
                 ->get();
 
@@ -546,7 +667,7 @@ class UserIncentiveApplicationController extends Controller
 
                 $data['value'] = $answers[$question->id]['value'] ?? null;
                 $data['files'] = $answers[$question->id]['files'] ?? [];
-                
+
                 return $data;
             });
 
@@ -693,6 +814,36 @@ class UserIncentiveApplicationController extends Controller
                     $application->eligibility_certificate_no = 'ELG-' . date('y') . '-' . str_pad((string)$application->id, 6, '0', STR_PAD_LEFT);
                 }
             }
+            if ($new_status === 'approved_by_gm' && $application->application_type === 'claim') {
+                
+                if ($application->subsidy_report) {
+                    $report = json_decode($application->subsidy_report, true) ?: [];
+
+                    if (!empty($report['subsidy_items'])) {
+
+                        $approved_total = 0.0;
+
+                        foreach ($report['subsidy_items'] as &$subsidy_item) {
+                            
+                            if (!isset($subsidy_item['approved']) || $subsidy_item['approved'] === null) {
+                                $subsidy_item['approved'] = $subsidy_item['claimed'];
+                            }
+
+                            if (!isset($subsidy_item['status']) || $subsidy_item['status'] === 'eligible') {
+                                $subsidy_item['status'] = 'approved';
+                            }
+                            $approved_total += $subsidy_item['approved'];
+                        }
+                        
+                        unset($subsidy_item);
+
+                        $report['totals']['approved'] = round($approved_total, 2);
+
+                        $application->subsidy_report = json_encode($report, JSON_UNESCAPED_UNICODE);
+                    }
+                }
+            }
+
 
             $application->save();
 
