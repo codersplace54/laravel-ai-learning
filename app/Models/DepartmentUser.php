@@ -16,6 +16,7 @@ class DepartmentUser extends Model
         'district_id',
         'hierarchy_level',
         'is_active',
+        'inspector',
         'created_at',
         'updated_at',
         'created_by',
