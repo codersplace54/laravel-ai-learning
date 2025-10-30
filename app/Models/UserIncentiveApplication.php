@@ -24,6 +24,7 @@ class UserIncentiveApplication extends Model
         'claim_period_end',
         'claim_calculated',
         'form_answers_json',
+        'subsidy_report',
     ];
 
     protected $casts = [

@@ -1011,11 +1011,31 @@ class UserServiceApplicationController extends Controller
                 }
             }
 
+            $history_data = ApplicationWorkflowHistory::where('application_id', $application->id)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($history_data) {
+                $history_data = [
+                    'id'             => $history_data->id,
+                    'step_number'    => $history_data->step_number,
+                    'status'         => $history_data->status,
+                    'remarks'        => $history_data->remarks,
+                    'status_file'    => !empty($history_data->status_file)
+                        ? asset('storage/' . $history_data->status_file)
+                        : null,
+                    'action_taken_at' => $history_data->action_taken_at,
+                    'action_taken_by' => $history_data->action_taken_by,
+                ];
+            }
+
+
             return response()->json([
                 'status'            => 1,
                 'message'           => 'Service user application fetched successfully.',
                 'data'              => $application,
                 'application_data'  => $formatted_data,
+                'history_data'    => $history_data,
             ]);
         } catch (\Exception $e) {
             return response()->json([

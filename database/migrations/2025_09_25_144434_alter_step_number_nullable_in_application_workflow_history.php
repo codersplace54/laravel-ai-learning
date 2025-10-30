@@ -13,7 +13,7 @@ return new class extends Migration
             $table->unsignedInteger('step_number')->nullable()->change();
             $table->enum('step_type', ['validation', 'review', 'screening', 'scrutiny', 'approval'])->nullable()->change();
             $table->bigInteger('department_id')->nullable()->change();
-            $table->enum('hierarchy_level', ['block', 'subdivision', 'district', 'state1', 'state2', 'state3'])->nullable()->change();
+            $table->enum('hierarchy_level', ['block', 'subdivision1', 'subdivision2', 'subdivision3', 'district1', 'district2', 'district3', 'state1', 'state2', 'state3'])->nullable()->change();
             $table->bigInteger('action_taken_by')->nullable()->change();
             $table->dateTime('action_taken_at')->nullable()->change();
             $table->enum('status', ['pending', 'in_progress', 'approved', 'rejected', 'send_back', 'extra_payment', 'saved'])->nullable()->change();
@@ -27,7 +27,7 @@ return new class extends Migration
             $table->unsignedInteger('step_number')->nullable()->change();
             $table->enum('step_type', ['validation', 'review', 'screening', 'scrutiny', 'approval'])->nullable()->change();
             $table->bigInteger('department_id')->nullable()->change();
-            $table->enum('hierarchy_level', ['block', 'subdivision', 'district', 'state1', 'state2', 'state3'])->nullable()->change();
+            $table->enum('hierarchy_level', ['block', 'subdivision1', 'subdivision2', 'subdivision3', 'district1', 'district2', 'district3', 'state1', 'state2', 'state3'])->nullable()->change();
             $table->bigInteger('action_taken_by')->nullable()->change();
             $table->dateTime('action_taken_at')->nullable()->change();
             $table->enum('status', ['pending', 'in_progress', 'approved', 'rejected', 'send_back', 'extra_payment', 'saved'])->nullable()->change();

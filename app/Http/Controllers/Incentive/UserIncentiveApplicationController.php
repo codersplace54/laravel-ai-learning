@@ -699,6 +699,36 @@ class UserIncentiveApplicationController extends Controller
                     $application->eligibility_certificate_no = 'ELG-' . date('y') . '-' . str_pad((string)$application->id, 6, '0', STR_PAD_LEFT);
                 }
             }
+            if ($new_status === 'approved_by_gm' && $application->application_type === 'claim') {
+                
+                if ($application->subsidy_report) {
+                    $report = json_decode($application->subsidy_report, true) ?: [];
+
+                    if (!empty($report['subsidy_items'])) {
+
+                        $approved_total = 0.0;
+
+                        foreach ($report['subsidy_items'] as &$subsidy_item) {
+                            
+                            if (!isset($subsidy_item['approved']) || $subsidy_item['approved'] === null) {
+                                $subsidy_item['approved'] = $subsidy_item['claimed'];
+                            }
+
+                            if (!isset($subsidy_item['status']) || $subsidy_item['status'] === 'eligible') {
+                                $subsidy_item['status'] = 'approved';
+                            }
+                            $approved_total += $subsidy_item['approved'];
+                        }
+                        
+                        unset($subsidy_item);
+
+                        $report['totals']['approved'] = round($approved_total, 2);
+
+                        $application->subsidy_report = json_encode($report, JSON_UNESCAPED_UNICODE);
+                    }
+                }
+            }
+
 
             if (
                 in_array($new_status, ['approved_by_gm', 'approved_by_slc', 'approved_by_da'], true)

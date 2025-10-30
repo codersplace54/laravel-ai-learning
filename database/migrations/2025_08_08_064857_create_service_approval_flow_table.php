@@ -15,7 +15,7 @@ return new class extends Migration
             $table->integer('step_number');
             $table->enum('step_type', ['validation', 'review', 'screening', 'scrutiny', 'approval']);
             $table->bigInteger('department_id');
-            $table->enum('hierarchy_level', ['block', 'subdivision', 'district', 'state1', 'state2', 'state3']);
+            $table->enum('hierarchy_level', ['block', 'subdivision1', 'subdivision2', 'subdivision3', 'district1', 'district2', 'district3', 'state1', 'state2', 'state3']);
             $table->timestamps();
         });
     }
