@@ -33,6 +33,7 @@ class UserIncentiveApplicationController extends Controller
             $is_save_only = $request->save_data == 1;
 
             $request->validate([
+                'application_id'   => 'nullable|integer|exists:user_incentive_applications,id',
                 'save_data'        => 'required|integer|in:0,1',
                 'proforma_id'      => 'required|integer|exists:proformas,id',
                 'application_type' => 'required|in:eligibility,claim',
@@ -47,15 +48,12 @@ class UserIncentiveApplicationController extends Controller
             DB::beginTransaction();
 
             $proforma = Proforma::where('id', $request->proforma_id)->first();
-            $find_application = [
-                'user_id'          => $user->id,
-                'scheme_id'        => $proforma->scheme->id,
-                'proforma_id'      => $request->proforma_id,
-                'application_type' => $request->application_type,
-            ];
 
-            $application = UserIncentiveApplication::firstOrNew($find_application);
 
+            $application = UserIncentiveApplication::where('id', $request->application_id)->first();
+            if (!$application) {
+                $application = new UserIncentiveApplication();
+            }
             $existing_answers = $application->form_answers_json;
 
             if (is_string($existing_answers)) {
@@ -168,6 +166,10 @@ class UserIncentiveApplicationController extends Controller
                 $application->workflow_status = 'draft';
             }
 
+            $application->application_type = $proforma->proforma_type;
+            $application->proforma_id = $proforma->id;
+            $application->scheme_id = $proforma->scheme->id;
+            $application->user_id = Auth::id();
             $application->save();
 
             if (!$is_save_only) {
@@ -200,10 +202,26 @@ class UserIncentiveApplicationController extends Controller
                     $application->application_no = 'INE-' . date('y') . '-' . str_pad((string)$application->id, 6, '0', STR_PAD_LEFT);
                 }
 
+
+                $previous_status = $application->workflow_status;
+
+                $application->application_type = $proforma->proforma_type;
                 $previous_workflow_status = $application->workflow_status ?? 'draft';
                 $application->workflow_status = 'submitted';
                 $application->submitted_at    = now();
+                $application->user_id = Auth::id();
                 $application->save();
+
+                if ($application->workflow_status == 'submitted' && ($previous_status == 'draft' || $previous_status == null)) {
+                    $used_count = UserIncentiveApplication::where('user_id', Auth::id())
+                        ->where('proforma_id', $proforma->id)
+                        ->where('application_type', 'claim')
+                        ->count();
+                    
+
+                    $application->remaining_claim = $proforma->max_claim_count - $used_count;
+                    $application->save();
+                }
 
                 IncentiveWorkflowHistory::insert([
                     'application_id' => $application->id,
@@ -261,7 +279,14 @@ class UserIncentiveApplicationController extends Controller
             $proposed_date_of_commissioning = EnterpriseDetail::where('user_id', Auth::id())->value('proposed_date_of_commissioning');
 
             if (!$proposed_date_of_commissioning) {
-                return response()->json(['status' => 0, 'message' => 'Proposed commissioning date not found.'], 422);
+                return response()->json(
+                    [
+                        'data'    => [],
+                        'status' => 1,
+                        'message' => 'Proposed commissioning date not found.'
+                    ],
+                    422
+                );
             }
 
             $data = Scheme::query()
@@ -315,7 +340,8 @@ class UserIncentiveApplicationController extends Controller
 
             if ($eligibility_proformas->isEmpty()) {
                 return response()->json([
-                    'status' => 0,
+                    'data' => [],
+                    'status' => 1,
                     'message' => 'No proforma found for the given scheme_id.',
                 ], 404);
             }
@@ -352,7 +378,6 @@ class UserIncentiveApplicationController extends Controller
         }
     }
 
-
     public function user_claim_proforma_list(Request $request)
     {
         try {
@@ -362,7 +387,6 @@ class UserIncentiveApplicationController extends Controller
 
             $user_id = Auth::id();
 
-            // for eligibility
             $user_eligibility_applications = UserIncentiveApplication::query()
                 ->where('user_id', $user_id)
                 ->where('application_type', 'eligibility')
@@ -385,60 +409,24 @@ class UserIncentiveApplicationController extends Controller
             $user_claim_applications = UserIncentiveApplication::query()
                 ->where('user_id', $user_id)
                 ->where('application_type', 'claim')
-                ->whereIn('workflow_status', ['approved_by_gm', 'approved_by_slc'])
+                // ->whereIn('workflow_status', ['approved_by_gm', 'approved_by_slc'])
                 ->orderByDesc('decided_at')
                 ->with('proforma')
                 ->get()
                 ->unique('proforma_id')
-                ->values();
+                ->values()
+                ->pluck('proforma_id')
+                ->toArray();
 
-            /* 
-                decided_at => newest first
-                unique('proforma_id') => the latest claim
-                values() => reindex
-            */
-
-            $claim_period_months = [
-                'monthly'     => 1,
-                'quarterly'   => 3,
-                'half_yearly' => 6,
-                'annually'    => 12,
-                'biennially'  => 24,
-                'triennially' => 36,
-                'quinquenially' => 60,
-            ];
-
-            foreach ($user_claim_applications as $application) {
-
-                $claim_type = $application->claim_type;
-
-                if ($application->proforma->status != 1 || $claim_type === 'one_time') {
-                    continue;
-                }
-
-                if (!is_null($application->remaining_claim) && $application->remaining_claim < 1) {
-                    continue;
-                }
-                $months_gap = $claim_period_months[$claim_type] ?? null;
-
-                // Application not approved by department
-                if (!$months_gap || empty($application->decided_at)) {
-                    continue;
-                }
-
-                $last_claim_approved_on = Carbon::parse($application->decided_at);
-                $next_claim_allowed_on  = $last_claim_approved_on->copy()->addMonths($months_gap);
-
-                if (now()->greaterThanOrEqualTo($next_claim_allowed_on)) {
-                    $eligible_claim_proforma_ids[] = $application->proforma->id;
-                }
-            }
-
+            $eligible_claim_proforma_ids = array_merge($eligible_claim_proforma_ids, $user_claim_applications);
             $eligible_claim_proforma_ids = array_values($eligible_claim_proforma_ids);
+            // dd($eligible_claim_proforma_ids);
+
 
             $claim_proformas = Proforma::query()
                 ->whereIn('id', $eligible_claim_proforma_ids)
                 ->where('status', 1)
+                ->where('proforma_type', 'claim')
                 ->orderBy('display_order')
                 ->orderByDesc('id')
                 ->with(['applications' => function ($q) use ($user_id) {
@@ -447,26 +435,55 @@ class UserIncentiveApplicationController extends Controller
                         ->orderByDesc('id')
                         ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id');
                 }])
-                ->select('id', 'scheme_id', 'code', 'title', 'description')
+                ->select('id', 'scheme_id', 'code', 'title', 'description', 'claim_type')
                 ->get();
+            
+            $claim_period_months = [
+                'monthly'       => 1,
+                'quarterly'     => 3,
+                'half_yearly'   => 6,
+                'annually'      => 12,
+                'biennially'    => 24,
+                'triennially'   => 36,
+                'quinquenially' => 60,
+            ];
 
-            $response_data = $claim_proformas->map(function ($proforma) {
-                $application = $proforma->applications->first();
+            $response_data = $claim_proformas->flatMap(function ($proforma) use ($claim_period_months) {
+                return $proforma->applications->map(function ($application) use ($proforma, $claim_period_months) {
 
-                return [
-                    'application_id'   => $application?->id,
-                    'scheme_id'        => $proforma->scheme->id,
-                    'proforma_id'      => $proforma->id,
-                    'application_code' => $proforma->code,
-                    'application_type' => $proforma->title,
-                    'proforma_details' => $proforma->description,
-                    'application_no'   => $application?->application_no,
-                    'applied_on'       => $application?->submitted_at?->format('d/m/Y'),
-                    'approved_on'      => $application?->decided_at?->format('d/m/Y'),
-                    'workflow_status'  => $application?->workflow_status,
-                    'is_editable'      => $application ? $this->is_application_editable($application) : true,
-                ];
-            });
+                    $can_reapply = true;
+
+                    if ($proforma->claim_type === 'one_time') {
+                        $can_reapply = false;
+                    } elseif ($proforma->claim_type !== 'one_time') {
+                        $months_gap = $claim_period_months[$proforma->claim_type] ?? null;
+
+                        if ($months_gap && $application->submitted_at) {
+                            // dd($application->submitted_at);
+                            $next_allowed_on = $application->submitted_at->copy()->addMonths($months_gap);
+                            if (now()->lt($next_allowed_on)) {
+                                $can_reapply = false;
+                            }
+                        }
+                    }
+
+                    return [
+                        'application_id'   => $application->id,
+                        'scheme_id'        => $proforma->scheme_id,
+                        'proforma_id'      => $proforma->id,
+                        'application_code' => $proforma->code,
+                        'application_type' => $proforma->title,
+                        'proforma_details' => $proforma->description,
+                        'application_no'   => $application->application_no,
+                        'applied_on'       => $application->submitted_at?->format('d/m/Y'),
+                        'approved_on'      => $application->decided_at?->format('d/m/Y'),
+                        'workflow_status'  => $application->workflow_status,
+                        'is_editable'      => $this->is_application_editable($application),
+                        'can_reapply'      => $can_reapply,
+                    ];
+                });
+            })->values();
+
 
             return response()->json([
                 'status'  => 1,
@@ -474,11 +491,10 @@ class UserIncentiveApplicationController extends Controller
                 'data'    => $response_data,
             ]);
         } catch (\Exception $e) {
-
             return response()->json([
-                'status' => 0,
+                'status'  => 0,
                 'message' => 'Something went wrong.',
-                'error' => $e->getMessage(),
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
@@ -699,8 +715,9 @@ class UserIncentiveApplicationController extends Controller
                     $application->eligibility_certificate_no = 'ELG-' . date('y') . '-' . str_pad((string)$application->id, 6, '0', STR_PAD_LEFT);
                 }
             }
+
             if ($new_status === 'approved_by_gm' && $application->application_type === 'claim') {
-                
+
                 if ($application->subsidy_report) {
                     $report = json_decode($application->subsidy_report, true) ?: [];
 
@@ -709,7 +726,7 @@ class UserIncentiveApplicationController extends Controller
                         $approved_total = 0.0;
 
                         foreach ($report['subsidy_items'] as &$subsidy_item) {
-                            
+
                             if (!isset($subsidy_item['approved']) || $subsidy_item['approved'] === null) {
                                 $subsidy_item['approved'] = $subsidy_item['claimed'];
                             }
@@ -717,9 +734,10 @@ class UserIncentiveApplicationController extends Controller
                             if (!isset($subsidy_item['status']) || $subsidy_item['status'] === 'eligible') {
                                 $subsidy_item['status'] = 'approved';
                             }
+
                             $approved_total += $subsidy_item['approved'];
                         }
-                        
+
                         unset($subsidy_item);
 
                         $report['totals']['approved'] = round($approved_total, 2);
@@ -766,10 +784,10 @@ class UserIncentiveApplicationController extends Controller
                     $report['totals']['approved'] = round($approved_total, 2);
                     $application->subsidy_report  = json_encode($report, JSON_UNESCAPED_UNICODE);
                 }
-            }
 
-            if ($new_status === 'approved_by_gm' && $approved_total > 500000) {
-                $new_status = 'under_review_slc';
+                if ($new_status === 'approved_by_gm' && $approved_total > 500000) {
+                    $new_status = 'under_review_slc';
+                }
             }
 
             $application->workflow_status = $new_status;
