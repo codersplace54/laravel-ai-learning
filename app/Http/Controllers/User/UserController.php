@@ -42,7 +42,8 @@ class UserController extends Controller
                     'department_id'   => 'required_if:user_type,department|integer|exists:departments,id',
                     'hierarchy_level' => 'required_if:user_type,department|in:block,subdivision1,subdivision2,subdivision3,district1,district2,district3,state1,state2,state3',
                     'designation'      => 'nullable|string',
-                    'is_active'      => 'nullable|integer'
+                    'is_active'      => 'nullable|integer',
+                    'inspector'      => 'nullable|string|in:yes,no'
                 ],
                 [
                     'name_of_enterprise.required' => 'Enterprise name is required.',
@@ -116,6 +117,7 @@ class UserController extends Controller
                     'district_id' => $request->district_id,
                     'hierarchy_level' => $request->hierarchy_level,
                     'is_active' => 1,
+                    'inspector' => $request->inspector ?? 'no',
                     'created_by' => $admin->email_id,
                     'updated_by' => null
                 ]);
@@ -228,6 +230,12 @@ class UserController extends Controller
             if ($request->department_id !== null) {
                 $rules['department_id'] = 'nullable|integer|exists:departments,id';
             }
+            if ($request->designation !== null) {
+                $rules['designation'] = 'nullable|string';
+            }
+            if ($request->inspector !== null) {
+                $rules['inspector'] = 'nullable|string|in:yes,no';
+            }
 
             $request->validate($rules, [
                 'id.required' => 'User ID is required.',
@@ -317,8 +325,10 @@ class UserController extends Controller
                         'hierarchy_level' => $request->hierarchy_level,
                         'district_id' => $request->district_id,
                         'subdivision_id' => $request->subdivision_id,
+                        'designation' => $request->designation,
                         'block_id' => $request->ulb_id,
                         'updated_by' =>  $admin->email_id,
+                        'inspector' =>  $request->inspector,
                     ]);
                     $user->department_id   = $department_user->department_id;
                     $user->hierarchy_level = $department_user->hierarchy_level;
@@ -334,6 +344,7 @@ class UserController extends Controller
                         'hierarchy_level' => $request->hierarchy_level,
                         'is_active' => 1,
                         'created_by' =>  $admin->email_id,
+                        'inspector' =>  $request->inspector ?? "no"
                     ]);
                 }
             }
@@ -345,8 +356,8 @@ class UserController extends Controller
                 'mobile_no' => $user->mobile_no,
                 'pan' => $user->pan,
                 'bin' => $user->bin,
-                'district'                     => $user->district->district_name,
-                'district_code'                => $user->district->district_code,
+                'district'                     => $user->district->district_name ?? null,
+                'district_code'                => $user->district->district_code ?? null,
                 'subdivision_name'                 => $user->subdivision->sub_division ?? null,
                 'subdivision_code'               => $user->subdivision->sub_lgd_code ?? null,
                 'ulb_name'                          => $user->ulb->ulb_name ?? null,
@@ -362,6 +373,7 @@ class UserController extends Controller
                 'designation'     => $user->department_user->designation     ?? null,
                 'created_by'     => $user->department_user->created_by    ?? null,
                 'updated_by'     => $user->department_user->updated_by ?? null,
+                'inspector'     => $user->department_user->inspector ?? null,
 
 
             ];
@@ -501,6 +513,7 @@ class UserController extends Controller
                 'department_id'   => $user->department_user->department_id   ?? null,
                 'hierarchy_level' => $user->department_user->hierarchy_level ?? null,
                 'designation'     => $user->department_user->designation     ?? null,
+                'inspector'     => $user->department_user->inspector         ?? null,
 
 
             ];
@@ -580,7 +593,8 @@ class UserController extends Controller
                     'user_type' => $user->user_type,
                     'status' => $user->status,
                     'created_at'  => $user->created_at,
-                    'updated_at'  => $user->updated_at
+                    'updated_at'  => $user->updated_at,
+                    'inspector'     => $user->department_user->inspector         ?? null,
                 ];
             });
 
@@ -643,6 +657,7 @@ class UserController extends Controller
                 'department_id'   => $department_user->department_user->department_id   ?? null,
                 'hierarchy_level' => $department_user->department_user->hierarchy_level ?? null,
                 'designation'     => $department_user->department_user->designation     ?? null,
+                'inspector'     => $user->department_user->inspector         ?? null,
 
 
             ];

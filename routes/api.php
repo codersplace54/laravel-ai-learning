@@ -33,8 +33,7 @@ use App\Http\Controllers\SchemaController;
 use App\Http\Middleware\JWTActivityMiddleware;
 use App\Http\Controllers\Report\ReportController;
 use App\Http\Controllers\Report\UserFeedbackController;
-
-
+use App\Http\Controllers\Inspection\InspectionController;
 
 
 Route::prefix('user')->group(function () {
@@ -190,7 +189,6 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
             Route::post('proforma-questionnaire-view',   [UserIncentiveApplicationController::class, 'user_proforma_questionnaire_view']);
             Route::post('proforma-application-store', [UserIncentiveApplicationController::class, 'user_proforma_application_store']);
             Route::post('application-workflow-history', [UserIncentiveApplicationController::class, 'application_workflow_history']);
-
         });
     });
 
@@ -238,13 +236,30 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/get-total-applications-by-department', [ServiceController::class, 'get_total_applications_by_department']);
         Route::post('/get-list-of-NOC-issued-by-department', [ServiceController::class, 'get_list_of_NOC_issued_by_department']);
         Route::post('export-service-applications', [ServiceController::class, 'export_service_applications']);
+
+        Route::post('inspections-by-department', [InspectionController::class, 'inspections_by_department']);
+        Route::post('inspections-status-update', [InspectionController::class, 'inspections_status_update']);
+        Route::post('approved-inspections-list', [InspectionController::class, 'approved_inspections_list']);
+        Route::post('inspection-date-update-by-inspector', [InspectionController::class, 'inspection_date_update_by_inspector']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
     Route::post('get-default-source', [ServiceMasterController::class, 'get_default_source_value']);
+
+    Route::prefix('inspection')->group(function () {
+        Route::post('inspection-store', [InspectionController::class, 'inspection_store']);
+        Route::post('inspection-view', [InspectionController::class, 'inspection_view']);
+        Route::post('inspection-update', [InspectionController::class, 'inspection_update']);
+        Route::post('inspection-delete', [InspectionController::class, 'inspection_delete']);
+        Route::post('get-inspection-departments', [InspectionController::class, 'get_inspection_departments']);
+        Route::post('inspection-list', [InspectionController::class, 'inspection_list']);
+        Route::post('date-confirmed-inspections-list-per-user', [InspectionController::class, 'date_confirmed_inspections_list_per_user']);
+        Route::post('inspection-date-update-by-user', [InspectionController::class, 'inspection_date_update_by_user']);
+    });
 });
 
 Route::post('department-get-all-departments', [DepartmentController::class, 'all_departments'])->name('department.all_departments');
+ Route::post('inspectors-by-department', [InspectionController::class, 'inspectors_by_department']);
 
 Route::post('/tripura/get-all-districts', [TripuraMasterDataController::class, 'get_districts']);
 Route::post('/tripura/get-sub-subdivisions', [TripuraMasterDataController::class, 'get_subdivisions']);
