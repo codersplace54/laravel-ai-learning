@@ -15,6 +15,7 @@ class IncentiveWorkflowHistory extends Model
         'remarks',
         'meta',
         'action_taken_at',
+        'review_file',
     ];
 
     public function user()

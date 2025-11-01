@@ -31,4 +31,9 @@ class Proforma extends Model
     {
         return $this->hasMany(UserIncentiveApplication::class);
     }
+
+    public function scheme()
+    {
+        return $this->belongsTo(Scheme::class);
+    }
 }

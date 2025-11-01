@@ -214,6 +214,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::prefix('incentive')->group(function () {
             Route::post('applications', [UserIncentiveApplicationController::class, 'get_department_applications']);
             Route::post('update-application-status', [UserIncentiveApplicationController::class, 'update_application_status']);
+            Route::post('application-details', [UserIncentiveApplicationController::class, 'application_details']);
         });
 
         Route::post('/services', [ServiceController::class, 'get_services_by_department']);
