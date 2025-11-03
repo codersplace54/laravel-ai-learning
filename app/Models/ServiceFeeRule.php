@@ -28,7 +28,8 @@ class ServiceFeeRule extends Model
         'updated_at',
         'created_by',
         'updated_by',
-        "multi_condition"
+        "multi_condition",
+        'minimum_fee'
 
     ];
 
