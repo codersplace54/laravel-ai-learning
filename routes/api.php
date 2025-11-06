@@ -273,3 +273,7 @@ Route::prefix('report')->group(function () {
 Route::post('user-feedback-store', [UserFeedbackController::class, 'user_feedback_store']);
 Route::post('user-feedback-list', [UserFeedbackController::class, 'user_feedback_list']);
 Route::post('user-feedback-details', [UserFeedbackController::class, 'user_feedback_details']);
+
+Route::post('unit-list', [InspectionController::class, 'unit_list']);
+Route::post('get-unit-details', [InspectionController::class, 'get_unit_details']);
+
