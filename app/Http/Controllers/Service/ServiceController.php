@@ -1087,76 +1087,6 @@ class ServiceController extends Controller
         }
     }
 
-    private function generate_dynamic_pdf(UserServiceApplication $application, User $user): void
-    {
-
-        $template = (string) data_get($application, 'service.form_template', '');
-        if ($template === '') abort(422, 'No form template configured for this service.');
-
-        $template = html_entity_decode($template, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $template = str_replace("\xC2\xA0", ' ', $template); // NBSP -> space
-
-        $name     = $application->user->authorized_person_name ?? $user->name ?? '—';
-        $verifyUrl = trim('https://swaagat.tripura.gov.in/verify');
-
-        $qrPayload = "Name: {$name}\nApplication Id: {$application->id}\n{$verifyUrl}";
-        $qrSvg     = QrCode::format('svg')->size(220)->margin(0)->generate($qrPayload);
-        $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
-
-        $data = [
-            'form_title'        => 'FORM VI',
-            'rules_ref'         => '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
-            'government'        => 'Government of Tripura',
-            'issuing_office'    => 'Office of the Licensing Officer',
-            'verify_portal_url' => 'https://swaagat.tripura.gov.in',
-
-            'license_id'          => $application->id ?? '—',
-            'issue_date'          => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
-            'principal_employer'  => $application->user->authorized_person_name ?? '—',
-            'guardian_name'       => $application->user->management_details->owner_details_father_name ?? '—',
-            'address'             => $application->user->management_details->owner_details_residential_details ?? '—',
-            'work_location'       => $application->work_location ?? 'Tripura',
-            'registration_no'     => $application->id ?? '—',
-            'registration_date'   => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
-            'valid_upto'          => $application->NOC_expiry_date ? Carbon::parse($application->NOC_expiry_date)->format('d-m-Y') : '—',
-            'max_contract_labour' => (string) ($application->max_contract_labour ?? 0),
-            'fee_paid'            => (string) ($application->final_fee ?? 0),
-            'security_deposit'    => (string) ($application->security_deposit ?? ''),
-            'designation'         => $application->service->department->department_user->designation ?? '',
-            'spc_code'            => $application->spc_code ?? '—',
-            'signature_note'      => 'Not Required',
-            'user_name'           => $user->authorized_person_name ?? '',
-            'user_id'             => (string) $user->id,
-            'qr_code'            => $qrDataUri,
-        ];
-
-        $filled = preg_replace_callback('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', function ($m) use ($data) {
-            $key = $m[1];
-            $val = $data[$key] ?? '';
-            return e(is_scalar($val) ? (string) $val : '');
-        }, $template);
-
-        if (stripos($filled, '<html') === false) {
-            $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
-        }
-
-        $pdf = Pdf::loadHTML($filled)
-            ->setPaper('a4', 'portrait')
-            ->setOptions([
-                'isHtml5ParserEnabled' => true,
-                'isRemoteEnabled'      => true,
-                'defaultFont'          => 'DejaVu Sans',
-                'dpi'                  => 110,
-            ]);
-
-
-        $filename = uniqid('license_') . '.pdf';
-        $path     = "uploads/{$user->id}/application/{$filename}";
-
-        Storage::disk('public')->put($path, $pdf->output());
-        $application->update(['NOC_certificate' => $path]);
-    }
-
     public function get_total_applications_by_department(Request $request)
     {
 
@@ -1377,44 +1307,7 @@ class ServiceController extends Controller
         }
     }
 
-    // public function preview_certificate($application_id)
-    // {
-    //     try {
-    //         $application = UserServiceApplication::with('service')->findOrFail($application_id);
 
-    //         if (!$application->service || !$application->service->form_template) {
-    //             return response()->json([
-    //                 'status' => 0,
-    //                 'message' => 'Certificate template not found.'
-    //             ]);
-    //         }
-
-    //         $user = Auth::user();
-
-    //         $this->generate_dynamic_pdf($application, $user);
-
-    //         $pdfPath = $application->fresh()->NOC_certificate;
-
-    //         if (!$pdfPath || !Storage::disk('public')->exists($pdfPath)) {
-    //             return response()->json([
-    //                 'status' => 0,
-    //                 'message' => 'Failed to generate or locate PDF file.'
-    //             ]);
-    //         }
-
-    //         return response()->json([
-    //             'status' => 1,
-    //             'message' => 'Certificate preview generated successfully.',
-    //             'pdf_url' => asset('storage/' . $pdfPath),
-    //         ]);
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'status' => 0,
-    //             'message' => 'Something went wrong while generating certificate preview.',
-    //             'error' => $e->getMessage(),
-    //         ], 500);
-    //     }
-    // }
     public function preview_certificate($application_id)
     {
 
@@ -1463,7 +1356,6 @@ class ServiceController extends Controller
                 'fee_paid'            => (string) ($application->final_fee ?? 0),
                 'security_deposit'    => (string) ($application->security_deposit ?? ''),
                 'designation'         => $application->service->department->department_user->designation ?? '',
-                'spc_code'            => $application->spc_code ?? '—',
                 'signature_note'      => 'Not Required',
                 'user_name'           => $user->authorized_person_name ?? '',
                 'user_id'             => (string) $user->id,
@@ -1497,6 +1389,296 @@ class ServiceController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong while generating preview.',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function generate_dynamic_pdf(UserServiceApplication $application, User $user): void
+    {
+
+        $template = (string) data_get($application, 'service.form_template', '');
+        if ($template === '') abort(422, 'No form template configured for this service.');
+
+        $template = html_entity_decode($template, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $template = str_replace("\xC2\xA0", ' ', $template); 
+
+        $name     = $application->user->authorized_person_name ?? $user->name ?? '—';
+        $verifyUrl = trim('https://swaagat.tripura.gov.in/verify');
+
+        $qrPayload = "Name: {$name}\nApplication Id: {$application->id}\n{$verifyUrl}";
+        $qrSvg     = QrCode::format('svg')->size(220)->margin(0)->generate($qrPayload);
+        $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
+
+        $data = [
+            'form_title'        => 'FORM VI',
+            'rules_ref'         => '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
+            'government'        => 'Government of Tripura',
+            'issuing_office'    => 'Office of the Licensing Officer',
+            'verify_portal_url' => 'https://swaagat.tripura.gov.in',
+
+            'license_id'          => $application->id ?? '—',
+            'issue_date'          => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
+            'principal_employer'  => $application->user->authorized_person_name ?? '—',
+            'guardian_name'       => $application->user->management_details->owner_details_father_name ?? '—',
+            'address'             => $application->user->management_details->owner_details_residential_details ?? '—',
+            'work_location'       => $application->work_location ?? 'Tripura',
+            'registration_no'     => $application->id ?? '—',
+            'registration_date'   => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
+            'valid_upto'          => $application->NOC_expiry_date ? Carbon::parse($application->NOC_expiry_date)->format('d-m-Y') : '—',
+            'max_contract_labour' => (string) ($application->max_contract_labour ?? 0),
+            'fee_paid'            => (string) ($application->final_fee ?? 0),
+            'security_deposit'    => (string) ($application->security_deposit ?? ''),
+            'designation'         => $application->service->department->department_user->designation ?? '',
+            'signature_note'      => 'Not Required',
+            'user_name'           => $user->authorized_person_name ?? '',
+            'user_id'             => (string) $user->id,
+            'qr_code'            => $qrDataUri,
+        ];
+
+        $filled = preg_replace_callback('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', function ($m) use ($data) {
+            $key = $m[1];
+            $val = $data[$key] ?? '';
+            return e(is_scalar($val) ? (string) $val : '');
+        }, $template);
+
+        if (stripos($filled, '<html') === false) {
+            $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
+        }
+
+        $pdf = Pdf::loadHTML($filled)
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled'      => true,
+                'defaultFont'          => 'DejaVu Sans',
+                'dpi'                  => 110,
+            ]);
+
+
+        $filename = uniqid('license_') . '.pdf';
+        $path     = "uploads/{$user->id}/application/{$filename}";
+
+        Storage::disk('public')->put($path, $pdf->output());
+        $application->update(['NOC_certificate' => $path]);
+    }
+
+    public function certificate_variables_list()
+    {
+        try {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $variables = [
+                'form_title',
+                'rules_ref',
+                'government',
+                'issuing_office',
+                'verify_portal_url',
+                'license_id',
+                'issue_date',
+                'principal_employer',
+                'guardian_name',
+                'address',
+                'work_location',
+                'registration_no',
+                'registration_date',
+                'valid_upto',
+                'max_contract_labour',
+                'fee_paid',
+                'security_deposit',
+                'designation',
+                'signature_note',
+                'user_name',
+                'user_id',
+                'qr_code',
+            ];
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Variables list fetched.',
+                'data'    => $variables,
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching total services',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function certificate_view(Request $request)
+    {
+
+        try {
+
+            $request->validate([
+                'application_id' => 'required|integer|exists:user_service_applications,id',
+            ]);
+
+            $application = UserServiceApplication::where("id", $request->application_id)->with([
+                'user',
+                'service:id,form_template',
+                'service.department.department_user',
+            ])->first();
+
+            $name = $application->user->authorized_person_name ?? '—';
+            $verifyUrl = 'https://swaagat.tripura.gov.in/verify';
+
+            $qrPayload = "Name: {$name}\nApplication Id: {$application->id}\n{$verifyUrl}";
+            $qrSvg = QrCode::format('svg')->size(220)->margin(0)->generate($qrPayload);
+            $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
+
+            $data = [
+                'form_title'        => 'FORM VI',
+                'rules_ref'         => '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
+                'government'        => 'Government of Tripura',
+                'issuing_office'    => 'Office of the Licensing Officer',
+                'verify_portal_url' => 'https://swaagat.tripura.gov.in',
+
+                'license_id'          => $application->id ?? null,
+                'issue_date'          => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : null,
+                'principal_employer'  => $application->user->authorized_person_name ?? null,
+                'guardian_name'       => $application->user->management_details->owner_details_father_name ?? null,
+                'address'             => $application->user->management_details->owner_details_residential_details ?? null,
+                'work_location'       => null,
+                'registration_no'     => $application->id ?? null,
+                'registration_date'   => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : null,
+                'valid_upto'          => $application->NOC_expiry_date ? Carbon::parse($application->NOC_expiry_date)->format('d-m-Y') : null,
+                'max_contract_labour' => $application->max_contract_labour ?? null,
+                'fee_paid'            => $application->final_fee ?? null,
+                'security_deposit'    => null,
+                'designation'         => $application->service->department->department_user->designation ?? null,
+                'signature_note'      => 'Not Required',
+                'user_name'           => $user->authorized_person_name ?? null,
+                'user_id'             => $application->user->id,
+                'qr_code'             => $qrDataUri,
+            ];
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Certificate data fetched successfully.',
+                'data'    => $data,
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function generate_certificate(Request $request)
+    {
+        $request->validate([
+            'application_id' => 'required|integer|exists:user_service_applications,id',
+        ]);
+
+        try {
+            $application = UserServiceApplication::where("id", $request->application_id)->with([
+                'user',
+                'service:id,form_template',
+                'service.department.department_user',
+            ])->first();
+
+            $template = (string) data_get($application, 'service.form_template', '');
+
+            if ($template === '') {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No form template configured for this service.',
+                ], 422);
+            }
+
+            $template = html_entity_decode($template, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $template = str_replace("\xC2\xA0", ' ', $template); 
+
+            $name     = $application->user->authorized_person_name ?? $user->name ?? '—';
+            $verifyUrl = trim('https://swaagat.tripura.gov.in/verify');
+
+            $qrPayload = "Name: {$name}\nApplication Id: {$application->id}\n{$verifyUrl}";
+            $qrSvg     = QrCode::format('svg')->size(220)->margin(0)->generate($qrPayload);
+            $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
+
+            $data = [
+                'form_title'        => $request->form_title ?? null,
+                'rules_ref'         => $request->rules_ref ?? null,
+                'government'        => $request->government ?? null,
+                'issuing_office'    => $request->issuing_office ?? null,
+                'verify_portal_url' => $request->verify_portal_url ?? null,
+
+                'license_id'          => $request->license_id ?? null,
+                'issue_date'          => $request->issue_date ?? null,
+                'principal_employer'  => $request->principal_employer ?? null,
+                'guardian_name'       => $request->guardian_name ?? null,
+                'address'             => $request->address ?? null,
+                'work_location'       => $request->work_location ?? null,
+                'registration_no'     => $request->registration_no ?? null,
+                'registration_date'   => $request->registration_date ?? null,
+                'valid_upto'          => $request->valid_upto ?? null,
+                'max_contract_labour' => $request->max_contract_labour ?? null,
+                'fee_paid'            => $request->fee_paid ?? null,
+                'security_deposit'    => $request->security_deposit ?? null,
+                'designation'         => $request->designation ?? null,
+                'signature_note'      => $request->signature_note ?? 'Not Required',
+                'user_name'           => $request->user_name ?? null,
+                'user_id'             => $application->user->id,
+                'qr_code'            => $qrDataUri,
+            ];
+
+            $filled = preg_replace_callback('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', function ($m) use ($data) {
+                $key = $m[1];
+                $val = $data[$key] ?? '';
+                return e(is_scalar($val) ? (string) $val : '');
+            }, $template);
+
+            if (stripos($filled, '<html') === false) {
+                $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
+            }
+
+            $pdf = Pdf::loadHTML($filled)
+                ->setPaper('a4', 'portrait')
+                ->setOptions([
+                    'isHtml5ParserEnabled' => true,
+                    'isRemoteEnabled'      => true,
+                    'defaultFont'          => 'DejaVu Sans',
+                    'dpi'                  => 110,
+                ]);
+
+
+            $filename = uniqid('license_') . '.pdf';
+            $path     = "uploads/{$application->user->id}/application/{$filename}";
+
+            Storage::disk('public')->put($path, $pdf->output());
+            $application->update(['NOC_certificate' => $path]);
+            $application->NOC_certificate = asset('Storage/'.$application->NOC_certificate);
+            
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Certificate generated.',
+                'data'    => [
+                    'application'   => $application->withoutRelations(),
+                ],
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong.',
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }

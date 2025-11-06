@@ -60,6 +60,17 @@ class UserIncentiveApplicationController extends Controller
             $proforma = Proforma::where('id', $request->proforma_id)->first();
 
             if (!$is_save_only && $proforma && $proforma->proforma_type === 'claim') {
+
+                // A user could change the proforma_id in the URL to open a claim form they are not eligible for
+                $can_apply = $this->can_apply_for_this_claim($user->id, $proforma);
+                if ($can_apply == false) {
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'You cannot submit this claim. Required eligibility application(s) are not approved by GM/SLC.',
+                    ], 422);
+                }
+
+                // Prevents users from re-submitting claims too soon or beyond allowed count.
                 $can_reapply = $this->can_reapply_for_claim($user->id, $proforma);
                 if (!$can_reapply) {
                     return response()->json([
@@ -473,7 +484,7 @@ class UserIncentiveApplicationController extends Controller
                         'approved_on'      => null,
                         'workflow_status'  => null,
                         'is_editable'      => true,
-                        'can_reapply'      => $can_reapply_for_claim,
+                        'can_reapply'      => false, // Don't show reapply button if user don't have even applied once
                     ];
                     continue;
                 }
@@ -1227,24 +1238,38 @@ class UserIncentiveApplicationController extends Controller
             return false;
         }
 
-        $latest = UserIncentiveApplication::select('submitted_at')
+        $latest = UserIncentiveApplication::select('submitted_at','remaining_claim')
             ->where('user_id', $user_id)
             ->where('proforma_id', $proforma->id)
             ->where('application_type', 'claim')
             ->whereNotNull('submitted_at')
             ->orderByDesc('submitted_at')
             ->first();
-            if (!$latest || !$latest->submitted_at) {
-                return true;
-            }
-            
+        if (!$latest || !$latest->submitted_at) {
+            return true;
+        }
 
         if ($latest->remaining_claim !== null && $latest->remaining_claim <= 0) {
             return false;
         }
-        
+
         $next_allowed_on = Carbon::parse($latest->submitted_at)->addMonths($gap_months);
         return now()->greaterThanOrEqualTo($next_allowed_on);
-        
+    }
+
+    private function can_apply_for_this_claim($user_id, Proforma $proforma): bool
+    {
+        $proforma_depends_on =  json_decode($proforma->depends_on_proforma_ids);
+
+        $approved_eligibilty = UserIncentiveApplication::query()
+            ->where('user_id', $user_id)
+            ->whereIn('proforma_id', $proforma_depends_on)
+            ->where('application_type', 'eligibility')
+            ->whereIn('workflow_status', ['approved_by_gm', 'approved_by_slc'])
+            ->select('proforma_id')
+            ->distinct()
+            ->count('proforma_id');
+
+        return $approved_eligibilty > 0 ? true : false;
     }
 }
