@@ -14,11 +14,13 @@ return new class extends Migration
             $table->bigInteger('user_id')->nullable();
             $table->bigInteger('department_id');
             $table->string('request_id')->nullable();
-            $table->date('proposed_date')->nullable();
+            $table->string('unit_name')->nullable();
+            $table->text('proposed_date')->nullable();
             $table->date('inspection_date')->nullable();
             $table->text('reason_for_request')->nullable();
             $table->integer('inspector')->nullable();
             $table->string('inspection_type')->nullable();
+            $table->string('inspection_for')->nullable();
             $table->text('remarks')->nullable();
             $table->string('status')->default('pending');
             $table->string('created_by')->nullable();

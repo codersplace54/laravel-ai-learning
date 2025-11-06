@@ -10,6 +10,7 @@ use App\Models\Inspection;
 use App\Models\Department;
 use App\Models\DepartmentUser;
 use App\Models\User;
+use App\Models\UnitDetail;
 
 class InspectionController extends Controller
 {
@@ -27,21 +28,35 @@ class InspectionController extends Controller
             }
 
             $request->validate([
-                'department_id' => 'required|integer|exists:departments,id',
-                'proposed_date'     => 'required|date',
+                'department_id'       => 'nullable|integer|exists:departments,id',
+                'proposed_date'       => 'nullable|array',
+                'proposed_date.*'     => 'date',
                 'reason_for_request'  => 'nullable|string',
-                'remarks'             => 'nullable|string'
+                'remarks'             => 'nullable|string',
+
+
+                'inspection_date'     => 'nullable|date',
+                'unit_name'           => 'nullable|string',
+                'inspection_type'     => 'nullable|string',
+                'inspector'           => 'nullable|string',
+                'inspection_for'      => 'nullable|array',
+                'inspection_for.*'    => 'string',
+
             ]);
 
             DB::beginTransaction();
 
             $inspection = Inspection::create([
                 'user_id'            => $user->id,
-                'department_id'      => $request->department_id,
-                'proposed_date'      => $request->proposed_date,
+                'department_id'      => $request->department_id ?? $user->department_user->department_id,
+                'proposed_date'      => json_encode($request->proposed_date),
+                'inspection_date'    => $request->inspection_date,
+                'unit_name'          => $request->unit_name,
                 'reason_for_request' => $request->reason_for_request,
                 'remarks'            => $request->remarks,
-                'inspection_type'    => 'On Request',
+                'inspection_type'    => $request->inspection_type ?? 'On Request',
+                'inspector'          => $request->inspector,
+                'inspection_for'     => json_encode($request->inspection_for),
                 'status'             => 'pending',
                 'created_by'         => $user->email_id,
             ]);
@@ -50,6 +65,9 @@ class InspectionController extends Controller
             $formatted_id = str_pad($inspection->id, 6, '0', STR_PAD_LEFT);
             $request_id = "REQ-{$department_code}-{$formatted_id}";
             $inspection->update(['request_id' => $request_id]);
+
+            $inspection->proposed_date = json_decode($inspection->proposed_date, true);
+            $inspection->inspection_for = json_decode($inspection->inspection_for, true);
 
             DB::commit();
 
@@ -116,7 +134,10 @@ class InspectionController extends Controller
 
 
                     return [
+                        'id'                        => $inspection->id,
                         'request_id'                => $inspection->request_id,
+                        'department_id'             => $inspection->department_id,
+                        'department_name'           => $inspection->department->name,
                         'proposed_inspection_date'  => $inspection->inspection_date,
                         'inspection_type'           => 'On Request',
                         'industry_name'             => $inspection->user->name_of_enterprise ?? 'N/A',
@@ -170,12 +191,15 @@ class InspectionController extends Controller
             $inspection = Inspection::where('id', $request->inspection_id)->first();
 
             $data = [
+                'id'                          => $inspection->id,
                 'request_id'                  => $inspection->request_id,
                 'proposed_date'               => $inspection->proposed_date,
                 'inspection_date'             => $inspection->inspection_date ?? 'N/A',
                 'department_name'             => $inspection->department->name ?? 'N/A',
                 'inspector'                   => $inspection->inspectorUser ? $inspection->inspectorUser->authorized_person_name : 'N/A',
                 'reason_for_request'          => $inspection->reason_for_request ?? '',
+                'inspection_type'             => $inspection->inspection_type ?? '',
+                'inspection_for'              => json_decode($inspection->inspection_for) ?? '',
                 'status'                      => $inspection->status,
                 'remarks'                     => $inspection->remarks ?? '',
                 'created_at'                  => $inspection->created_at,
@@ -215,12 +239,19 @@ class InspectionController extends Controller
 
 
             $request->validate([
-                'id'                => 'required|integer|exists:inspections,id',
-                'department_id'     => 'nullable|integer|exists:departments,id',
-                'proposed_date'     => 'nullable|date',
-                'reason_for_request' => 'nullable|string|max:255',
-                'remarks'           => 'nullable|string|max:255',
-                'status'            => 'nullable|string|in:pending,approved,rejected,completed',
+                'id'                  => 'required|integer|exists:inspections,id',
+                'department_id'       => 'nullable|integer|exists:departments,id',
+                'proposed_date'       => 'nullable|array',
+                'proposed_date.*'     => 'date',
+                'reason_for_request'  => 'nullable|string|max:255',
+                'remarks'             => 'nullable|string|max:255',
+
+                'inspection_date'     => 'nullable|date',
+                'unit_name'           => 'nullable|string',
+                'inspection_type'     => 'nullable|string',
+                'inspector'           => 'nullable|string',
+                'inspection_for'      => 'nullable|array',
+                'inspection_for.*'    => 'string',
             ]);
 
             DB::beginTransaction();
@@ -237,17 +268,25 @@ class InspectionController extends Controller
 
             $inspection->update([
                 'department_id'      => $request->department_id ?? $inspection->department_id,
-                'proposed_date'       => $request->proposed_date ?? $inspection->proposed_date,
+                'proposed_date'      => json_encode($request->proposed_date ?? $inspection->proposed_date),
                 'reason_for_request' => $request->reason_for_request ?? $inspection->reason_for_request,
                 'remarks'            => $request->remarks ?? $inspection->remarks,
-                'status'             => $request->status ?? $inspection->status,
+                // 'status'             => $request->status ?? $inspection->status,
                 'updated_by'         => $user->email_id,
+                'inspection_type'    => $request->inspection_type ?? 'On Request',
+                'inspector'          => $request->inspector ??  $inspection->inspector,
+                'inspection_date'    => $request->inspection_date  ?? $inspection->inspection_date,
+                'unit_name'          => $request->unit_name  ?? $inspection->unit_name,
+                'inspection_for'     => json_encode($request->inspection_for ?? $inspection->inspection_for),
             ]);
 
             $department_code = str_pad($inspection->department_id, 2, '0', STR_PAD_LEFT);
             $formatted_id = str_pad($inspection->id, 6, '0', STR_PAD_LEFT);
             $request_id = "REQ-{$department_code}-{$formatted_id}";
             $inspection->update(['request_id' => $request_id]);
+
+            $inspection->proposed_date = json_decode($inspection->proposed_date, true);
+            $inspection->inspection_for = json_decode($inspection->inspection_for, true);
 
             DB::commit();
 
@@ -356,7 +395,7 @@ class InspectionController extends Controller
             ]);
 
             $inspections = Inspection::where('department_id', $request->department_id)
-                ->where('status', 'pending')
+                ->whereIn('status', ['pending', 'approved'])
                 ->orderBy('proposed_date', 'desc')
                 ->get();
 
@@ -517,6 +556,8 @@ class InspectionController extends Controller
                     'request_id',
                     'department_id',
                     'user_id',
+                    'inspection_type',
+                    'inspector',
                     'proposed_date',
                     'reason_for_request',
                     'remarks',
@@ -530,6 +571,8 @@ class InspectionController extends Controller
                     'id'               => $item->id,
                     'user_name'        => $item->user->authorized_person_name,
                     'request_id'       => $item->request_id,
+                    'inspection_type'  => $item->inspection_type,
+                    'inspector'        => $item->inspectorUser ? $item->inspectorUser->authorized_person_name : 'N/A',
                     'department_name'  => $item->department->name ?? null,
                     'industry_name'    => $item->user->name_of_enterprise ?? null,
                     'proposed_date'    => $item->proposed_date,
@@ -691,6 +734,8 @@ class InspectionController extends Controller
                     return [
                         'id'                        => $inspection->id,
                         'inspection_id'             => $inspection->request_id,
+                        'department_id'             => $inspection->department_id,
+                        'department_name'           => $inspection->department->name,
                         'inspection_date'           => $inspection->inspection_date,
                         'inspection_type'           => $inspection->inspection_type,
                         'deprtment'                 => $inspection->department->name,
@@ -867,6 +912,84 @@ class InspectionController extends Controller
 
 
             DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function unit_list()
+    {
+
+        try {
+
+
+            $units = UnitDetail::select('id', 'unit_name')
+                ->orderBy('unit_name', 'asc')
+                ->get();
+
+            if ($units->isEmpty()) {
+                return response()->json([
+                    'status' => 1,
+                    'message' => 'No units found.',
+                    'data' => []
+                ], 200);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Unit list fetched successfully.',
+                'data' => $units
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function get_unit_details(Request $request)
+    {
+
+        try {
+
+
+            $request->validate([
+                'id' => 'required|integer|exists:unit_details,id',
+            ]);
+
+            $unit = UnitDetail::where('id', $request->id)
+                ->select('id', 'unit_name', 'unit_address', 'unit_location_district', 'unit_location_subdivision', 'category_of_enterprise')
+                ->first();
+
+            if (!$unit) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Unit not found.',
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Unit details fetched successfully.',
+                'data' => $unit,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed.',
+                'error' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+
 
             return response()->json([
                 'status' => 0,
