@@ -425,7 +425,6 @@ class UserIncentiveApplicationController extends Controller
                 $eligible_claim_proforma_ids = array_merge($eligible_claim_proforma_ids, $proforma_ids);
             }
 
-
             $user_claim_proform_ids = UserIncentiveApplication::query()
                 ->where('user_id', $user_id)
                 ->where('application_type', 'claim')
