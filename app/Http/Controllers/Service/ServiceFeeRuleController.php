@@ -43,6 +43,7 @@ class ServiceFeeRuleController extends Controller
                 'rules.*.priority' => 'nullable|integer',
                 'rules.*.status' => 'nullable|boolean',
                 'rules.*.multi_condition' => 'nullable|in:yes,no',
+                'rules.*.minimum_fee' => 'nullable|string',
             ]);
 
             DB::beginTransaction();
@@ -76,6 +77,7 @@ class ServiceFeeRuleController extends Controller
                         'status' => $rule['status'] ?? 1,
                         'created_by' => $admin->email_id,
                         'multi_condition' => $rule['multi_condition'] ?? "no",
+                        'minimum_fee' => $rule['minimum_fee'] ?? null,
                     ]);
 
                     $service_fee_rules[] = $service_fee_rule;
@@ -134,6 +136,7 @@ class ServiceFeeRuleController extends Controller
                 'rules.*.priority' => 'nullable|integer',
                 'rules.*.status' => 'nullable|boolean',
                 'rules.*.multi_condition' => 'nullable|in:yes,no',
+                'rules.*.minimum_fee' => 'nullable|string',
             ]);
 
             DB::beginTransaction();
@@ -163,6 +166,7 @@ class ServiceFeeRuleController extends Controller
                     'status' => $rule['status'] ?? 1,
                     'updated_by' => $admin->email_id,
                     'multi_condition' => $rule['multi_condition'] ?? $service_fee_rule['multi_condition'],
+                    'minimum_fee' => $rule['minimum_fee'] ?? null,
                 ]);
 
                 $service_fee_rules[] = $service_fee_rule;
@@ -234,6 +238,7 @@ class ServiceFeeRuleController extends Controller
                     'priority' => $rule->priority,
                     'status' => $rule->status,
                     'multi_condition' => $rule->multi_condition,
+                    'minimum_fee' => $rule->minimum_fee,
                     'created_by' => $rule->created_by,
                     'updated_by' => $rule->updated_by,
                     'created_at' => $rule->created_at,

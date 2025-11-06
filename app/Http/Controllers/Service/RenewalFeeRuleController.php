@@ -43,6 +43,7 @@ class RenewalFeeRuleController extends Controller
                 'rules.*.priority' => 'nullable|integer',
                 'rules.*.status' => 'nullable|boolean',
                 'rules.*.multi_condition' => 'nullable|in:yes,no',
+                'rules.*.minimum_fee' => 'nullable|string',
             ]);
 
             DB::beginTransaction();
@@ -70,6 +71,7 @@ class RenewalFeeRuleController extends Controller
                     'status' => $rule['status'] ?? 1,
                     'created_by' => $admin->email_id,
                     'multi_condition' => $rule['multi_condition'] ?? "no",
+                    'minimum_fee' => $rule['minimum_fee'] ?? null,
                 ]);
 
                 $renewal_fee_rules[] = $renewal_fee_rule;
@@ -126,6 +128,7 @@ class RenewalFeeRuleController extends Controller
                 'rules.*.per_unit_fee' => 'nullable|string',
                 'rules.*.priority' => 'nullable|integer',
                 'rules.*.status' => 'nullable|boolean',
+                'rules.*.minimum_fee' => 'nullable|string',
             ]);
 
             DB::beginTransaction();
@@ -155,6 +158,7 @@ class RenewalFeeRuleController extends Controller
                     'status' => $rule['status'] ?? 1,
                     'updated_by' => $admin->email_id,
                     'multi_condition' => $rule['multi_condition'] ?? $renewal_fee_rule['multi_condition'],
+                    'minimum_fee' => $rule['minimum_fee'] ?? null,
                 ]);
 
                 $renewal_fee_rules[] = $renewal_fee_rule;
@@ -226,6 +230,7 @@ class RenewalFeeRuleController extends Controller
                     'priority' => $rule->priority,
                     'status' => $rule->status,
                     'multi_condition' => $rule->multi_condition,
+                    'minimum_fee' => $rule['minimum_fee'] ?? null,
                     'created_by' => $rule->created_by,
                     'updated_by' => $rule->updated_by,
                     'created_at' => $rule->created_at,

@@ -44,6 +44,7 @@ class ServiceQuestionnaireController extends Controller
                 'questionnaires.*.is_section' => 'nullable|in:yes,no',
                 'questionnaires.*.section_name' => 'nullable|required_if:questionnaires.*.is_section,yes|string',
                 'questionnaires.*.sample_format' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
+                'questionnaires.*.display_rule' => 'nullable|array',
             ]);
 
             DB::beginTransaction();
@@ -90,12 +91,14 @@ class ServiceQuestionnaireController extends Controller
                         'section_name' => $questionnaire['section_name'] ?? null,
                         'created_by' => $admin->email_id,
                         'sample_format' => $sample_format,
+                        'display_rule' => json_encode($questionnaire['display_rule'] ?? null),
                     ]);
                 }
             }
 
             foreach ($service_questionnaire as &$service) {
                 $service->validation_rule = json_decode($service->validation_rule, true);
+                $service->display_rule = json_decode($service->display_rule, true);
 
                 if ($service->sample_format) {
                     $service->sample_format = asset(Storage::url($service->sample_format));
@@ -155,6 +158,7 @@ class ServiceQuestionnaireController extends Controller
                 'questionnaires.*.is_section' => 'nullable|in:yes,no',
                 'questionnaires.*.section_name' => 'nullable|required_if:questionnaires.*.is_section,yes|string',
                 'questionnaires.*.sample_format' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
+                'questionnaires.*.display_rule' => 'nullable|array',
             ]);
 
             DB::beginTransaction();
@@ -193,7 +197,7 @@ class ServiceQuestionnaireController extends Controller
                     'validation_rule' => json_encode($questionnaire['validation_rule'] ?? null),
                     'is_section'   => $questionnaire['is_section'] ?? 'no',
                     'section_name' => $questionnaire['section_name'] ?? null,
-
+                    'display_rule' => json_encode($questionnaire['display_rule'] ?? null),
                     'updated_by' => $admin->email_id,
                     'sample_format' => $sample_format,
                 ]);
@@ -203,6 +207,7 @@ class ServiceQuestionnaireController extends Controller
 
             foreach ($service_questionnaire as &$service) {
                 $service->validation_rule = json_decode($service->validation_rule, true);
+                $service->display_rule = json_decode($service->display_rule, true);
 
                 if ($service->sample_format) {
                     $service->sample_format = asset('storage/' . $service->sample_format);
@@ -311,12 +316,24 @@ class ServiceQuestionnaireController extends Controller
 
             foreach ($service_questionnaires as $service) {
                 $service->validation_rule = json_decode($service->validation_rule, true);
+                $service->display_rule = json_decode($service->display_rule, true);
+
+                if (is_array($service->display_rule) && !empty($service->display_rule['depends_on'])) {
+                    $parent_id = $service->display_rule['depends_on'];
+                    if (!isset($children_map[$parent_id])) {
+                        $children_map[$parent_id] = [];
+                    }
+                    $children_map[$parent_id][] = $service->id;
+                }
 
                 if ($service->sample_format) {
                     $service->sample_format = asset('storage/' . $service->sample_format);
                 }
             }
-
+            foreach ($service_questionnaires as $service) {
+                $qid = $service->id;
+                $service->children_id = $children_map[$qid] ?? [];
+            }
             return response()->json([
                 'status' => 1,
                 'message' => 'Service questionnaires fetched successfully.',
