@@ -34,7 +34,7 @@ use App\Http\Middleware\JWTActivityMiddleware;
 use App\Http\Controllers\Report\ReportController;
 use App\Http\Controllers\Report\UserFeedbackController;
 use App\Http\Controllers\Inspection\InspectionController;
-
+use App\Http\Controllers\Service\ExistingLicenseController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -159,6 +159,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('fetch-all-department-users', [AdminController::class, 'fetch_all_department_users']);
         Route::post('get-department-user-details', [UserController::class, 'get_department_user_details']);
         Route::post('update-user-status/{user_id}', [AdminController::class, 'update_user_status']);
+
+        Route::post('existing-license-update-status', [ExistingLicenseController::class, 'existing_license_update_status']);
+        Route::post('existing-license-view', [ExistingLicenseController::class, 'existing_license_view']);
+        Route::post('existing-license-details', [ExistingLicenseController::class, 'existing_license_details']);
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
@@ -181,6 +185,13 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-user-applications-per-service', [UserServiceApplicationController::class, 'get_user_applications_per_service']);
         Route::post('/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
         Route::post('calculate-fee', [UserServiceApplicationController::class, 'calculate_fee']);
+
+        Route::post('existing-license-store', [ExistingLicenseController::class, 'existing_license_store']);
+        Route::post('existing-license-update', [ExistingLicenseController::class, 'existing_license_update']);
+        Route::post('existing-license-view', [ExistingLicenseController::class, 'existing_license_view']);
+        Route::post('existing-license-delete', [ExistingLicenseController::class, 'existing_license_delete']);
+        Route::post('existing-license-details', [ExistingLicenseController::class, 'existing_license_details']);
+        Route::post('get-department-services', [ExistingLicenseController::class, 'get_department_services']);
 
         Route::prefix('incentive')->group(function () {
             Route::post('scheme-list', [UserIncentiveApplicationController::class, 'user_incentive_scheme_list']);
@@ -241,6 +252,11 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('inspections-status-update', [InspectionController::class, 'inspections_status_update']);
         Route::post('approved-inspections-list', [InspectionController::class, 'approved_inspections_list']);
         Route::post('inspection-date-update-by-inspector', [InspectionController::class, 'inspection_date_update_by_inspector']);
+
+        Route::post('certificate-variables-list',  [ServiceController::class, 'certificate_variables_list']);
+        Route::post('certificate-view',  [ServiceController::class, 'certificate_view']);
+        Route::post('generate-certificate',  [ServiceController::class, 'generate_certificate']);
+
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);

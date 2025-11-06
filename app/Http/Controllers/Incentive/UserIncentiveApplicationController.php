@@ -60,6 +60,17 @@ class UserIncentiveApplicationController extends Controller
             $proforma = Proforma::where('id', $request->proforma_id)->first();
 
             if (!$is_save_only && $proforma && $proforma->proforma_type === 'claim') {
+
+                // A user could change the proforma_id in the URL to open a claim form they are not eligible for
+                $can_apply = $this->can_apply_for_this_claim($user->id, $proforma);
+                if ($can_apply == false) {
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'You cannot submit this claim. Required eligibility application(s) are not approved by GM/SLC.',
+                    ], 422);
+                }
+
+                // Prevents users from re-submitting claims too soon or beyond allowed count.
                 $can_reapply = $this->can_reapply_for_claim($user->id, $proforma);
                 if (!$can_reapply) {
                     return response()->json([
@@ -447,7 +458,7 @@ class UserIncentiveApplicationController extends Controller
                 ->with(['applications' => function ($q) use ($user_id) {
                     $q->where('user_id', $user_id)
                         ->orderByDesc('id')
-                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id');
+                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id','subsidy_report');
                 }])
                 ->select('id', 'scheme_id', 'code', 'title', 'description', 'claim_type')
                 ->get();
@@ -473,13 +484,22 @@ class UserIncentiveApplicationController extends Controller
                         'approved_on'      => null,
                         'workflow_status'  => null,
                         'is_editable'      => true,
-                        'can_reapply'      => $can_reapply_for_claim,
+                        'can_reapply'      => false, // Don't show reapply button if user don't have even applied once
+                        'claimed_amount'   => null,
+                        'approved_amount'  => null,
+                        'disbursed_amount' => null,
                     ];
                     continue;
                 }
 
 
                 foreach ($proforma->applications as $application) {
+
+                    $subsidyReport = json_decode($application->subsidy_report);
+
+                    $claimed = $subsidyReport->totals->claimed ?? 0;
+                    $approved = $subsidyReport->totals->approved ?? 0;
+                    $disbursed = $subsidyReport->totals->disbursed ?? 0;
 
                     $response_data[] = [
                         'application_id'   => $application->id,
@@ -494,6 +514,9 @@ class UserIncentiveApplicationController extends Controller
                         'workflow_status'  => $this->status_label($application->workflow_status),
                         'is_editable'      => $this->is_application_editable($application),
                         'can_reapply'      => $can_reapply_for_claim,
+                        'claimed_amount'   => $claimed,
+                        'approved_amount'  => $approved,
+                        'disbursed_amount' => $disbursed,
                     ];
                 }
             }
@@ -601,7 +624,10 @@ class UserIncentiveApplicationController extends Controller
             ]);
 
             $user = User::where('id', auth()->user()->id)->with('department_user')->first();
+            
             $designation = $user ? $user?->department_user?->designation : null;
+
+            $department_user_district_code = $user?->district_id;
 
             if (!$designation) {
                 return response()->json([
@@ -610,7 +636,10 @@ class UserIncentiveApplicationController extends Controller
                 ]);
             }
 
-            $applications = UserIncentiveApplication::with(['proforma', 'user']);
+            $applications = UserIncentiveApplication::with(['proforma', 'user.district'])
+            ->whereHas('user',function($q) use($department_user_district_code){
+                $q->where('district_id',$department_user_district_code);
+            });
 
             if ($designation == 'Dealing Assistant') {
 
@@ -1227,24 +1256,38 @@ class UserIncentiveApplicationController extends Controller
             return false;
         }
 
-        $latest = UserIncentiveApplication::select('submitted_at')
+        $latest = UserIncentiveApplication::select('submitted_at','remaining_claim')
             ->where('user_id', $user_id)
             ->where('proforma_id', $proforma->id)
             ->where('application_type', 'claim')
             ->whereNotNull('submitted_at')
             ->orderByDesc('submitted_at')
             ->first();
-            if (!$latest || !$latest->submitted_at) {
-                return true;
-            }
-            
+        if (!$latest || !$latest->submitted_at) {
+            return true;
+        }
 
         if ($latest->remaining_claim !== null && $latest->remaining_claim <= 0) {
             return false;
         }
-        
+
         $next_allowed_on = Carbon::parse($latest->submitted_at)->addMonths($gap_months);
         return now()->greaterThanOrEqualTo($next_allowed_on);
-        
+    }
+
+    private function can_apply_for_this_claim($user_id, Proforma $proforma): bool
+    {
+        $proforma_depends_on =  json_decode($proforma->depends_on_proforma_ids);
+
+        $approved_eligibilty = UserIncentiveApplication::query()
+            ->where('user_id', $user_id)
+            ->whereIn('proforma_id', $proforma_depends_on)
+            ->where('application_type', 'eligibility')
+            ->whereIn('workflow_status', ['approved_by_gm', 'approved_by_slc'])
+            ->select('proforma_id')
+            ->distinct()
+            ->count('proforma_id');
+
+        return $approved_eligibilty > 0 ? true : false;
     }
 }
