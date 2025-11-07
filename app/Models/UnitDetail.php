@@ -68,7 +68,7 @@ class UnitDetail extends Model
         'category_of_enterprise',
         'working_session',
         'product_manufacturing_process',
-        
+
         'created_at',
         'updated_at',
     ];
@@ -77,4 +77,14 @@ class UnitDetail extends Model
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    public function district()
+    {
+        return $this->belongsTo(TripuraMasterData::class, 'unit_location_district', 'district_code');
+    }
+
+    public function subdivision()
+    {
+        return $this->belongsTo(TripuraMasterData::class, 'unit_location_subdivision', 'sub_lgd_code');
+    }
 }

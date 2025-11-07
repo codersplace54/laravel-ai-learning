@@ -16,6 +16,8 @@ class RenewalFeeRule extends Model
         'condition_label_question_id',
         'pre_condition_operator',
         'pre_condition_value',
+        'pre_start_value',
+        'pre_end_value',
         'condition_operator',
         'condition_value_start',
         'condition_value_end',
