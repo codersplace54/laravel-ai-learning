@@ -20,6 +20,8 @@ return new class extends Migration
             $table->enum('pre_condition_operator', ['=', '!=', '<', '<=', '>', '>=', 'between'])->nullable();
             $table->enum('condition_operator', ['=', '!=', '<', '<=', '>', '>=', 'between'])->nullable();
             $table->string('pre_condition_value')->nullable();
+            $table->string('pre_start_value')->nullable();
+            $table->string('pre_end_value')->nullable();
             $table->string('condition_value_start')->nullable();
             $table->string('condition_value_end')->nullable();
             $table->string('calculated_fee')->nullable();

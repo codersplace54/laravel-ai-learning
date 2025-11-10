@@ -241,6 +241,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('inspections-status-update', [InspectionController::class, 'inspections_status_update']);
         Route::post('approved-inspections-list', [InspectionController::class, 'approved_inspections_list']);
         Route::post('inspection-date-update-by-inspector', [InspectionController::class, 'inspection_date_update_by_inspector']);
+        Route::post('update-joint-inspection', [InspectionController::class, 'update_joint_inspection']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);

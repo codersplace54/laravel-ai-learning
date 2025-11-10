@@ -35,6 +35,8 @@ class ServiceFeeRuleController extends Controller
                 'rules.*.pre_condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
                 'rules.*.condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
                 'rules.*.pre_condition_value' => 'nullable|string',
+                'rules.*.pre_start_value' => 'nullable|string',
+                'rules.*.pre_end_value' => 'nullable|string',
                 'rules.*.condition_value_start' => 'nullable|string',
                 'rules.*.condition_value_end' => 'nullable|string',
                 'rules.*.calculated_fee' => 'nullable|string',
@@ -58,29 +60,31 @@ class ServiceFeeRuleController extends Controller
                 // }
 
                 // foreach ($condition_labels as $label) {
-                    $service_fee_rule = ServiceFeeRule::create([
-                        'service_id' => $rule['service_id'] ?? null,
-                        'renewal_cycle_id' => $rule['renewal_cycle_id'] ?? null,
-                        'fee_type' => $rule['fee_type'] ?? null,
-                        'fixed_fee' => $rule['fixed_fee'] ?? null,
-                        'question_id' => $rule['question_id'] ?? null,
-                        'condition_label_question_id' => $rule['condition_label_question_id'] ?? null,
-                        'pre_condition_operator' => $rule['pre_condition_operator'] ?? null,
-                        'condition_operator' => $rule['condition_operator'] ?? null,
-                        'pre_condition_value' => $rule['pre_condition_value'] ?? null,
-                        'condition_value_start' => $rule['condition_value_start'] ?? null,
-                        'condition_value_end' => $rule['condition_value_end'] ?? null,
-                        'calculated_fee' => $rule['calculated_fee'] ?? null,
-                        'fixed_calculated_fee' => $rule['fixed_calculated_fee'] ?? null,
-                        'per_unit_fee' => $rule['per_unit_fee'] ?? null,
-                        'priority' => $rule['priority'] ?? null,
-                        'status' => $rule['status'] ?? 1,
-                        'created_by' => $admin->email_id,
-                        'multi_condition' => $rule['multi_condition'] ?? "no",
-                        'minimum_fee' => $rule['minimum_fee'] ?? null,
-                    ]);
+                $service_fee_rule = ServiceFeeRule::create([
+                    'service_id' => $rule['service_id'] ?? null,
+                    'renewal_cycle_id' => $rule['renewal_cycle_id'] ?? null,
+                    'fee_type' => $rule['fee_type'] ?? null,
+                    'fixed_fee' => $rule['fixed_fee'] ?? null,
+                    'question_id' => $rule['question_id'] ?? null,
+                    'condition_label_question_id' => $rule['condition_label_question_id'] ?? null,
+                    'pre_condition_operator' => $rule['pre_condition_operator'] ?? null,
+                    'condition_operator' => $rule['condition_operator'] ?? null,
+                    'pre_condition_value' => $rule['pre_condition_value'] ?? null,
+                    'pre_start_value' => $rule['pre_start_value'] ?? null,
+                    'pre_end_value' => $rule['pre_end_value'] ?? null,
+                    'condition_value_start' => $rule['condition_value_start'] ?? null,
+                    'condition_value_end' => $rule['condition_value_end'] ?? null,
+                    'calculated_fee' => $rule['calculated_fee'] ?? null,
+                    'fixed_calculated_fee' => $rule['fixed_calculated_fee'] ?? null,
+                    'per_unit_fee' => $rule['per_unit_fee'] ?? null,
+                    'priority' => $rule['priority'] ?? null,
+                    'status' => $rule['status'] ?? 1,
+                    'created_by' => $admin->email_id,
+                    'multi_condition' => $rule['multi_condition'] ?? "no",
+                    'minimum_fee' => $rule['minimum_fee'] ?? null,
+                ]);
 
-                    $service_fee_rules[] = $service_fee_rule;
+                $service_fee_rules[] = $service_fee_rule;
                 // }
             }
 
@@ -128,6 +132,8 @@ class ServiceFeeRuleController extends Controller
                 'rules.*.condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
                 'rules.*.pre_condition_operator' => 'nullable|in:=,!=,<,<=,>,>=,between',
                 'rules.*.pre_condition_value' => 'nullable|string',
+                'rules.*.pre_start_value' => 'nullable|string',
+                'rules.*.pre_end_value' => 'nullable|string',
                 'rules.*.condition_value_start' => 'nullable|string',
                 'rules.*.condition_value_end' => 'nullable|string',
                 'rules.*.calculated_fee' => 'nullable|string',
@@ -157,6 +163,8 @@ class ServiceFeeRuleController extends Controller
                     'pre_condition_operator' => $rule['pre_condition_operator'] ?? null,
                     'condition_operator' => $rule['condition_operator'] ?? null,
                     'pre_condition_value' => $rule['pre_condition_value'] ?? null,
+                    'pre_start_value' => $rule['pre_start_value'] ?? null,
+                    'pre_end_value' => $rule['pre_end_value'] ?? null,
                     'condition_value_start' => $rule['condition_value_start'] ?? null,
                     'condition_value_end' => $rule['condition_value_end'] ?? null,
                     'calculated_fee' => $rule['calculated_fee'] ?? null,
@@ -227,6 +235,8 @@ class ServiceFeeRuleController extends Controller
                     'condition_label_question_id' => $rule->condition_label_question_id ?? null,
                     'condition_label_question' => $rule->conditionQuestion->question_label ?? null,
                     'pre_condition_value' => $rule->pre_condition_value ?? null,
+                    'pre_start_value' => $rule->pre_start_value ?? null,
+                    'pre_end_value' => $rule->pre_end_value ?? null,
                     'pre_condition_operator' => $rule->pre_condition_operator ?? null,
                     'condition_operator' => $rule->condition_operator,
                     'condition_value_start' => $rule->condition_value_start,
