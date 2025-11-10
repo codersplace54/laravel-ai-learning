@@ -654,6 +654,7 @@ class UserServiceApplicationController extends Controller
     {
         $rules = ServiceFeeRule::where('service_id', $service_id)->get();
         $final_fee = 0;
+        $minimum_fee = 0;
 
         foreach ($rules as $rule) {
 
@@ -664,19 +665,32 @@ class UserServiceApplicationController extends Controller
                     continue;
                 }
 
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $pre_value)) {
+                    $pre_value = date('md', strtotime($pre_value));
+                }
+
                 if (is_numeric($pre_value)) {
                     $pre_value = (float) $pre_value;
                 }
 
-                $pre_match = match ($rule->pre_condition_operator) {
-                    '='  => $pre_value == $rule->pre_condition_value,
-                    '!=' => $pre_value != $rule->pre_condition_value,
-                    '<'  => $pre_value <  $rule->pre_condition_value,
-                    '<=' => $pre_value <= $rule->pre_condition_value,
-                    '>'  => $pre_value >  $rule->pre_condition_value,
-                    '>=' => $pre_value >= $rule->pre_condition_value,
-                    default => true,
-                };
+                if ($rule->pre_condition_operator === 'between') {
+
+                    $start = (int) $rule->pre_start_value;
+                    $end   = (int) $rule->pre_end_value;
+
+                    $pre_match = ($pre_value >= $start && $pre_value <= $end);
+                } else {
+
+                    $pre_match = match ($rule->pre_condition_operator) {
+                        '='  => $pre_value == $rule->pre_condition_value,
+                        '!=' => $pre_value != $rule->pre_condition_value,
+                        '<'  => $pre_value <  $rule->pre_condition_value,
+                        '<=' => $pre_value <= $rule->pre_condition_value,
+                        '>'  => $pre_value >  $rule->pre_condition_value,
+                        '>=' => $pre_value >= $rule->pre_condition_value,
+                        default => true,
+                    };
+                }
 
                 if (!$pre_match) {
                     continue;
@@ -685,6 +699,10 @@ class UserServiceApplicationController extends Controller
 
             $user_answer = $application_data[$rule->question_id] ?? null;
             if ($user_answer === null) continue;
+
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $user_answer)) {
+                $user_answer = date('md', strtotime($user_answer));
+            }
 
             if (is_numeric($user_answer)) {
                 $user_answer = (float) $user_answer;
@@ -720,9 +738,17 @@ class UserServiceApplicationController extends Controller
                     }
                     break;
             }
+
+            if (!empty($rule->minimum_fee) && $rule->minimum_fee > $minimum_fee) {
+                $minimum_fee = (float) $rule->minimum_fee;
+            }
         }
 
-        return $final_fee;
+        if ($minimum_fee > 0 && $final_fee < $minimum_fee) {
+            return round($minimum_fee, 2);
+        }
+
+        return round($final_fee, 2);
     }
 
 
@@ -928,6 +954,7 @@ class UserServiceApplicationController extends Controller
 
                 $response_data[] = [
                     'application_id' => $service->id,
+                    'service_id' => $service->service_id,
                     'application_data' => $service->application_data,
                     'service_title_or_description' => $service->service->service_title_or_description ?? null,
                     'application_type' => $service->service->noc_type ?? null,

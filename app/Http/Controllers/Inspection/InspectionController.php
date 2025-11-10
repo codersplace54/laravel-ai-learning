@@ -41,6 +41,7 @@ class InspectionController extends Controller
                 'inspector'           => 'nullable|string',
                 'inspection_for'      => 'nullable|array',
                 'inspection_for.*'    => 'string',
+                'department_type'     => 'nullable|string',
 
             ]);
 
@@ -56,6 +57,7 @@ class InspectionController extends Controller
                 'remarks'            => $request->remarks,
                 'inspection_type'    => $request->inspection_type ?? 'On Request',
                 'inspector'          => $request->inspector,
+                'department_type'    => $request->department_type,
                 'inspection_for'     => json_encode($request->inspection_for),
                 'status'             => 'pending',
                 'created_by'         => $user->email_id,
@@ -138,9 +140,10 @@ class InspectionController extends Controller
                         'request_id'                => $inspection->request_id,
                         'department_id'             => $inspection->department_id,
                         'department_name'           => $inspection->department->name,
-                        'proposed_inspection_date'  => $inspection->inspection_date,
+                        'proposed_date'             => $inspection->proposed_date,
+                        'inspection_date'           => $inspection->inspection_date,
                         'inspection_type'           => 'On Request',
-                        'industry_name'             => $inspection->user->name_of_enterprise ?? 'N/A',
+                        'industry_name'             => $inspection->unit->unit_name ?? null,
                         'inspector'                 => null,
                         'status'                    => $inspection->status,
                         'created_by'                => $inspection->created_by,
@@ -252,6 +255,7 @@ class InspectionController extends Controller
                 'inspector'           => 'nullable|string',
                 'inspection_for'      => 'nullable|array',
                 'inspection_for.*'    => 'string',
+                'department_type'     => 'nullable|string',
             ]);
 
             DB::beginTransaction();
@@ -278,6 +282,7 @@ class InspectionController extends Controller
                 'inspection_date'    => $request->inspection_date  ?? $inspection->inspection_date,
                 'unit_name'          => $request->unit_name  ?? $inspection->unit_name,
                 'inspection_for'     => json_encode($request->inspection_for ?? $inspection->inspection_for),
+                'department_type'    => $request->department_type ??  $inspection->department_type,
             ]);
 
             $department_code = str_pad($inspection->department_id, 2, '0', STR_PAD_LEFT);
@@ -394,36 +399,49 @@ class InspectionController extends Controller
                 'department_id' => 'required|integer|exists:departments,id',
             ]);
 
-            $inspections = Inspection::where('department_id', $request->department_id)
-                ->whereIn('status', ['pending', 'approved'])
-                ->orderBy('proposed_date', 'desc')
-                ->get();
+            $industry_name = $request->industry_name;
+            $from_date     = $request->from_date;
+            $to_date       = $request->to_date;
+            $perPage       = $request->per_page ?? 10;
 
-            if ($inspections->isEmpty()) {
-                return response()->json([
-                    'status'  => 1,
-                    'message' => 'No inspections found for this department.',
-                    'data'    => []
-                ], 200);
+            $query = Inspection::where('department_id', $request->department_id)
+                ->whereIn('status', ['pending', 'approved']);
+
+            if ($industry_name) {
+                $query->whereHas('unit', function ($q) use ($industry_name) {
+                    $q->where('unit_name', 'like', "%{$industry_name}%");
+                });
             }
 
-            $data = $inspections->map(function ($inspection) {
+            if ($from_date && $to_date) {
+                $query->whereBetween('inspection_date', [$from_date, $to_date]);
+            }
+
+            $inspections = $query->orderByDesc('updated_at')
+                ->paginate($perPage);
+
+
+            $data = $inspections->getCollection()->map(function ($item) {
 
                 return [
-                    'id'               => $inspection->id,
-                    'request_id'       => $inspection->request_id,
-                    'proposed_date'    => $inspection->proposed_date,
-                    'inspection_type'  => $inspection->inspection_type ?? 'On Request',
-                    'industry_name'    => $inspection->user->name_of_enterprise ?? 'N/A',
-                    'inspector'        => $inspection->inspectorUser ? $inspection->inspectorUser->authorized_person_name : 'Not Assigned',
-                    'status'           => $inspection->status,
+                    'id'               => $item->id,
+                    'request_id'       => $item->request_id,
+                    'proposed_date'    => $item->proposed_date ?? null,
+                    'inspection_type'  => $item->inspection_type ?? 'On Request',
+                    'industry_name'    => $item->unit->unit_name ?? null,
+                    'inspector'        => $item->inspectorUser ? $item->inspectorUser->authorized_person_name : 'Not Assigned',
+                    'status'           => $item->status,
                 ];
             });
 
             return response()->json([
                 'status'  => 1,
                 'message' => 'Inspections fetched successfully.',
-                'data'    => $data
+                'total'   => $inspections->total(),
+                'current_page' => $inspections->currentPage(),
+                'last_page'    => $inspections->lastPage(),
+                'per_page'     => $inspections->perPage(),
+                'data'         => $data,
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -520,7 +538,7 @@ class InspectionController extends Controller
         }
     }
 
-    public function approved_inspections_list()
+    public function approved_inspections_list(Request $request)
     {
 
         try {
@@ -544,38 +562,48 @@ class InspectionController extends Controller
                 ], 403);
             }
 
-            $inspections = Inspection::with([
+            $industry_name = $request->industry_name;
+            $from_date     = $request->from_date;
+            $to_date       = $request->to_date;
+            $perPage       = $request->per_page ?? 10;
+
+            $query = Inspection::with([
                 'user:id,name_of_enterprise,authorized_person_name',
                 'department:id,name'
             ])
-                ->where('status', 'approved')
                 ->where('inspector', $user->id)
-                ->orderByDesc('updated_at')
-                ->get([
-                    'id',
-                    'request_id',
-                    'department_id',
-                    'user_id',
-                    'inspection_type',
-                    'inspector',
-                    'proposed_date',
-                    'reason_for_request',
-                    'remarks',
-                    'status',
-                    'updated_at'
-                ]);
+                ->where(function ($q) {
+                    $q->where('department_type', 'joint')
+                        ->orWhereIn('status', ['approved', 'completed']);
+                });
+
+            if ($industry_name) {
+                $query->whereHas('unit', function ($q) use ($industry_name) {
+                    $q->where('unit_name', 'like', "%{$industry_name}%");
+                });
+            }
+
+            if ($from_date && $to_date) {
+                $query->whereBetween('inspection_date', [$from_date, $to_date]);
+            }
+
+            $inspections = $query->orderByDesc('updated_at')
+                ->paginate($perPage);
 
 
-            $data = $inspections->map(function ($item) {
+            $data = $inspections->getCollection()->map(function ($item) {
                 return [
                     'id'               => $item->id,
                     'user_name'        => $item->user->authorized_person_name,
-                    'request_id'       => $item->request_id,
+                    'inspection_id'    => $item->request_id,
                     'inspection_type'  => $item->inspection_type,
                     'inspector'        => $item->inspectorUser ? $item->inspectorUser->authorized_person_name : 'N/A',
                     'department_name'  => $item->department->name ?? null,
-                    'industry_name'    => $item->user->name_of_enterprise ?? null,
-                    'proposed_date'    => $item->proposed_date,
+                    'industry_name'    => $item->unit->unit_name ?? null,
+                    'proposed_date'  => json_decode($item->proposed_date),
+                    'inspection_date'  => json_decode($item->inspection_date),
+                    'actual_date_of_inspection' => $item->inspection_date ?? null,
+                    'department_type'  => $item->department_type,
                     'reason'           => $item->reason_for_request,
                     'remarks'          => $item->remarks,
                     'status'           => $item->status,
@@ -584,10 +612,13 @@ class InspectionController extends Controller
             });
 
             return response()->json([
-                'status' => 1,
+                'status'  => 1,
                 'message' => 'Approved inspection list fetched successfully.',
-                'total' => $data->count(),
-                'data' => $data
+                'total'   => $inspections->total(),
+                'current_page' => $inspections->currentPage(),
+                'last_page'    => $inspections->lastPage(),
+                'per_page'     => $inspections->perPage(),
+                'data'         => $data,
             ], 200);
         } catch (\Exception $e) {
 
@@ -965,7 +996,7 @@ class InspectionController extends Controller
             ]);
 
             $unit = UnitDetail::where('id', $request->id)
-                ->select('id', 'unit_name', 'unit_address', 'unit_location_district', 'unit_location_subdivision', 'category_of_enterprise')
+                ->select('id', 'user_id', 'unit_name', 'unit_address', 'unit_location_district', 'unit_location_subdivision', 'category_of_enterprise')
                 ->first();
 
             if (!$unit) {
@@ -978,7 +1009,15 @@ class InspectionController extends Controller
             return response()->json([
                 'status' => 1,
                 'message' => 'Unit details fetched successfully.',
-                'data' => $unit,
+                'data' => [
+                    'id'                                => $unit->id,
+                    'user_id'                           => $unit->user_id,
+                    'unit_name'                         => $unit->unit_name,
+                    'unit_address'                      => $unit->unit_address,
+                    'unit_location_district'            => $unit->district->district_name ?? null,
+                    'unit_location_subdivision'         => $unit->subdivision->sub_division ?? null,
+                    'category_of_enterprise'            => $unit->category_of_enterprise,
+                ],
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -996,6 +1035,44 @@ class InspectionController extends Controller
                 'message' => 'Something went wrong.',
                 'error' => $e->getMessage(),
             ], 500);
+        }
+    }
+
+    public function update_joint_inspection(Request $request)
+    {
+
+        try {
+
+
+            $request->validate([
+                'inspection_id'   => 'required|integer',
+                'proposed_date'   => 'required|array|min:1',
+                'proposed_date.*' => 'date|date_format:Y-m-d'
+            ]);
+
+            $inspection = Inspection::where('id', $request->inspection_id)->first();
+
+            if (!$inspection) {
+                return response()->json(['status' => 0, 'message' => 'Inspection not found.'], 404);
+            }
+
+            $inspection->update([
+                'proposed_date' => json_encode($request->proposed_date)
+            ]);
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Proposed dates updated successfully.',
+                'proposed_date' => json_decode($inspection->proposed_date, true)
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage()
+            ]);
         }
     }
 }

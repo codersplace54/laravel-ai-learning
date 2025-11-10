@@ -256,6 +256,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('certificate-view',  [ServiceController::class, 'certificate_view']);
         Route::post('generate-certificate',  [ServiceController::class, 'generate_certificate']);
 
+        Route::post('update-joint-inspection', [InspectionController::class, 'update_joint_inspection']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);

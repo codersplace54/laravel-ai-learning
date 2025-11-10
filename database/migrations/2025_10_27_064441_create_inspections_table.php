@@ -21,6 +21,7 @@ return new class extends Migration
             $table->integer('inspector')->nullable();
             $table->string('inspection_type')->nullable();
             $table->string('inspection_for')->nullable();
+            $table->string('department_type')->nullable();
             $table->text('remarks')->nullable();
             $table->string('status')->default('pending');
             $table->string('created_by')->nullable();
