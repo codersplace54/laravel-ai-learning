@@ -18,6 +18,7 @@ class Inspection extends Model
         'inspector',
         'inspection_type',
         'inspection_for',
+        'department_type',
         'remarks',
         'status',
         'created_by',
@@ -44,5 +45,10 @@ class Inspection extends Model
     public function inspectorUser()
     {
         return $this->belongsTo(User::class, 'inspector', 'id');
+    }
+
+    public function unit()
+    {
+        return $this->belongsTo(UnitDetail::class, 'unit_name', 'id');
     }
 }
