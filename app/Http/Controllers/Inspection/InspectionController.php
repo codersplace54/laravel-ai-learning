@@ -196,7 +196,7 @@ class InspectionController extends Controller
             $data = [
                 'id'                          => $inspection->id,
                 'request_id'                  => $inspection->request_id,
-                'proposed_date'               => $inspection->proposed_date,
+                'proposed_date'               => json_decode($inspection->proposed_date),
                 'inspection_date'             => $inspection->inspection_date ?? 'N/A',
                 'department_name'             => $inspection->department->name ?? 'N/A',
                 'inspector'                   => $inspection->inspectorUser ? $inspection->inspectorUser->authorized_person_name : 'N/A',
