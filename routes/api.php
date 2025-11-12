@@ -182,6 +182,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
         Route::post('calculate-fee', [UserServiceApplicationController::class, 'calculate_fee']);
 
+
         Route::prefix('incentive')->group(function () {
             Route::post('scheme-list', [UserIncentiveApplicationController::class, 'user_incentive_scheme_list']);
             Route::post('eligibility-proforma-list', [UserIncentiveApplicationController::class, 'user_eligibility_proforma_list']);
@@ -277,4 +278,8 @@ Route::post('user-feedback-details', [UserFeedbackController::class, 'user_feedb
 
 Route::post('unit-list', [InspectionController::class, 'unit_list']);
 Route::post('get-unit-details', [InspectionController::class, 'get_unit_details']);
+
+Route::post('user/third-party/return', [UserServiceApplicationController::class, 'third_party_return'])->name('third_party.return');
+Route::post('/third-party/status/update', [UserServiceApplicationController::class, 'update_third_party_status_log']);
+
 
