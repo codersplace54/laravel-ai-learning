@@ -461,7 +461,7 @@ class ServiceMasterController extends Controller
                     }
 
                     if (!empty($service->verification_token)) {
-                        $post_params['verificationToken'] = base64_encode($service->verification_token);
+                        $post_params['verification_token'] = base64_encode($service->verification_token);
                     }
 
                     if (!empty($service->third_party_return_url)) {
@@ -839,10 +839,12 @@ class ServiceMasterController extends Controller
             }
 
             $params = collect($service->third_party_param);
-            $postParams = [];
+            $post_params = [];
 
-            $postParams['user_id'] = $user->id;
-            $postParams['bin'] = $user->bin ?? null;
+            $post_params['user_id'] = $user->id;
+            $post_params['bin'] = $user->bin ?? null;
+            $post_params['service_id'] = $service->id;
+            $phone = $user->mobile_no ?? null;
 
             foreach ($params as $param) {
                 $paramName = $param->param_name;
@@ -869,23 +871,34 @@ class ServiceMasterController extends Controller
                 }
 
                 if (!is_null($value)) {
-                    $postParams[$paramName] = $value;
+                    $post_params[$paramName] = $value;
                 }
             }
 
             if (!empty($service->verification_token)) {
-                $postParams['verificationToken'] = base64_encode($service->verification_token);
+                $secret_key = $service->verification_token;
+                $application_date = now()->format('d-m-Y H:i:s');
+                $payload = "phone={$phone}&application_date={$application_date}";
+
+                $hmac_hash = hash_hmac('sha256', $payload, $secret_key);
+
+                $encoded_token = base64_encode($secret_key . '|' . $phone . '|' . $application_date);
+
+                $post_params['application_date'] = $application_date;
+                $post_params['verification_Payload'] = $payload;
+                $post_params['verification_HMAC'] = $hmac_hash;
+                $post_params['verification_token'] = $encoded_token;
             }
 
             if (!empty($service->third_party_return_url)) {
-                $postParams['returnUrl'] = $service->third_party_return_url;
+                $post_params['returnUrl'] = $service->third_party_return_url;
             }
 
 
             $html = '<html><body onload="document.forms[0].submit()">';
             $html .= '<form method="POST" action="' . e($service->third_party_redirect_url) . '">';
 
-            foreach ($postParams as $key => $value) {
+            foreach ($post_params as $key => $value) {
                 $html .= '<input type="hidden" name="' . e($key) . '" value="' . e($value) . '">';
             }
 

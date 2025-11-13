@@ -294,3 +294,7 @@ Route::post('user-feedback-details', [UserFeedbackController::class, 'user_feedb
 Route::post('unit-list', [InspectionController::class, 'unit_list']);
 Route::post('get-unit-details', [InspectionController::class, 'get_unit_details']);
 
+Route::post('user/third-party/return', [UserServiceApplicationController::class, 'third_party_return'])->name('third_party.return');
+Route::post('/third-party/status/update', [UserServiceApplicationController::class, 'update_third_party_status_log']);
+
+
