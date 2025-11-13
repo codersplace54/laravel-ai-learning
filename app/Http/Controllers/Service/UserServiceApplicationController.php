@@ -968,7 +968,8 @@ class UserServiceApplicationController extends Controller
                     'status'  => $service->status ?? null,
                     'renewal_date'  => $service->renewalYear ?? null,
                     'allow_repeat_application' => $service->allow_repeat_application ?? null,
-                    'latest_workflow_status' => $latest_workflow?->status ?? null
+                    'latest_workflow_status' => $latest_workflow?->status ?? null,
+                    'service_mode' => $service->service->service_mode ?? null,
                 ];
             }
 
@@ -1148,7 +1149,7 @@ class UserServiceApplicationController extends Controller
                 'application_data'      => json_encode($request->application_data ?? null),
                 'applied_fee'           => $request->applied_fee,
                 'approved_fee'          => $request->approved_fee,
-                'payment_status'        => $request->payment_status ?? 'unpaid',
+                'payment_status'        => $request->payment_status ?? 'pending',
                 'remarks'               => $request->remarks,
                 'NOC_application_date'  => $request->NOC_application_date,
                 'NOC_expiry_date'       => $request->NOC_expiry_date,
@@ -1339,7 +1340,8 @@ class UserServiceApplicationController extends Controller
                     'status'  => $service->status ?? null,
                     'renewal_date'  => $service->renewalYear ?? null,
                     'allow_repeat_application' => $service->allow_repeat_application ?? null,
-                    'latest_workflow_status' => $latest_workflow?->status ?? null
+                    'latest_workflow_status' => $latest_workflow?->status ?? null,
+                    'service_mode' => $service->service->service_mode ?? null,
                 ];
             }
 
@@ -1355,6 +1357,177 @@ class UserServiceApplicationController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong.',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function third_party_return(Request $request)
+    {
+
+        try {
+
+
+            $external_id        = $request->input('applicationId');
+            $status            = $request->input('status');
+            $payment_status     = $request->input('payment_status');
+            $max_processing_date = $request->input('max_processing_date');
+            $noc_number         = $request->input('noc_number');
+            $noc_valid_till      = $request->input('noc_valid_till');
+            $remarks           = $request->input('remarks');
+            $service_id        = $request->input('service_id');
+            $user_id          = $request->input('user_id');
+
+
+            $data = UserServiceApplication::where('external_application_id', $external_id)->first();
+
+            if ($data) {
+                $data->update([
+                    'status'              => $status,
+                    'payment_status'      => $payment_status ?? $data->payment_status,
+                    'max_processing_date' => $max_processing_date ?? $data->max_processing_date,
+                    'noc_number'          => $noc_number ?? $data->noc_number,
+                    'noc_valid_till'      => $noc_valid_till ?? $data->noc_valid_till,
+                    'remarks'             => $remarks ?? $data->remarks,
+                ]);
+            } else {
+
+                $data = UserServiceApplication::create([
+                    'user_id'                 => $user_id,
+                    'service_id'              => $service_id,
+                    'external_application_id' => $external_id,
+                    'applicationId'           => $external_id,
+                    'status'                  => $status,
+                    'payment_status'          => $payment_status ?? 'pending',
+                    'max_processing_date'     => $max_processing_date,
+                    'noc_number'              => $noc_number,
+                    'noc_valid_till'          => $noc_valid_till,
+                    'remarks'                 => $remarks,
+                    'bin'                     => $request->input('bin'),
+                ]);
+            }
+
+            // $redirectUrl = env('APP_FRONTEND_URL') . "/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";
+            // return redirect()->away($redirectUrl);
+            return response()->json([
+                'status' => 1,
+                'message' => 'Service user application fetched successfully.',
+                'data' => $data
+            ]);
+
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'success' => 0,
+                'message' => 'Failed to process callback',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function update_third_party_status_log(Request $request)
+    {
+
+        try {
+
+
+            $request->validate([
+                'application_id'       => 'required|string',
+                'swaagat_user_id'      => 'required|integer',
+                'service_id'           => 'required|integer',
+                'service_status'       => 'required|string',
+                'mobile_no'            => 'required|string',
+                'application_date'     => 'required|date',
+                'updation_date'        => 'required|date',
+                'action_by'            => 'nullable|string',
+                'remark'               => 'nullable|string',
+                'payment_amount'       => 'nullable',
+                'payment_status'       => 'nullable|string',
+                'payment_url'          => 'nullable|string',
+                'egras_account_head'   => 'nullable|string',
+                'noc_url'              => 'nullable|string',
+                'noc_file'             => 'nullable|string',
+            ]);
+
+            $log = ThirdPartyStatusLog::where('application_id', $request->application_id)->first();
+
+            $data = [
+                'service_id'         => $request->service_id,
+                'application_id'     => $request->application_id,
+                'swaagat_user_id'    => $request->swaagat_user_id,
+                'service_status'     => $request->service_status,
+                'mobile_no'          => $request->mobile_no,
+                'application_date'   => $request->application_date,
+                'updation_date'      => $request->updation_date,
+                'action_by'          => $request->action_by,
+                'remark'             => $request->remark,
+                'payment_amount'     => $request->payment_amount,
+                'payment_status'     => $request->payment_status,
+                'payment_url'        => $request->payment_url,
+                'egras_account_head' => $request->egras_account_head,
+                'noc_url'            => $request->noc_url,
+                'noc_file'           => $request->noc_file,
+            ];
+
+            if ($log) {
+                $log->update([
+                    'service_id'         => $request->service_id,
+                    'application_id'     => $request->application_id,
+                    'swaagat_user_id'    => $request->swaagat_user_id,
+                    'service_status'     => $request->service_status,
+                    'mobile_no'          => $request->mobile_no,
+                    'application_date'   => $request->application_date,
+                    'updation_date'      => $request->updation_date,
+                    'action_by'          => $request->action_by,
+                    'remark'             => $request->remark,
+                    'payment_amount'     => $request->payment_amount,
+                    'payment_status'     => $request->payment_status,
+                    'payment_url'        => $request->payment_url,
+                    'egras_account_head' => $request->egras_account_head,
+                    'noc_url'            => $request->noc_url,
+                    'noc_file'           => $request->noc_file,
+                ]);
+            } else {
+
+                ThirdPartyStatusLog::create([
+                    'service_id'         => $request->service_id,
+                    'application_id'     => $request->application_id,
+                    'swaagat_user_id'    => $request->swaagat_user_id,
+                    'service_status'     => $request->service_status,
+                    'mobile_no'          => $request->mobile_no,
+                    'application_date'   => $request->application_date,
+                    'updation_date'      => $request->updation_date,
+                    'action_by'          => $request->action_by,
+                    'remark'             => $request->remark,
+                    'payment_amount'     => $request->payment_amount,
+                    'payment_status'     => $request->payment_status,
+                    'payment_url'        => $request->payment_url,
+                    'egras_account_head' => $request->egras_account_head,
+                    'noc_url'            => $request->noc_url,
+                    'noc_file'           => $request->noc_file,
+                ]);
+            }
+
+            return response()->json([
+                'success' => 1,
+                'message' => 'Status log saved successfully',
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+
+            return response()->json([
+                'success' => 0,
+                'message' => 'Validation Error',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'success' => 0,
+                'message' => 'Something went wrong',
+                'error'   => $e->getMessage(),
+                'line'    => $e->getLine()
             ], 500);
         }
     }
