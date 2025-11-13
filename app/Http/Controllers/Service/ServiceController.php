@@ -1470,6 +1470,7 @@ class ServiceController extends Controller
             }
 
             $variables = [
+                'add_watermark',
                 'form_title',
                 'rules_ref',
                 'government',
@@ -1533,6 +1534,7 @@ class ServiceController extends Controller
             $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
 
             $data = [
+                'add_watermark'     => 'no',
                 'form_title'        => 'FORM VI',
                 'rules_ref'         => '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
                 'government'        => 'Government of Tripura',
@@ -1580,7 +1582,7 @@ class ServiceController extends Controller
             'application_id' => 'required|integer|exists:user_service_applications,id',
             'add_watermark' => 'nullable|in:yes,no'
         ]);
-
+        
         try {
             $application = UserServiceApplication::where("id", $request->application_id)->with([
                 'user',
@@ -1646,7 +1648,7 @@ class ServiceController extends Controller
             $user = $application->user;
 
             // watermark start
-            $logo_path = public_path('images/logo/state_emblem_english.jpg');
+            $logo_path = storage_path('app/public/images/logo/state_emblem_english.jpg');
             $html = $filled;
 
             $pdf = Pdf::loadHTML($html)
@@ -1686,7 +1688,7 @@ class ServiceController extends Controller
 
             Storage::disk('public')->put($path, $pdf->output());
             $application->update(['NOC_certificate' => $path]);
-            $application->NOC_certificate = asset('Storage/' . $application->NOC_certificate);
+            $application->NOC_certificate = asset('storage/' . $application->NOC_certificate);
 
             return response()->json([
                 'status'  => 1,
@@ -1696,11 +1698,13 @@ class ServiceController extends Controller
                 ],
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            
             return response()->json([
                 'status'  => 0,
                 'message' => 'Validation failed.',
                 'errors'  => $e->errors(),
             ], 422);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => 0,
