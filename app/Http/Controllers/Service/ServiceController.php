@@ -1186,7 +1186,7 @@ class ServiceController extends Controller
             $user_id         = $user->id;
             $department_id   = $request->department_id;
 
-            $total_applications_for_this_department = Department::find($department_id)->applications()->count();
+            $total_applications_for_this_user = Department::find($department_id)->applications()->count();
 
             $total_count_pending_application_in_department = ApplicationWorkflowAssignment::where('status', 'pending')
                 ->where('hierarchy_level', $hierarchy_level)
@@ -1197,7 +1197,7 @@ class ServiceController extends Controller
 
             $total_count_approved_application_in_department = ApplicationWorkflowAssignment::where('status', 'approved');
 
-            $percentage_pending_application = ($total_count_pending_application_in_department / $total_applications_for_this_department) * 100;
+            $percentage_pending_application = ($total_count_pending_application_in_department / $total_applications_for_this_user) * 100;
 
             $total_count_approved_application_in_department = ApplicationWorkflowAssignment::query()
 
@@ -1207,11 +1207,11 @@ class ServiceController extends Controller
                 ->count('application_id');
 
 
-            $percentage_approved_application = ($total_count_approved_application_in_department / $total_applications_for_this_department) * 100;
+            $percentage_approved_application = ($total_count_approved_application_in_department / $total_applications_for_this_user) * 100;
 
             $total_count_rejected_application_in_department = UserServiceApplication::where('status', 'rejected')->count();
 
-            $percentage_rejected_application = ($total_count_rejected_application_in_department / $total_applications_for_this_department) * 100;
+            $percentage_rejected_application = ($total_count_rejected_application_in_department / $total_applications_for_this_user) * 100;
 
 
             $number_of_NOC_issued_by_department = UserServiceApplication::where('status', 'approved')
@@ -1269,7 +1269,7 @@ class ServiceController extends Controller
             return response()->json([
                 'status'            => 1,
                 'message'           => 'Total count applications under this department fetched successfully',
-                'total_applications_for_this_department' => $total_applications_for_this_department,
+                'total_applications_for_this_user' => $total_applications_for_this_user,
                 'total_count_pending_application_in_department' => $total_count_pending_application_in_department,
                 'percentage_pending_application' => $percentage_pending_application,
                 'percentage_approved_application' => $percentage_approved_application,
@@ -1497,6 +1497,140 @@ class ServiceController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong while generating preview.',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function get_total_applications_by_user(Request $request)
+    {
+
+        try {
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $user = User::where('id', $user->id)
+                ->where('user_type', 'individual')
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Not a user.'
+                ], 404);
+            }
+
+            $request->validate([
+                'user_id' => 'required|integer|exists:users,id',
+            ]);
+
+            $user_id         = $user->id;
+            $total_applications_for_this_user = User::find($user_id)->applications()->count();
+            $total_count_pending_application_in_user = ApplicationWorkflowAssignment::where('status', 'pending')
+                ->whereIn('application_id', function ($query) use ($request) {
+                    $query->select('id')
+                        ->from('user_service_applications')
+                        ->where('user_id', $request->user_id);
+                })
+                ->distinct('application_id')
+                ->count('application_id');
+
+dd($total_count_pending_application_in_user);
+            $total_count_approved_application_in_department = ApplicationWorkflowAssignment::where('status', 'approved');
+
+            $percentage_pending_application = ($total_count_pending_application_in_department / $total_applications_for_this_user) * 100;
+
+            $total_count_approved_application_in_department = ApplicationWorkflowAssignment::query()
+
+                ->where('hierarchy_level', $hierarchy_level)
+                ->where('department_id', $request->department_id)
+                ->distinct('application_id')
+                ->count('application_id');
+
+
+            $percentage_approved_application = ($total_count_approved_application_in_department / $total_applications_for_this_user) * 100;
+
+            $total_count_rejected_application_in_department = UserServiceApplication::where('status', 'rejected')->count();
+
+            $percentage_rejected_application = ($total_count_rejected_application_in_department / $total_applications_for_this_user) * 100;
+
+
+            $number_of_NOC_issued_by_department = UserServiceApplication::where('status', 'approved')
+                ->whereHas('latestWorkflow', function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                })
+                ->count();
+
+            $services = ServiceMaster::withCount('applications')
+                ->where('department_id', $department_id)
+                ->get(['id', 'service_title_or_description']);
+
+            $application_count_per_service = $services->map(function ($service) {
+                return [
+                    'service_id' => $service->id,
+                    'service_name' => $service->service_title_or_description,
+                    'application_count' => $service->applications_count,
+                ];
+            });
+
+            $district_wise_application_in_department = UserServiceApplication::with(['service', 'user.district'])
+                ->whereHas('service', function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                })
+                ->select('user_id')
+                ->with('user.district')
+                ->get()
+                ->groupBy(fn($app) => $app->user?->district?->district_name)
+                ->map(fn($group, $district_name) => [
+                    'district_name' => $district_name,
+                    'count' => $group->count(),
+                ])
+                ->values();
+
+            $district_wise_application_per_service = UserServiceApplication::with(['service', 'user.district'])
+                ->whereHas('service', function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                })
+                ->get()
+                ->groupBy(fn($app) => $app->service?->service_title_or_description)
+                ->map(function ($appsPerService, $serviceName) {
+                    return [
+                        'service_name' => $serviceName,
+                        'districts' => $appsPerService
+                            ->groupBy(fn($app) => $app->user?->district?->district_name)
+                            ->map(fn($apps_per_district, $district_name) => [
+                                'district_name' => $district_name,
+                                'count' => $apps_per_district->count(),
+                            ])
+                            ->values(),
+                    ];
+                })
+                ->values();
+
+            return response()->json([
+                'status'            => 1,
+                'message'           => 'Total count applications under this department fetched successfully',
+                'total_applications_for_this_user' => $total_applications_for_this_user,
+                'total_count_pending_application_in_department' => $total_count_pending_application_in_department,
+                'percentage_pending_application' => $percentage_pending_application,
+                'percentage_approved_application' => $percentage_approved_application,
+                'percentage_rejected_application' => $percentage_rejected_application,
+                'total_count_approved_application_in_department' => $total_count_approved_application_in_department,
+                'number_of_NOC_issued_by_department' => $number_of_NOC_issued_by_department,
+                'application_count_per_service' => $application_count_per_service,
+                'district_wise_application_in_department' => $district_wise_application_in_department,
+                'district_wise_application_per_service' => $district_wise_application_per_service,
+
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching the application count',
+                'error'   => $e->getMessage()
             ], 500);
         }
     }

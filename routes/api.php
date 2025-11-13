@@ -191,6 +191,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
             Route::post('proforma-application-store', [UserIncentiveApplicationController::class, 'user_proforma_application_store']);
             Route::post('application-workflow-history', [UserIncentiveApplicationController::class, 'application_workflow_history']);
         });
+
+    Route::post('/get-total-applications-by-user', [ServiceController::class, 'get_total_applications_by_user']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
