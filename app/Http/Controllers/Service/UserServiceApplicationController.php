@@ -724,18 +724,24 @@ class UserServiceApplicationController extends Controller
 
             switch ($rule->fee_type) {
                 case 'hardcoded':
-                    $final_fee += (float) $rule->fixed_fee;
+                    if (!empty($rule->fixed_calculated_fee)) {
+                        $final_fee += (float) $rule->fixed_calculated_fee;
+                    }
                     break;
 
                 case 'calculated':
                 case 'estimated':
+                    $temp_fee = 0;
+
                     if (!empty($rule->per_unit_fee)) {
-                        $final_fee += $user_answer * (float) $rule->per_unit_fee;
-                    } elseif (!empty($rule->fixed_calculated_fee)) {
-                        $final_fee += (float) $rule->fixed_calculated_fee;
-                    } elseif (!empty($rule->calculated_fee)) {
-                        $final_fee += $user_answer * (float) $rule->calculated_fee;
+                        $temp_fee += $user_answer * (float) $rule->per_unit_fee;
                     }
+
+                    if (!empty($rule->fixed_calculated_fee)) {
+                        $temp_fee += (float) $rule->fixed_calculated_fee;
+                    }
+
+                    $final_fee += $temp_fee;
                     break;
             }
 
@@ -1064,6 +1070,7 @@ class UserServiceApplicationController extends Controller
                 'data'              => $application,
                 'application_data'  => $formatted_data,
                 'history_data'    => $history_data,
+                'service_name'    => $application->service->service_title_or_description,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -1376,6 +1383,8 @@ class UserServiceApplicationController extends Controller
             $remarks           = $request->input('remarks');
             $service_id        = $request->input('service_id');
             $user_id          = $request->input('user_id');
+            $approved_fee      = $request->input('approved_fee');
+            $extra_payment          = $request->input('extra_payment');
 
 
             $data = UserServiceApplication::where('external_application_id', $external_id)->first();
@@ -1388,6 +1397,8 @@ class UserServiceApplicationController extends Controller
                     'noc_number'          => $noc_number ?? $data->noc_number,
                     'noc_valid_till'      => $noc_valid_till ?? $data->noc_valid_till,
                     'remarks'             => $remarks ?? $data->remarks,
+                    'approved_fee'        => $approved_fee ?? $data->approved_fee,
+                    'extra_payment'       => $extra_payment ?? $data->extra_payment,
                 ]);
             } else {
 
@@ -1403,17 +1414,20 @@ class UserServiceApplicationController extends Controller
                     'noc_valid_till'          => $noc_valid_till,
                     'remarks'                 => $remarks,
                     'bin'                     => $request->input('bin'),
+                    'approved_fee'            => $approved_fee,
+                    'extra_payment'           => $extra_payment,
                 ]);
             }
 
-            // $redirectUrl = env('APP_FRONTEND_URL') . "/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";
-            // return redirect()->away($redirectUrl);
-            return response()->json([
-                'status' => 1,
-                'message' => 'Service user application fetched successfully.',
-                'data' => $data
-            ]);
+            //$redirectUrl = env('APP_FRONTEND_URL') . "/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";
+            $redirectUrl = "http://localhost:4200/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";
+            return redirect()->away($redirectUrl);
 
+            // return response()->json([
+            //     'status' => 1,
+            //     'message' => 'Service user application fetched successfully.',
+            //     'data' => $data
+            // ]);
         } catch (\Exception $e) {
 
 

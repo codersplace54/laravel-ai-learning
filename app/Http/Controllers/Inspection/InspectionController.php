@@ -140,7 +140,7 @@ class InspectionController extends Controller
                         'request_id'                => $inspection->request_id,
                         'department_id'             => $inspection->department_id,
                         'department_name'           => $inspection->department->name,
-                        'proposed_date'             => $inspection->proposed_date,
+                        'proposed_date'             => json_decode($inspection->proposed_date),
                         'inspection_date'           => $inspection->inspection_date,
                         'inspection_type'           => 'On Request',
                         'industry_name'             => $inspection->unit->unit_name ?? null,
@@ -405,7 +405,7 @@ class InspectionController extends Controller
             $perPage       = $request->per_page ?? 10;
 
             $query = Inspection::where('department_id', $request->department_id)
-                ->whereIn('status', ['pending', 'approved']);
+                ->whereIn('status', ['pending', 'approved','re_submitted']);
 
             if ($industry_name) {
                 $query->whereHas('unit', function ($q) use ($industry_name) {
@@ -574,7 +574,7 @@ class InspectionController extends Controller
                 ->where('inspector', $user->id)
                 ->where(function ($q) {
                     $q->where('department_type', 'joint')
-                        ->orWhereIn('status', ['approved', 'completed']);
+                        ->orWhereIn('status', ['approved', 'completed','Date Confirmed']);
                 });
 
             if ($industry_name) {

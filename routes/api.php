@@ -35,6 +35,8 @@ use App\Http\Controllers\Report\ReportController;
 use App\Http\Controllers\Report\UserFeedbackController;
 use App\Http\Controllers\Inspection\InspectionController;
 use App\Http\Controllers\Service\ExistingLicenseController;
+use App\Http\Controllers\Dashboard\DashboardController;
+
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -200,6 +202,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
             Route::post('proforma-application-store', [UserIncentiveApplicationController::class, 'user_proforma_application_store']);
             Route::post('application-workflow-history', [UserIncentiveApplicationController::class, 'application_workflow_history']);
         });
+
+    Route::post('/get-total-applications-by-user', [DashboardController::class, 'get_total_applications_by_user']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
@@ -243,7 +247,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/get-user-caf-bank-details', [BankDetailController::class, 'get_user_caf_bank_details']);
         Route::post('/get-user-caf-activity-details', [ActivityController::class, 'get_user_caf_activity_details']);
 
-        Route::post('/get-total-applications-by-department', [ServiceController::class, 'get_total_applications_by_department']);
+        Route::post('/get-total-applications-by-department', [DashboardController::class, 'get_total_applications_by_department']);
         Route::post('/get-list-of-NOC-issued-by-department', [ServiceController::class, 'get_list_of_NOC_issued_by_department']);
         Route::post('export-service-applications', [ServiceController::class, 'export_service_applications']);
 
