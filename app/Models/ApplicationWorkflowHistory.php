@@ -47,4 +47,9 @@ class ApplicationWorkflowHistory extends Model
     {
         return $this->belongsTo(Department::class, 'department_id');
     }
+
+    public function application()
+    {
+        return $this->belongsTo(UserServiceApplication::class, 'application_id');
+    }
 }
