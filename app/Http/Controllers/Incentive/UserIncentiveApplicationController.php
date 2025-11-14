@@ -458,7 +458,7 @@ class UserIncentiveApplicationController extends Controller
                 ->with(['applications' => function ($q) use ($user_id) {
                     $q->where('user_id', $user_id)
                         ->orderByDesc('id')
-                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id','subsidy_report');
+                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id', 'subsidy_report');
                 }])
                 ->select('id', 'scheme_id', 'code', 'title', 'description', 'claim_type')
                 ->get();
@@ -624,7 +624,7 @@ class UserIncentiveApplicationController extends Controller
             ]);
 
             $user = User::where('id', auth()->user()->id)->with('department_user')->first();
-            
+
             $designation = $user ? $user?->department_user?->designation : null;
 
             $department_user_district_code = $user?->district_id;
@@ -636,10 +636,16 @@ class UserIncentiveApplicationController extends Controller
                 ]);
             }
 
-            $applications = UserIncentiveApplication::with(['proforma', 'user.district'])
-            ->whereHas('user',function($q) use($department_user_district_code){
-                $q->where('district_id',$department_user_district_code);
-            });
+            $is_slc = $designation === 'State Level Committee';
+
+            $applications = UserIncentiveApplication::with(['proforma', 'user.district']);
+
+            if (!$is_slc) {
+                $applications->whereHas('user', function ($q) use ($department_user_district_code) {
+                    $q->where('district_id', $department_user_district_code);
+                });
+            }
+
 
             if ($designation == 'Dealing Assistant') {
 
@@ -972,6 +978,12 @@ class UserIncentiveApplicationController extends Controller
             }
 
             $answers = $application->form_answers_json;
+            if (is_string($answers)) {
+                $answers = json_decode($answers, true) ?: [];
+            }
+            if (!is_array($answers)) {
+                $answers = [];
+            }
 
             $questions = ProformaQuestionnaire::where('proforma_id', $application->proforma->id)
                 ->orderBy('display_order')
@@ -979,12 +991,12 @@ class UserIncentiveApplicationController extends Controller
                 ->get();
 
             $questions_with_answers = $questions->map(function ($question) use ($answers) {
-                $answer = $answers[$question->id] ?? null;
+                $answer = $answers[$question->id] ?? ['value' => null, 'files' => []];
                 return [
                     'question_id' => $question->id,
                     'question'    => $question->question_label,
                     'answer'      => $answer['value'] ?? null,
-                    'files'       => $answer['files'],
+                    'files'       => $answer['files'] ?? [],
                 ];
             });
 
@@ -1004,7 +1016,7 @@ class UserIncentiveApplicationController extends Controller
                 'applicant_name'               => $application->user->authorized_person_name,
                 'application_type'             => $application->application_type,
                 'workflow_status'              => $application->workflow_status,
-                'remarks'                      => $latest_workflow_history->remarks,
+                'remarks'                      => $latest_workflow_history?->remarks,
                 'review_file'                  => $latest_workflow_history?->review_file ? asset('storage/' . $latest_workflow_history->review_file) : null,
                 'current_reviewer_user_id'     => $application->current_reviewer_user_id,
                 'submitted_at'                 => optional($application->submitted_at)->toDateTimeString(),
@@ -1256,7 +1268,7 @@ class UserIncentiveApplicationController extends Controller
             return false;
         }
 
-        $latest = UserIncentiveApplication::select('submitted_at','remaining_claim')
+        $latest = UserIncentiveApplication::select('submitted_at', 'remaining_claim')
             ->where('user_id', $user_id)
             ->where('proforma_id', $proforma->id)
             ->where('application_type', 'claim')
