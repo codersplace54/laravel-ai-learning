@@ -46,7 +46,13 @@ class DashboardController extends Controller
             $user_id         = $user->id;
             $department_id   = $request->department_id;
 
+            $total_services_per_department = ServiceMaster::where('department_id', $department_id)->count();
+
             $total_applications_for_this_department = Department::find($department_id)->applications()->count();
+
+            $percentage_total_application = $total_applications_for_this_department > 0
+                ? round(($total_applications_for_this_department / $total_services_per_department) * 100, 2)
+                : 0;
 
             $total_count_pending_application_in_department = ApplicationWorkflowAssignment::where('status', 'pending')
                 ->where('hierarchy_level', $hierarchy_level)
@@ -149,11 +155,13 @@ class DashboardController extends Controller
                 'status'            => 1,
                 'message'           => 'Total count applications under this department fetched successfully',
                 'total_applications_for_this_department' => $total_applications_for_this_department,
+                'percentage_total_application' => $percentage_total_application,
                 'total_count_pending_application_in_department' => $total_count_pending_application_in_department,
                 'percentage_pending_application' => $percentage_pending_application,
                 'percentage_approved_application' => $percentage_approved_application,
                 'percentage_rejected_application' => $percentage_rejected_application,
                 'total_count_approved_application_in_department' => $total_count_approved_application_in_department,
+                '$total_count_rejected_application_in_department' => $total_count_rejected_application_in_department,
                 'number_of_NOC_issued_by_department' => $number_of_NOC_issued_by_department,
                 'application_count_per_service' => $application_count_per_service,
                 'district_wise_application_in_department' => $district_wise_application_in_department,
@@ -199,7 +207,15 @@ class DashboardController extends Controller
             ]);
 
             $user_id         = $user->id;
+
+            $total_services_per_user = ServiceMaster::count();
+
             $total_applications_for_this_user = User::find($user_id)->applications()->count();
+
+            $percentage_total_application = $total_applications_for_this_user > 0
+                ? round(($total_applications_for_this_user / $total_services_per_user) * 100, 2)
+                : 0;
+
             $total_count_pending_application_in_user = UserServiceApplication::where('user_id', $request->user_id)
                 ->whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review'])
                 ->count();
@@ -269,11 +285,13 @@ class DashboardController extends Controller
                 'status'            => 1,
                 'message'           => 'Total count applications under this department fetched successfully',
                 'total_applications_for_this_user' => $total_applications_for_this_user,
+                'percentage_total_application' => $percentage_total_application,
                 'total_count_pending_application_in_user' => $total_count_pending_application_in_user,
                 'percentage_pending_application' => $percentage_pending_application,
                 'percentage_approved_application' => $percentage_approved_application,
                 'percentage_rejected_application' => $percentage_rejected_application,
                 'total_count_approved_application_in_user' => $total_count_approved_application_in_user,
+                '$total_count_rejected_application_in_department' => $total_count_rejected_application_in_department,
                 'application_count_per_service' => $application_count_per_service,
                 'clarification_required'       => $clarification_required,
 
