@@ -92,4 +92,8 @@ class UserServiceApplication extends Model
         return $this->belongsTo(RenewalCycle::class, 'renewal_cycle_id');
     }
 
+    public function workflowHistory()
+    {
+        return $this->hasMany(ApplicationWorkflowHistory::class, 'application_id', 'id');
+    }
 }
