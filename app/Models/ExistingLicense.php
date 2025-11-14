@@ -19,6 +19,7 @@ class ExistingLicense extends Model
         'status',
         'created_by',
         'updated_by',
+        'license_file',
     ];
 
     protected $casts = [

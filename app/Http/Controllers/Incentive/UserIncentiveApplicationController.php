@@ -458,7 +458,7 @@ class UserIncentiveApplicationController extends Controller
                 ->with(['applications' => function ($q) use ($user_id) {
                     $q->where('user_id', $user_id)
                         ->orderByDesc('id')
-                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id');
+                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id', 'subsidy_report');
                 }])
                 ->select('id', 'scheme_id', 'code', 'title', 'description', 'claim_type')
                 ->get();
@@ -485,12 +485,21 @@ class UserIncentiveApplicationController extends Controller
                         'workflow_status'  => null,
                         'is_editable'      => true,
                         'can_reapply'      => false, // Don't show reapply button if user don't have even applied once
+                        'claimed_amount'   => null,
+                        'approved_amount'  => null,
+                        'disbursed_amount' => null,
                     ];
                     continue;
                 }
 
 
                 foreach ($proforma->applications as $application) {
+
+                    $subsidyReport = json_decode($application->subsidy_report);
+
+                    $claimed = $subsidyReport->totals->claimed ?? 0;
+                    $approved = $subsidyReport->totals->approved ?? 0;
+                    $disbursed = $subsidyReport->totals->disbursed ?? 0;
 
                     $response_data[] = [
                         'application_id'   => $application->id,
@@ -505,6 +514,9 @@ class UserIncentiveApplicationController extends Controller
                         'workflow_status'  => $this->status_label($application->workflow_status),
                         'is_editable'      => $this->is_application_editable($application),
                         'can_reapply'      => $can_reapply_for_claim,
+                        'claimed_amount'   => $claimed,
+                        'approved_amount'  => $approved,
+                        'disbursed_amount' => $disbursed,
                     ];
                 }
             }
@@ -612,7 +624,10 @@ class UserIncentiveApplicationController extends Controller
             ]);
 
             $user = User::where('id', auth()->user()->id)->with('department_user')->first();
+
             $designation = $user ? $user?->department_user?->designation : null;
+
+            $department_user_district_code = $user?->district_id;
 
             if (!$designation) {
                 return response()->json([
@@ -621,7 +636,16 @@ class UserIncentiveApplicationController extends Controller
                 ]);
             }
 
-            $applications = UserIncentiveApplication::with(['proforma', 'user']);
+            $is_slc = $designation === 'State Level Committee';
+
+            $applications = UserIncentiveApplication::with(['proforma', 'user.district']);
+
+            if (!$is_slc) {
+                $applications->whereHas('user', function ($q) use ($department_user_district_code) {
+                    $q->where('district_id', $department_user_district_code);
+                });
+            }
+
 
             if ($designation == 'Dealing Assistant') {
 
@@ -954,6 +978,12 @@ class UserIncentiveApplicationController extends Controller
             }
 
             $answers = $application->form_answers_json;
+            if (is_string($answers)) {
+                $answers = json_decode($answers, true) ?: [];
+            }
+            if (!is_array($answers)) {
+                $answers = [];
+            }
 
             $questions = ProformaQuestionnaire::where('proforma_id', $application->proforma->id)
                 ->orderBy('display_order')
@@ -961,12 +991,12 @@ class UserIncentiveApplicationController extends Controller
                 ->get();
 
             $questions_with_answers = $questions->map(function ($question) use ($answers) {
-                $answer = $answers[$question->id] ?? null;
+                $answer = $answers[$question->id] ?? ['value' => null, 'files' => []];
                 return [
                     'question_id' => $question->id,
                     'question'    => $question->question_label,
                     'answer'      => $answer['value'] ?? null,
-                    'files'       => $answer['files'],
+                    'files'       => $answer['files'] ?? [],
                 ];
             });
 
@@ -986,7 +1016,7 @@ class UserIncentiveApplicationController extends Controller
                 'applicant_name'               => $application->user->authorized_person_name,
                 'application_type'             => $application->application_type,
                 'workflow_status'              => $application->workflow_status,
-                'remarks'                      => $latest_workflow_history->remarks,
+                'remarks'                      => $latest_workflow_history?->remarks,
                 'review_file'                  => $latest_workflow_history?->review_file ? asset('storage/' . $latest_workflow_history->review_file) : null,
                 'current_reviewer_user_id'     => $application->current_reviewer_user_id,
                 'submitted_at'                 => optional($application->submitted_at)->toDateTimeString(),
@@ -1238,7 +1268,7 @@ class UserIncentiveApplicationController extends Controller
             return false;
         }
 
-        $latest = UserIncentiveApplication::select('submitted_at','remaining_claim')
+        $latest = UserIncentiveApplication::select('submitted_at', 'remaining_claim')
             ->where('user_id', $user_id)
             ->where('proforma_id', $proforma->id)
             ->where('application_type', 'claim')

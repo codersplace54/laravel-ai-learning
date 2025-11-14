@@ -193,6 +193,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('existing-license-view', [ExistingLicenseController::class, 'existing_license_view']);
         Route::post('existing-license-delete', [ExistingLicenseController::class, 'existing_license_delete']);
         Route::post('existing-license-details', [ExistingLicenseController::class, 'existing_license_details']);
+        Route::post('get-department-services', [ExistingLicenseController::class, 'get_department_services']);
 
         Route::prefix('incentive')->group(function () {
             Route::post('scheme-list', [UserIncentiveApplicationController::class, 'user_incentive_scheme_list']);

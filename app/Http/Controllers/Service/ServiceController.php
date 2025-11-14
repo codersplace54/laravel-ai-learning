@@ -1468,7 +1468,7 @@ class ServiceController extends Controller
         if ($template === '') abort(422, 'No form template configured for this service.');
 
         $template = html_entity_decode($template, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $template = str_replace("\xC2\xA0", ' ', $template); 
+        $template = str_replace("\xC2\xA0", ' ', $template);
 
         $name     = $application->user->authorized_person_name ?? $user->name ?? '—';
         $verifyUrl = trim('https://swaagat.tripura.gov.in/verify');
@@ -1538,6 +1538,7 @@ class ServiceController extends Controller
             }
 
             $variables = [
+                'add_watermark',
                 'form_title',
                 'rules_ref',
                 'government',
@@ -1572,7 +1573,7 @@ class ServiceController extends Controller
 
             return response()->json([
                 'status' => 0,
-                'message' => 'Something went wrong while fetching total services',
+                'message' => 'Something went wrong.',
                 'error'   => $e->getMessage()
             ], 500);
         }
@@ -1601,6 +1602,7 @@ class ServiceController extends Controller
             $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
 
             $data = [
+                'add_watermark'     => 'no',
                 'form_title'        => 'FORM VI',
                 'rules_ref'         => '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
                 'government'        => 'Government of Tripura',
@@ -1646,8 +1648,9 @@ class ServiceController extends Controller
     {
         $request->validate([
             'application_id' => 'required|integer|exists:user_service_applications,id',
+            'add_watermark' => 'nullable|in:yes,no'
         ]);
-
+        
         try {
             $application = UserServiceApplication::where("id", $request->application_id)->with([
                 'user',
@@ -1665,7 +1668,7 @@ class ServiceController extends Controller
             }
 
             $template = html_entity_decode($template, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            $template = str_replace("\xC2\xA0", ' ', $template); 
+            $template = str_replace("\xC2\xA0", ' ', $template);
 
             $name     = $application->user->authorized_person_name ?? $user->name ?? '—';
             $verifyUrl = trim('https://swaagat.tripura.gov.in/verify');
@@ -1710,23 +1713,51 @@ class ServiceController extends Controller
                 $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
             }
 
-            $pdf = Pdf::loadHTML($filled)
+            $user = $application->user;
+
+            // watermark start
+            $logo_path = storage_path('app/public/images/logo/state_emblem_english.jpg');
+            $html = $filled;
+
+            $pdf = Pdf::loadHTML($html)
                 ->setPaper('a4', 'portrait')
                 ->setOptions([
                     'isHtml5ParserEnabled' => true,
                     'isRemoteEnabled'      => true,
                     'defaultFont'          => 'DejaVu Sans',
-                    'dpi'                  => 110,
+                    'dpi'                  => 150,
                 ]);
 
+            if ($request->add_watermark == 'yes' &&  is_file($logo_path)) {
 
+                $dompdf = $pdf->getDomPDF();
+                $dompdf->getCanvas()->page_script('
+                $w = $pdf->get_width();   
+                $h = $pdf->get_height();
+
+                $imgW = 354; 
+                $imgH = 354; 
+
+                $x = ($w - $imgW) / 2;
+                $y = ($h - $imgH) / 2;
+
+                if (method_exists($pdf, "set_opacity")) {
+                    $pdf->set_opacity(0.04, "Multiply"); 
+                }
+
+                $pdf->image("' . addslashes($logo_path) . '", $x, $y, $imgW, $imgH);
+            ');
+
+                // watermark end
+
+            }
             $filename = uniqid('license_') . '.pdf';
             $path     = "uploads/{$application->user->id}/application/{$filename}";
 
             Storage::disk('public')->put($path, $pdf->output());
             $application->update(['NOC_certificate' => $path]);
-            $application->NOC_certificate = asset('Storage/'.$application->NOC_certificate);
-            
+            $application->NOC_certificate = asset('storage/' . $application->NOC_certificate);
+
             return response()->json([
                 'status'  => 1,
                 'message' => 'Certificate generated.',
@@ -1734,8 +1765,8 @@ class ServiceController extends Controller
                     'application'   => $application->withoutRelations(),
                 ],
             ]);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
+            
             return response()->json([
                 'status'  => 0,
                 'message' => 'Validation failed.',

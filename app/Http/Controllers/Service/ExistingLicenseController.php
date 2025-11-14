@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use App\Models\ExistingLicense;
 use App\Models\User;
+use App\Models\ServiceMaster;
 use Exception;
 
 class ExistingLicenseController extends Controller
@@ -22,7 +24,6 @@ class ExistingLicenseController extends Controller
 
             $request->validate([
                 'service_id'    => 'nullable|integer|exists:service_masters,id',
-                'department_id' => 'nullable|integer|exists:departments,id',
                 'licensee_name' => 'required|string|max:255',
                 'application_no'=> 'nullable|string|max:255',
                 'valid_from'    => 'nullable|date',
@@ -34,15 +35,21 @@ class ExistingLicenseController extends Controller
 
             $user = Auth::user();
 
+            if ($request->file('license_file')) {
+                $file = $request->license_file;
+                $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                $license_file = $file->storeAs("uploads/{$user->id}/existing_license", $filename, 'public');
+            }
+            
             $license = ExistingLicense::create([
                 'user_id'        => $user->id,
                 'service_id'     => $request->service_id,
-                'department_id'  => $request->department_id,
                 'licensee_name'  => $request->licensee_name,
                 'application_no' => $request->application_no,
                 'valid_from'     => $request->valid_from,
                 'expiry_date'    => $request->expiry_date,
                 'license_no'     => $request->license_no,
+                'license_file'   => $license_file,
                 'status'         => 'pending',
             ]);
 
@@ -85,16 +92,16 @@ class ExistingLicenseController extends Controller
             $request->validate([
                 'id'            => 'required|integer|exists:existing_licenses,id',
                 'service_id'    => 'nullable|integer|exists:service_masters,id',
-                'department_id' => 'nullable|integer|exists:departments,id',
                 'licensee_name' => 'required|string|max:255',
                 'application_no'=> 'nullable|string|max:255',
                 'valid_from'    => 'nullable|date',
                 'expiry_date'   => 'nullable|date|after_or_equal:valid_from',
                 'license_no'    => 'required|string|max:255|unique:existing_licenses,license_no,' . $request->id,
                 'status'        => 'nullable|in:pending,approved,rejected', 
+                'license_file'  => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
             ]);
 
-            $admin   = Auth::user();
+            $user   = Auth::user();
             $license = ExistingLicense::where('id',$request->id)->where('user_id',Auth::id())->first();
 
             if (!$license) {
@@ -104,16 +111,24 @@ class ExistingLicenseController extends Controller
                 ], 403);
             }
 
+            if ($request->file('license_file')) {
+                if($license->license_file){
+                    Storage::disk('public')->delete($license->license_file);
+                }
+                $file = $request->license_file;
+                $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                $license_file = $file->storeAs("uploads/{$user->id}/existing_license", $filename, 'public');
+            }
+
             $license->update([
                 'service_id'     => $request->service_id,
-                'department_id'  => $request->department_id,
                 'licensee_name'  => $request->licensee_name,
                 'application_no' => $request->application_no,
                 'valid_from'     => $request->valid_from,
                 'expiry_date'    => $request->expiry_date,
                 'license_no'     => $request->license_no,
+                'license_file'   => $license_file,
                 'status'         => $request->status ?? $license->status,
-                'updated_by'     => $admin->email_id ?? null,
             ]);
 
             DB::commit();
@@ -155,6 +170,14 @@ class ExistingLicenseController extends Controller
             }else{
                 $licenses = ExistingLicense::where('user_id',Auth::id())->latest()->get();
             }
+
+            $licenses->transform(function ($license) {
+            if (!empty($license->license_file)) {
+                $license->license_file = Storage::disk('public')->url($license->license_file);
+            }
+
+            return $license;
+        });
 
             return response()->json([
                 'status' => 1,
@@ -321,5 +344,37 @@ class ExistingLicenseController extends Controller
             ], 500);
         }
     }
+
+    public function get_department_services(Request  $request)
+    {
+
+        try {
+
+
+            $request->validate([
+                'department_id' => 'required|integer|exists:departments,id',
+            ]);
+
+            $services = ServiceMaster::where('department_id', $request->department_id)
+                ->where('status', 1)
+                ->select('id','service_title_or_description')
+                ->get();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Services list fetched successfully.',
+                'data' => $services
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching services.',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
 
 }
