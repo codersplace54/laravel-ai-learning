@@ -9,6 +9,7 @@ class ExistingLicense extends Model
     protected $fillable = [
         'user_id',
         'service_id',
+        'department_id',
         'licensee_name',
         'application_no',
         'valid_from',
@@ -34,6 +35,10 @@ class ExistingLicense extends Model
 
     public function service(){ 
         return $this->belongsTo(ServiceMaster::class, 'service_id'); 
+    }
+
+    public function department(){ 
+        return $this->belongsTo(Department::class, 'department_id'); 
     }
 
     public function actionTaker(){ 
