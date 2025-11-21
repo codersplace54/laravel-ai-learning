@@ -40,6 +40,10 @@ class UserServiceApplication extends Model
         'NSW_Push_Document_ID',
         'final_fee',
         'total_fee',
+        'effective_fee',
+        'payment_head',
+        'payment_url',
+        'paid_amount',
         'current_step_number',
         'max_processing_date',
         'created_at',
@@ -58,6 +62,10 @@ class UserServiceApplication extends Model
     protected $casts = [
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
+        'NOC_application_date' => 'datetime:Y-m-d H:i:s',
+        'NOC_generationDate' => 'datetime:Y-m-d H:i:s',
+        'NOC_expiry_date' => 'datetime:Y-m-d H:i:s',
+        'PreviousNOCexpiryDate' => 'datetime:Y-m-d H:i:s',
     ];
 
     public function service()
