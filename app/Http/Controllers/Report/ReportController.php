@@ -17,6 +17,380 @@ use App\Models\ManagementDetails;
 
 class ReportController extends Controller
 {
+    public function cis_details_report(Request $request)
+    {
+        try {
+            $request->validate([
+                'from_date'       => 'nullable|date',
+                'to_date'         => 'nullable|date|after_or_equal:from_date',
+                'department_id'   => 'nullable|integer|exists:departments,id',
+                'inspection_for'  => 'nullable|array',      
+                'inspection_for.*' => 'string',
+            ]);
+
+            $from_date      = $request->from_date;
+            $to_date        = $request->to_date;
+            $department_id  = $request->department_id;
+            $inspection_for = $request->inspection_for;    
+
+            $query = Inspection::with([
+                'user:id,name_of_enterprise,registered_enterprise_address,mobile_no,email_id',
+                'department:id,name',
+            ]);
+
+            if (!empty($from_date)) {
+                $query->whereDate('inspection_date', '>=', $from_date);
+            }
+
+            if (!empty($to_date)) {
+                $query->whereDate('inspection_date', '<=', $to_date);
+            }
+
+            if (!empty($department_id)) {
+                $query->where('department_id', $department_id);
+            }
+
+            if (!empty($inspection_for) && is_array($inspection_for)) {
+               
+                $query->whereIn('inspection_type', $inspection_for);
+            }
+
+            $inspections = $query
+                ->orderBy('inspection_date', 'asc')
+                ->get();
+
+            if ($inspections->isEmpty()) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'No record found.',
+                    'data'    => [],
+                ]);
+            }
+
+            $rows = $inspections->map(function ($inspection) {
+                $user = $inspection->user;
+
+                $type_text = strtolower(trim((string) $inspection->inspection_type));
+                $self_certification  = '';
+                $third_party_cert    = '';
+
+                if ($type_text !== '') {
+                    if (str_contains($type_text, 'self')) {
+                        $self_certification = 'Yes';
+                    }
+
+                    if (str_contains($type_text, 'third')) {
+                        $third_party_cert = 'Yes';
+                    }
+                }
+
+                return [
+                    'enterprise_name'                 => $user ? $user->name_of_enterprise : null,
+                    'address'                         => $user ? $user->registered_enterprise_address : null,
+                    'contact_no'                      => $user ? $user->mobile_no : null,
+                    'email'                           => $user ? $user->email_id : null,
+                    'act_name'                        => $inspection->inspection_type,
+                    'inspection_date'                 => $inspection->inspection_date
+                        ? Carbon::parse($inspection->inspection_date)->format('Y-m-d')
+                        : null,
+                    'self_certification_exempt'       => $self_certification,
+                    'third_party_cert_exempt'         => $third_party_cert,
+                ];
+            });
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'CIS details report.',
+                'data'    => $rows,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function cis_summary_report(Request $request)
+    {
+        try {
+            $request->validate([
+                'year'  => 'nullable|integer',
+                'month' => 'nullable|integer|min:1|max:12',
+            ]);
+
+            $year  = $request->year;
+            $month = $request->month;
+
+            $inspection_query = Inspection::with(['department:id,name']);
+
+            if (!empty($year)) {
+                $inspection_query->whereYear('proposed_date', $year);
+            }
+
+            if (!empty($month)) {
+                $inspection_query->whereMonth('proposed_date', $month);
+            }
+
+            $inspections = $inspection_query->get();
+
+            if ($inspections->isEmpty()) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'No record found.',
+                    'data'    => [],
+                ]);
+            }
+
+            $summary = [];
+
+            foreach ($inspections as $inspection) {
+                $department = $inspection->department;
+                if (!$department) {
+                    continue;
+                }
+
+                $department_id   = $department->id;
+                $department_name = $department->name;
+
+                if (!isset($summary[$department_id])) {
+                    $summary[$department_id] = [
+                        'department_id'                            => $department_id,
+                        'department_name'                          => $department_name,
+                        'scheduled_inspections'                    => 0,
+                        'inspections_conducted'                    => 0,
+                        'pending_inspections'                      => 0,
+                        'self_certification_exempt_companies'      => 0,
+                        'third_party_cert_exempt_companies'        => 0,
+                        'reports_uploaded_within_48_hrs'           => 0,
+                        'reports_uploaded_beyond_48_hrs'           => 0,
+                    ];
+                }
+
+                $row = &$summary[$department_id];
+
+                $row['scheduled_inspections']++;
+
+                $inspection_date = $inspection->inspection_date
+                    ? Carbon::parse($inspection->inspection_date)
+                    : null;
+
+                if ($inspection_date) {
+                    $row['inspections_conducted']++;
+                }
+
+                $inspection_type = strtolower(trim((string) $inspection->inspection_type));
+
+                if ($inspection_type !== '') {
+                    if (str_contains($inspection_type, 'self')) {
+                        $row['self_certification_exempt_companies']++;
+                    } elseif (str_contains($inspection_type, 'third')) {
+                        $row['third_party_cert_exempt_companies']++;
+                    }
+                }
+
+                if ($inspection_date && $inspection->created_at) {
+                    $uploaded_at = Carbon::parse($inspection->created_at);
+                    $hours_diff  = $inspection_date->diffInHours($uploaded_at);
+
+                    if ($hours_diff <= 48) {
+                        $row['reports_uploaded_within_48_hrs']++;
+                    } else {
+                        $row['reports_uploaded_beyond_48_hrs']++;
+                    }
+                }
+
+                unset($row);
+            }
+
+            foreach ($summary as &$row) {
+                $row['pending_inspections'] = $row['scheduled_inspections'] - $row['inspections_conducted'];
+                if ($row['pending_inspections'] < 0) {
+                    $row['pending_inspections'] = 0;
+                }
+            }
+            unset($row);
+
+            $rows = array_values($summary);
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'CIS summary report.',
+                'data'    => $rows,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function departmental_approvals(Request $request)
+    {
+        try {
+            $request->validate([
+                'from_date' => 'nullable|date',
+                'to_date'   => 'nullable|date|after_or_equal:from_date',
+            ]);
+
+            $from_date = $request->from_date;
+            $to_date   = $request->to_date;
+
+            $application_query = UserServiceApplication::with([
+                'service:id,department_id,target_days',
+                'service.department:id,name',
+                'workflow' => function ($q) {
+                    $q->orderBy('action_taken_at', 'asc');
+                },
+            ])
+                ->whereHas('service', function ($q) {
+                    $q->whereNotNull('department_id');
+                });
+
+            if (!empty($from_date)) {
+                $application_query->whereDate('application_date', '>=', $from_date);
+            }
+
+            if (!empty($to_date)) {
+                $application_query->whereDate('application_date', '<=', $to_date);
+            }
+
+            $applications = $application_query->get();
+
+            if ($applications->isEmpty()) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'No record found.',
+                    'data'    => [],
+                ]);
+            }
+
+            $today   = Carbon::today();
+            $summary = [];
+
+            foreach ($applications as $application) {
+                $service    = $application->service;
+                $department = $service ? $service->department : null;
+
+                if (!$service || !$department) {
+                    continue;
+                }
+
+                $department_id   = $department->id;
+                $department_name = $department->name;
+
+                if (!isset($summary[$department_id])) {
+                    $summary[$department_id] = [
+                        'department_id'               => $department_id,
+                        'department_name'             => $department_name,
+                        'received'                    => 0,
+                        'processed'                   => 0,
+                        'approved'                    => 0,
+                        'submitted_within_timelines'  => 0,
+                        'submitted_timelines_lapsed'  => 0,
+                        'clarification_stage'         => 0,
+                        'rejected'                    => 0,
+                        'other_status'                => 0,
+                        'queried_within_7_days'       => 0,
+                        'queried_after_7_days'        => 0,
+                    ];
+                }
+
+                $department_row = &$summary[$department_id];
+
+                $department_row['received']++;
+
+                $workflow_steps = $application->workflow ?? collect();
+                $status         = (string) $application->status;
+
+                if (in_array($status, ['in_progress', 'approved', 'rejected', 'send_back', 'extra_payment'])) {
+                    $department_row['processed']++;
+                }
+
+                $approved_step = $workflow_steps->where('status', 'approved')
+                    ->sortByDesc('action_taken_at')
+                    ->first();
+
+                $rejected_step = $workflow_steps->where('status', 'rejected')
+                    ->sortByDesc('action_taken_at')
+                    ->first();
+
+                if ($approved_step) {
+                    $department_row['approved']++;
+                }
+
+                if ($rejected_step) {
+                    $department_row['rejected']++;
+                }
+
+                $latest_step = $workflow_steps->sortByDesc('action_taken_at')->first();
+
+                if ($latest_step && $latest_step->status === 'send_back') {
+                    $department_row['clarification_stage']++;
+                }
+
+                if (
+                    $latest_step &&
+                    !in_array($latest_step->status, ['pending', 'in_progress', 'approved', 'rejected', 'send_back', 'saved'])
+                ) {
+                    $department_row['other_status']++;
+                }
+
+                $application_date = $application->application_date
+                    ? Carbon::parse($application->application_date)
+                    : null;
+
+                $target_days = $service->target_days ? (int) $service->target_days : null;
+                $due_date    = null;
+
+                if ($application_date && $target_days !== null) {
+                    $due_date = $application_date->copy()->addDays($target_days);
+                }
+
+                $has_final_decision = $approved_step || $rejected_step;
+
+                if ($due_date && !$has_final_decision) {
+                    if ($today->lessThanOrEqualTo($due_date)) {
+                        $department_row['submitted_within_timelines']++;
+                    } else {
+                        $department_row['submitted_timelines_lapsed']++;
+                    }
+                }
+
+                $first_send_back_step = $workflow_steps->where('status', 'send_back')
+                    ->sortBy('action_taken_at')
+                    ->first();
+
+                if ($application_date && $first_send_back_step && $first_send_back_step->action_taken_at) {
+                    $send_back_date = Carbon::parse($first_send_back_step->action_taken_at);
+                    $days_gap       = $application_date->diffInDays($send_back_date);
+
+                    if ($days_gap <= 7) {
+                        $department_row['queried_within_7_days']++;
+                    } else {
+                        $department_row['queried_after_7_days']++;
+                    }
+                }
+
+                unset($department_row);
+            }
+
+            $rows = array_values($summary);
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Departmental approvals report.',
+                'data'    => $rows,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function industry_report_details(Request $request)
     {
         try {
@@ -168,135 +542,133 @@ class ReportController extends Controller
     }
 
     public function industry_report_summary(Request $request)
-{
-    try {
-        $request->validate([
-            'from_date'    => 'nullable|date',
-            'to_date'      => 'nullable|date|after_or_equal:from_date',
-            'district'     => 'nullable|integer',
-            'sub_division' => 'nullable|integer',
-        ]);
+    {
+        try {
+            $request->validate([
+                'from_date'    => 'nullable|date',
+                'to_date'      => 'nullable|date|after_or_equal:from_date',
+                'district'     => 'nullable|integer',
+                'sub_division' => 'nullable|integer',
+            ]);
 
-        $from_date      = $request->from_date;
-        $to_date        = $request->to_date;
-        $district_id    = $request->district;      
-        $sub_division_id = $request->sub_division;
+            $from_date      = $request->from_date;
+            $to_date        = $request->to_date;
+            $district_id    = $request->district;
+            $sub_division_id = $request->sub_division;
 
-        $application_query = UserServiceApplication::query();
+            $application_query = UserServiceApplication::query();
 
-        if (!empty($from_date)) {
-            $application_query->whereDate('application_date', '>=', $from_date);
-        }
+            if (!empty($from_date)) {
+                $application_query->whereDate('application_date', '>=', $from_date);
+            }
 
-        if (!empty($to_date)) {
-            $application_query->whereDate('application_date', '<=', $to_date);
-        }
+            if (!empty($to_date)) {
+                $application_query->whereDate('application_date', '<=', $to_date);
+            }
 
-        $user_ids = $application_query
-            ->whereNotNull('user_id')
-            ->pluck('user_id')
-            ->unique()
-            ->values();
+            $user_ids = $application_query
+                ->whereNotNull('user_id')
+                ->pluck('user_id')
+                ->unique()
+                ->values();
 
-        if ($user_ids->isEmpty()) {
+            if ($user_ids->isEmpty()) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'No record found.',
+                    'data'    => [],
+                ]);
+            }
+
+            $units = UnitDetail::whereIn('user_id', $user_ids)
+                ->get()
+                ->keyBy('user_id');
+
+            $activities = Activity::whereIn('user_id', $user_ids)
+                ->get()
+                ->keyBy('user_id');
+
+            $summary = [];
+
+            foreach ($user_ids as $user_id) {
+                $unit = $units->get($user_id);
+                if (!$unit) {
+                    continue;
+                }
+
+                $dist_id = $unit->unit_location_district;
+                $subd_id = $unit->unit_location_subdivision;
+
+                if (empty($dist_id) || empty($subd_id)) {
+                    continue;
+                }
+
+                if (!empty($district_id) && (int) $district_id !== (int) $dist_id) {
+                    continue;
+                }
+
+                if (!empty($sub_division_id) && (int) $sub_division_id !== (int) $subd_id) {
+                    continue;
+                }
+
+                $activity = $activities->get($user_id);
+                if (!$activity) {
+                    continue;
+                }
+
+                $type = strtolower(trim((string) $activity->activity_of_enterprise));
+                if ($type === '') {
+                    continue;
+                }
+
+                if (!isset($summary[$dist_id])) {
+                    $summary[$dist_id] = [];
+                }
+
+                if (!isset($summary[$dist_id][$subd_id])) {
+                    $summary[$dist_id][$subd_id] = [
+                        'district_id'     => (int) $dist_id,
+                        'sub_division_id' => (int) $subd_id,
+                        'manufacturing_count' => 0,
+                        'services_count'      => 0,
+                    ];
+                }
+
+                if (str_contains($type, 'manufact')) {
+                    $summary[$dist_id][$subd_id]['manufacturing_count']++;
+                } elseif (str_contains($type, 'service')) {
+                    $summary[$dist_id][$subd_id]['services_count']++;
+                }
+            }
+
+            if (empty($summary)) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'No record found.',
+                    'data'    => [],
+                ]);
+            }
+
+            $rows = [];
+
+            foreach ($summary as $district_rows) {
+                foreach ($district_rows as $row) {
+                    $rows[] = $row;
+                }
+            }
+
             return response()->json([
                 'status'  => 1,
-                'message' => 'No record found.',
-                'data'    => [],
+                'message' => 'Industry summary report.',
+                'data'    => $rows,
             ]);
-        }
-
-        $units = UnitDetail::whereIn('user_id', $user_ids)
-            ->get()
-            ->keyBy('user_id');
-
-        $activities = Activity::whereIn('user_id', $user_ids)
-            ->get()
-            ->keyBy('user_id');
-
-        $summary = [];
-
-        foreach ($user_ids as $user_id) {
-            $unit = $units->get($user_id);
-            if (!$unit) {
-                continue;
-            }
-
-            $dist_id = $unit->unit_location_district;      
-            $subd_id = $unit->unit_location_subdivision;   
-
-            if (empty($dist_id) || empty($subd_id)) {
-                continue;
-            }
-
-            if (!empty($district_id) && (int) $district_id !== (int) $dist_id) {
-                continue;
-            }
-
-            if (!empty($sub_division_id) && (int) $sub_division_id !== (int) $subd_id) {
-                continue;
-            }
-
-            $activity = $activities->get($user_id);
-            if (!$activity) {
-                continue;
-            }
-
-            $type = strtolower(trim((string) $activity->activity_of_enterprise));
-            if ($type === '') {
-                continue;
-            }
-
-            if (!isset($summary[$dist_id])) {
-                $summary[$dist_id] = [];
-            }
-
-            if (!isset($summary[$dist_id][$subd_id])) {
-                $summary[$dist_id][$subd_id] = [
-                    'district_id'     => (int) $dist_id,
-                    'sub_division_id' => (int) $subd_id,
-                    'manufacturing_count' => 0,
-                    'services_count'      => 0,
-                ];
-            }
-
-            if (str_contains($type, 'manufact')) {
-                $summary[$dist_id][$subd_id]['manufacturing_count']++;
-            } elseif (str_contains($type, 'service')) {
-                $summary[$dist_id][$subd_id]['services_count']++;
-            }
-        }
-
-        if (empty($summary)) {
+        } catch (\Throwable $e) {
             return response()->json([
-                'status'  => 1,
-                'message' => 'No record found.',
-                'data'    => [],
-            ]);
+                'status'  => 0,
+                'message' => $e->getMessage(),
+            ], 500);
         }
-
-        $rows = [];
-
-        foreach ($summary as $district_rows) {
-            foreach ($district_rows as $row) {
-                $rows[] = $row;
-            }
-        }
-
-        return response()->json([
-            'status'  => 1,
-            'message' => 'Industry summary report.',
-            'data'    => $rows,
-        ]);
-    } catch (\Throwable $e) {
-        return response()->json([
-            'status'  => 0,
-            'message' => $e->getMessage(),
-        ], 500);
     }
-}
-
-
 
 
     public function user_list(Request $request)

@@ -86,24 +86,21 @@ class KyaController extends Controller
 
     /**
      * Fetch Industry Sectors for a given Sector & Risk
-    */
+     */
     public function get_industry_sectors(Request $request)
     {
         try {
             $request->validate(
                 [
                     'sector' => 'required|string',
-                    'risk'   => 'required|string',
                 ],
                 [
                     'sector.required' => 'Sector is required.',
-                    'risk.required'   => 'Risk category is required.',
                 ]
             );
 
-            $industrySectors = KyaMaster::query()
+            $industry_sectors = KyaMaster::query()
                 ->where('sector', $request->sector)
-                ->where('risk_category', $request->risk)
                 ->whereNotNull('industry_sector')
                 ->distinct()
                 ->orderBy('industry_sector')
@@ -113,8 +110,7 @@ class KyaController extends Controller
             return response()->json([
                 'status'           => true,
                 'sector'           => $request->sector,
-                'risk_category'    => $request->risk,
-                'industry_sectors' => $industrySectors,
+                'industry_sectors' => $industry_sectors,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -133,26 +129,20 @@ class KyaController extends Controller
 
     /**
      * Fetch Questions for a Sector/Risk/Industry
-    */
+     */
     public function get_questions(Request $request)
     {
         try {
             $request->validate(
                 [
-                    'sector'   => 'required|string',
-                    'risk'     => 'required|string',
                     'industry' => 'required|string',
                 ],
                 [
-                    'sector.required'   => 'Sector is required.',
-                    'risk.required'     => 'Risk category is required.',
                     'industry.required' => 'Industry sector is required.',
                 ]
             );
 
             $questions = KyaMaster::query()
-                ->where('sector', $request->sector)
-                ->where('risk_category', $request->risk)
                 ->where('industry_sector', $request->industry)
                 ->orderBy('serial_no')
                 ->get([
@@ -163,13 +153,13 @@ class KyaController extends Controller
                     'approval_name',
                     'stage_of_business',
                     'sla_days',
+                    'risk_category',
                 ]);
 
             return response()->json([
                 'status'   => true,
-                'sector'   => $request->sector,
-                'risk'     => $request->risk,
                 'industry' => $request->industry,
+                'risk_category' => $questions->first()->risk_category ?? null,
                 'data'     => $questions,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -189,35 +179,38 @@ class KyaController extends Controller
 
     /**
      * Return Approval Details for a selected question/record
-    */
-     public function get_approval_details(Request $request)
+     */
+    public function get_approval_details(Request $request)
     {
         try {
             $request->validate(
                 [
-                    'id'     => 'required|integer|exists:kya_master,id',
-                    'answer' => 'required|string|in:yes,no,YES,NO,Yes,No',
+                    'ids'     => 'required|array',
                 ],
                 [
                     'id.required'     => 'Id is required.',
-                    'id.exists'       => 'No KYA record found for this ID.',
-                    'answer.required' => 'Answer is required.',
                 ]
             );
 
-            $record = KyaMaster::findOrFail($request->id);
+            $records = KyaMaster::whereIn('id', $request->ids)->get();
+
+            $mapped = $records->map(function ($item) {
+                return [
+                    'id'                => $item->id,
+                    'approval_name'     => $item->approval_name,
+                    'stage_of_business' => $item->stage_of_business,
+                    'sla_days'          => $item->sla_days,
+                    'steps'             => $item->steps,
+                    'documents_required' => $item->documents_required,
+                    'fees'              => $item->fees,
+                    'legal_provision'   => $item->legal_provision,
+                    'more_info'         => $item->more_info,
+                ];
+            });
 
             return response()->json([
-                'status'            => true,
-                'id'                => $record->id,
-                'approval_name'     => $record->approval_name,
-                'stage_of_business' => $record->stage_of_business,
-                'sla_days'          => $record->sla_days,
-                'steps'             => $record->steps,
-                'documents_required'=> $record->documents_required,
-                'fees'              => $record->fees,
-                'legal_provision'   => $record->legal_provision,
-                'more_info'         => $record->more_info,
+                'status' => true,
+                'records' => $mapped,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
