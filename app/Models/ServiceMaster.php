@@ -44,7 +44,7 @@ class ServiceMaster extends Model
         'third_party_payment_mode',
         'is_active',
         'fixed_expiry_date',
-
+        'payment_accountant',
         'created_at',
         'updated_at',
         'created_by',

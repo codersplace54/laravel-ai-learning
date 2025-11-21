@@ -38,11 +38,11 @@ class UserServiceApplicationController extends Controller
                 'renewalYear'           => 'nullable|integer|min:1|max:10',
                 'applicationId'         => 'nullable|string|max:255',
                 'application_date'      => 'nullable|date',
-                'status'                => 'in:submitted,under_review,approved,rejected,re_submitted,send_back,saved',
+                'status'                => 'nullable|in:submitted,under_review,approved,rejected,re_submitted,send_back,saved',
                 'application_data'      => 'nullable|array',
                 'applied_fee'           => 'nullable|numeric',
                 'approved_fee'          => 'nullable|numeric',
-                'payment_status'        => 'in:pending,paid,failed',
+                'payment_status'        => 'nullable|string',
                 'remarks'               => 'nullable|string',
                 'NOC_application_date'  => 'nullable|date',
                 'NOC_expiry_date'       => 'nullable|date',
@@ -100,8 +100,6 @@ class UserServiceApplicationController extends Controller
 
             if ($service_data->service_mode === "native") {
 
-                $final_fee = $this->calculate_final_fee($request->service_id, $request->application_data);
-
                 $approval_flow = ServiceApprovalFlow::where('service_id', $request->service_id)
                     ->orderBy('step_number', 'asc')
                     ->first();
@@ -122,7 +120,7 @@ class UserServiceApplicationController extends Controller
 
 
                 $max_processing_date = $this->add_working_days($application_date, $target_days);
-                $total_fee =  $final_fee + $request->extra_payment;
+
 
 
                 $user_service_application = UserServiceApplication::where('user_id', $user->id)
@@ -130,9 +128,20 @@ class UserServiceApplicationController extends Controller
                     ->latest()
                     ->first();
 
+                $application_id =  $user_service_application->id ?? null;
+                $fee_data = $this->calculate_final_fee($request->service_id, $request->application_data, $application_id);
+                $final_fee = $fee_data['final_fee'];
+                $blc_fee   = $fee_data['effective_fee'];
+                $previous_paid = $fee_data['previous_paid'];
+                $total_fee =  $final_fee;
+                $effective_fee = 0;
                 if ($user_service_application && $service_data->allow_repeat_application === 'no') {
 
-                    $total_fee =  $final_fee + $user_service_application->extra_payment;
+                    $total_fee =  $final_fee;
+                    $previous_paid = $user_service_application->paid_amount ?? 0;
+                    if (!is_null($previous_paid) && $previous_paid > 0) {
+                        $effective_fee = $total_fee - $previous_paid;
+                    }
 
                     if (!in_array($user_service_application->status, ['submitted', 're_submitted', 'send_back', 'extra_payment', 'saved'])) {
                         return response()->json([
@@ -150,8 +159,21 @@ class UserServiceApplicationController extends Controller
                         }
                     }
 
-                    $application_data = (array) $user_service_application->application_data ?: [];
-                    $new_data = (array) $request->input('application_data', []);
+                    $application_data = [];
+                    if (!empty($user_service_application->application_data)) {
+                        $decoded = json_decode($user_service_application->application_data, true);
+                        if (is_array($decoded)) {
+                            $application_data = $decoded;
+                        }
+                    }
+                    $new_data = $request->input('application_data', []);
+
+                    foreach ($new_data as $key => $value) {
+                        if (is_numeric($key)) {
+                            $key = (string) $key;
+                        }
+                        $application_data[$key] = $value;
+                    }
 
                     $removed_question_ids = json_decode((string)($request->input('remove_file_question_ids') ?? '[]'), true) ?? [];
                     foreach ($removed_question_ids as $question_id) {
@@ -173,7 +195,7 @@ class UserServiceApplicationController extends Controller
                         $new_data[$question_id] = $path;
                     }
 
-                    $application_data = array_merge($application_data, $new_data);
+                    $user_service_application->application_data = json_encode($application_data);
 
                     $user_service_application->update([
                         'renewal_cycle_id'      => $request->renewal_cycle_id,
@@ -181,8 +203,8 @@ class UserServiceApplicationController extends Controller
                         'renewalYear'           => $request->renewalYear,
                         'applicationId'         => $application_number,
                         'application_date'      => $request->application_date ?? now(),
-                        'status'                => $request->status ?? 'submitted',
-                        'application_data'      => json_encode($application_data ?? null),
+                        'status'                => $request->status ?? 're_submitted',
+                        'application_data'      => $user_service_application->application_data,
                         'applied_fee'           => $request->applied_fee,
                         'approved_fee'          => $request->approved_fee,
                         'payment_status'        => $request->payment_status ?? 'pending',
@@ -206,6 +228,7 @@ class UserServiceApplicationController extends Controller
                         'NSW_Push_Document_ID'  => $request->NSW_Push_Document_ID,
                         'final_fee'             => $final_fee,
                         'total_fee'             => $total_fee,
+                        'effective_fee'         => $effective_fee,
                         'current_step_number'   => $approval_flow->step_number ?? null,
                         'max_processing_date'   => $max_processing_date,
                     ]);
@@ -213,7 +236,7 @@ class UserServiceApplicationController extends Controller
                     ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
                         ->where('status', 'pending')
                         ->update([
-                            'status'          => $request->status,
+                            'status'          => 're_submitted',
                             'remarks'         => $request->remarks,
                             'action_taken_by' => $user->id,
                             'action_taken_at' => now(),
@@ -268,7 +291,7 @@ class UserServiceApplicationController extends Controller
                         'renewalYear'           => $request->renewalYear,
                         'applicationId'         => $application_number,
                         'application_date'      => $request->application_date ?? now(),
-                        'status'                => $request->status ?? 'submitted',
+                        'status'                => $request->status ?? 'saved',
                         'application_data'      => json_encode($application_data ?: null),
                         'applied_fee'           => $request->applied_fee,
                         'approved_fee'          => $request->approved_fee,
@@ -432,7 +455,7 @@ class UserServiceApplicationController extends Controller
                 'application_data'     => 'nullable|array',
                 'applied_fee'          => 'nullable|numeric',
                 'approved_fee'         => 'nullable|numeric',
-                'payment_status'       => 'nullable|in:pending,paid,failed',
+                'payment_status'       => 'nullable|string',
                 'remarks'              => 'nullable|string',
                 'NOC_application_date' => 'nullable|date',
                 'NOC_expiry_date'      => 'nullable|date',
@@ -487,8 +510,11 @@ class UserServiceApplicationController extends Controller
                 $user_service_application->application_data = json_encode($request->application_data);
             }
 
-            $final_fee = $this->calculate_final_fee($request->service_id, $request->application_data);
-
+            $application_id =  $user_service_application->id;
+            $fee_data = $this->calculate_final_fee($request->service_id, $request->application_data, $application_id);
+            $final_fee = $fee_data['final_fee'];
+            $blc_fee = $fee_data['effective_fee'];
+            $previous_paid = $fee_data['previous_paid'];
             $approval_flow = ServiceApprovalFlow::where('service_id', $request->service_id)
                 ->orderBy('step_number', 'asc')
                 ->first();
@@ -496,6 +522,13 @@ class UserServiceApplicationController extends Controller
             $application_date = Carbon::parse($request->NOC_application_date ?? now());
             $target_days = $service->target_days ?? 0;
             $max_processing_date = $this->add_working_days($application_date, $target_days);
+
+            $total_fee =  $final_fee;
+            $previous_paid = $user_service_application->paid_amount ?? 0;
+            $effective_fee = $total_fee - $previous_paid;
+            if ($effective_fee < 0) {
+                $effective_fee = 0;
+            }
 
             $user_service_application->update([
                 'user_id'               => $user->id,
@@ -529,6 +562,8 @@ class UserServiceApplicationController extends Controller
                 'NSW_license_status'    => $request->NSW_license_status,
                 'NSW_Push_Document_ID'  => $request->NSW_Push_Document_ID,
                 'final_fee'             => $final_fee,
+                'total_fee'             => $total_fee,
+                'effective_fee'         => $effective_fee,
                 'current_step_number'   => $approval_flow->step_number,
                 'max_processing_date'   => $max_processing_date
             ]);
@@ -589,68 +624,7 @@ class UserServiceApplicationController extends Controller
         }
     }
 
-
-    // public function calculate_final_fee($serviceId, $applicationData)
-    // {
-
-    //     $rules = ServiceFeeRule::where('service_id', $serviceId)
-    //         ->get();
-
-    //     $final_fee = 0;
-
-    //     foreach ($rules as $rule) {
-    //         $user_answer = $applicationData[$rule->question_id] ?? null;
-
-    //         if ($user_answer === null) {
-    //             continue;
-    //         }
-
-    //         $match = false;
-
-    //         switch ($rule->condition_operator) {
-    //             case '=':
-    //                 $match = ($user_answer == $rule->condition_value_start);
-    //                 break;
-    //             case '!=':
-    //                 $match = ($user_answer != $rule->condition_value_start);
-    //                 break;
-    //             case '<':
-    //                 $match = ($user_answer < $rule->condition_value_start);
-    //                 break;
-    //             case '<=':
-    //                 $match = ($user_answer <= $rule->condition_value_start);
-    //                 break;
-    //             case '>':
-    //                 $match = ($user_answer > $rule->condition_value_start);
-    //                 break;
-    //             case '>=':
-    //                 $match = ($user_answer >= $rule->condition_value_start);
-    //                 break;
-    //             case 'between':
-    //                 $match = ($user_answer >= $rule->condition_value_start && $user_answer <= $rule->condition_value_end);
-    //                 break;
-    //         }
-
-    //         if ($match) {
-
-    //             if ($rule->fee_type === 'hardcoded') {
-    //                 $final_fee += (float) $rule->fixed_fee;
-    //             } elseif (in_array($rule->fee_type, ['calculated', 'estimated'])) {
-    //                 if (!empty($rule->per_unit_fee)) {
-    //                     $final_fee += $user_answer * (float) $rule->per_unit_fee;
-    //                 } elseif (!empty($rule->fixed_calculated_fee)) {
-    //                     $final_fee += (float) $rule->fixed_calculated_fee;
-    //                 } elseif (!empty($rule->calculated_fee)) {
-    //                     $final_fee += $user_answer * (float) $rule->calculated_fee;
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     return $final_fee;
-    // }
-
-    public function calculate_final_fee($service_id, $application_data)
+    public function calculate_final_fee($service_id, $application_data, $application_id = null, $request_extra_payment = null)
     {
         $rules = ServiceFeeRule::where('service_id', $service_id)->get();
         $final_fee = 0;
@@ -754,7 +728,35 @@ class UserServiceApplicationController extends Controller
             return round($minimum_fee, 2);
         }
 
-        return round($final_fee, 2);
+        $extra_payment = $application_data['extra_payment'] ?? 0;
+        if (is_numeric($extra_payment)) {
+            $final_fee += (float) $extra_payment;
+        }
+
+        $previous_paid = 0;
+        $db_extra_payment = 0;
+
+        if ($application_id) {
+            $existing_application = UserServiceApplication::find($application_id);
+            if ($existing_application) {
+                $previous_paid = $existing_application->paid_amount ?? 0;
+                $db_extra_payment   = $existing_application->extra_payment ?? 0;
+            }
+        }
+
+        $extra_payment = is_numeric($request_extra_payment)
+            ? (float)$request_extra_payment
+            : (float)$db_extra_payment;
+
+        $final_fee += $extra_payment;
+
+        $effective_fee = max($final_fee - $previous_paid, 0);
+
+        return [
+            'final_fee'     => round($final_fee, 2),
+            'previous_paid' => round($previous_paid, 2),
+            'effective_fee' => round($effective_fee, 2)
+        ];
     }
 
 
@@ -772,20 +774,24 @@ class UserServiceApplicationController extends Controller
             $request->validate([
                 'service_id' => 'required|integer|exists:service_masters,id',
                 'application_data' => 'required|array',
+                'application_id' => 'nullable|integer',
+                'extra_payment' => 'nullable|integer',
             ]);
 
             $service_id = $request->service_id;
             $application_data = $request->application_data;
+            $application_id = $request->application_id;
+            $request_extra_payment = $request->extra_payment;
 
-            $final_fee = $this->calculate_final_fee($service_id, $application_data);
+            $final_fee = $this->calculate_final_fee($service_id, $application_data, $application_id, $request_extra_payment);
 
             return response()->json([
                 'status' => 1,
                 'message' => 'Fee calculated successfully.',
-                'data' => [
-                    'service_id' => $service_id,
-                    'final_fee' => $final_fee
-                ]
+                'data' => array_merge(
+                    ['service_id' => $service_id],
+                    $final_fee
+                )
             ]);
         } catch (\Exception $e) {
 
@@ -1049,20 +1055,44 @@ class UserServiceApplicationController extends Controller
                 ->orderByDesc('id')
                 ->first();
 
-            if ($history_data) {
-                $history_data = [
-                    'id'             => $history_data->id,
-                    'step_number'    => $history_data->step_number,
-                    'status'         => $history_data->status,
-                    'remarks'        => $history_data->remarks,
-                    'status_file'    => !empty($history_data->status_file)
-                        ? asset('storage/' . $history_data->status_file)
-                        : null,
-                    'action_taken_at' => $history_data->action_taken_at,
-                    'action_taken_by' => $history_data->action_taken_by,
-                ];
-            }
+            if ($application->service && $application->service->service_mode === 'third_party') {
 
+                $third_party_logs = ThirdPartyStatusLog::where('application_id', $application->id)
+                    ->orderByDesc('id')
+                    ->first();
+                if ($third_party_logs) {
+                    $history_data =  [
+                        'application_id'         => $third_party_logs->application_id,
+                        'service_status'     => $third_party_logs->service_status,
+                        'application_date'     => $third_party_logs->application_date,
+                        'payment_amount'     => $third_party_logs->payment_amount,
+                        'payment_status'     => $third_party_logs->payment_status,
+                        'remarks'    => $third_party_logs->remarks,
+                        'noc_file'       => !empty($third_party_logs->file)
+                            ? asset('storage/' . $third_party_logs->file)
+                            : null,
+                        'updated_at' => $third_party_logs->updated_at,
+                    ];
+                } else {
+                    $history = ApplicationWorkflowHistory::where('application_id', $application->id)
+                        ->orderByDesc('id')
+                        ->first();
+
+                    if ($history) {
+                        $history_data = [
+                            'id'              => $history->id,
+                            'step_number'     => $history->step_number,
+                            'status'          => $history->status,
+                            'remarks'         => $history->remarks,
+                            'status_file'     => $history->status_file
+                                ? asset('storage/' . $history->status_file)
+                                : null,
+                            'action_taken_at' => $history->action_taken_at,
+                            'action_taken_by' => $history->action_taken_by,
+                        ];
+                    }
+                }
+            }
 
             return response()->json([
                 'status'            => 1,
@@ -1081,7 +1111,6 @@ class UserServiceApplicationController extends Controller
         }
     }
 
-
     public function store_third_party_status_logs(Request $request, $user_service_application)
     {
 
@@ -1097,7 +1126,7 @@ class UserServiceApplicationController extends Controller
 
             $third_party_status_log->update([
                 'service_id'         => $user_service_application->service_id,
-                'application_id'     => $user_service_application->applicationId,
+                'application_id'     => $user_service_application->id,
                 'swaagat_user_id'    => $user_service_application->user_id,
                 'service_status'     => $user_service_application->status,
                 'mobile_no'          => $user_service_application->user->mobile_no,
@@ -1116,7 +1145,7 @@ class UserServiceApplicationController extends Controller
 
             ThirdPartyStatusLog::create([
                 'service_id'        => $user_service_application->service_id,
-                'application_id'     => $user_service_application->applicationId,
+                'application_id'     => $user_service_application->id,
                 'swaagat_user_id'    => $user_service_application->user_id,
                 'service_status'     => $user_service_application->status,
                 'mobile_no'          => $user_service_application->user->mobile_no,
@@ -1201,7 +1230,7 @@ class UserServiceApplicationController extends Controller
 
 
             ApplicationWorkflowHistory::create([
-                'application_id'            =>  $user_service_application->external_application_id,
+                'application_id'            =>  $user_service_application->id,
                 'service_id'                =>  $user_service_application->service_id,
                 'external_status'           =>  $user_service_application->external_status,
                 'external_payment_amount'   =>  $request->external_payment_amount,

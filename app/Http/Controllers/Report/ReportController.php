@@ -16,6 +16,11 @@ use App\Models\User;
 use App\Models\ManagementDetails;
 use App\Models\Inspection;
 use App\Models\Department;
+use App\Models\ApplicationWorkflowHistory;
+use App\Models\AclRule;
+use Carbon\Carbon;
+use App\Models\DepartmentUser;
+use App\Models\ServiceApprovalFlow;
 
 class ReportController extends Controller
 {
