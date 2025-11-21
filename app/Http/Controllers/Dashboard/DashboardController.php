@@ -269,6 +269,7 @@ class DashboardController extends Controller
                     return [
                         'application_id'    => $app->id,
                         'applicationId'     => $app->applicationId,
+                        'service_id'        => $app->service_id,
                         'department_name'   => $latest_send_back && $latest_send_back->department
                             ? $latest_send_back->department->name
                             : null,

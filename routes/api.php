@@ -37,6 +37,8 @@ use App\Http\Controllers\Inspection\InspectionController;
 use App\Http\Controllers\Service\ExistingLicenseController;
 use App\Http\Controllers\Dashboard\DashboardController;
 use App\Http\Controllers\KyaController;
+use App\Http\Controllers\Service\PaymentController;
+
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -188,6 +190,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-user-applications-per-service', [UserServiceApplicationController::class, 'get_user_applications_per_service']);
         Route::post('/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
         Route::post('calculate-fee', [UserServiceApplicationController::class, 'calculate_fee']);
+
+        Route::post('process-payment', [PaymentController::class, 'process_payment']);
+        Route::post('update-payment', [PaymentController::class, 'update_payment']);
+        Route::post('payment-callback', [PaymentController::class, 'payment_callback']);
 
         Route::post('existing-license-store', [ExistingLicenseController::class, 'existing_license_store']);
         Route::post('existing-license-update', [ExistingLicenseController::class, 'existing_license_update']);
