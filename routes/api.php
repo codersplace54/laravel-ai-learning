@@ -23,7 +23,7 @@ use App\Http\Controllers\Service\ServiceApprovalFlowController;
 use App\Http\Controllers\Service\UserServiceApplicationController;
 use App\Http\Controllers\Service\HolidayController;
 use App\Http\Controllers\Service\ServiceController;
-use App\Http\Controllers\Service\ServiceTemplateController;
+use App\Http\Controllers\Service\CertificateController;
 use App\Http\Controllers\Subdivision\TripuraMasterDataController;
 use App\Http\Controllers\Incentive\SchemeController;
 use App\Http\Controllers\Incentive\ProformaController;
@@ -123,8 +123,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
             Route::post('fetch-proforma-questionnaire-details', [ProformaQuestionnaireController::class, 'proforma_questionnaire_details']);
         });
 
-        Route::post('service-template-show', [ServiceTemplateController::class, 'service_template_show']);
-        Route::post('service-template-store',  [ServiceTemplateController::class, 'service_template_store']);
+        Route::post('service-template-show', [CertificateController::class, 'service_template_show']);
+        Route::post('service-template-store',  [CertificateController::class, 'service_template_store']);
+
         Route::post('download-application-pdf',  [ServiceController::class, 'download_application_pdf']);
 
         Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
@@ -244,6 +245,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/user/{id}/assigned-applications', [ServiceController::class, 'get_department_user_assigned_applications']);
         Route::post('/preview-certificate/{application_id}', [ServiceController::class, 'preview_certificate']);
 
+        Route::post('certificate-variables-list',  [CertificateController::class, 'certificate_variables_list']);
+        Route::post('user-certificate-view',  [CertificateController::class, 'user_certificate_view']);
+        Route::post('user-certificate-generate',  [CertificateController::class, 'user_certificate_generate']);
+
         Route::post('/get-department-users', [UserController::class, 'get_department_users']);
         Route::post('/get-user-caf-unit_details', [UnitDetailController::class, 'get_user_caf_unit_details']);
         Route::post('/get-user-caf-management-details', [ManagementDetailsController::class, 'get_user_caf_management_details']);
@@ -261,10 +266,6 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('inspections-status-update', [InspectionController::class, 'inspections_status_update']);
         Route::post('approved-inspections-list', [InspectionController::class, 'approved_inspections_list']);
         Route::post('inspection-date-update-by-inspector', [InspectionController::class, 'inspection_date_update_by_inspector']);
-
-        Route::post('certificate-variables-list',  [ServiceController::class, 'certificate_variables_list']);
-        Route::post('certificate-view',  [ServiceController::class, 'certificate_view']);
-        Route::post('generate-certificate',  [ServiceController::class, 'generate_certificate']);
 
         Route::post('update-joint-inspection', [InspectionController::class, 'update_joint_inspection']);
     });
@@ -294,6 +295,10 @@ Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'ge
 
 Route::prefix('report')->group(function () {
     Route::post('online-single-windows', [ReportController::class, 'online_single_windows']);
+    Route::post('application-status', [ReportController::class, 'application_status']);
+    Route::post('department-user-list', [ReportController::class, 'department_user_list']);
+    Route::post('approval-steps-list', [ReportController::class, 'approval_step_list']);
+    Route::post('user-list', [ReportController::class, 'user_list']);
 });
 
 Route::post('user-feedback-store', [UserFeedbackController::class, 'user_feedback_store']);
