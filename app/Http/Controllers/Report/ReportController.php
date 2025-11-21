@@ -31,14 +31,14 @@ class ReportController extends Controller
                 'from_date'       => 'nullable|date',
                 'to_date'         => 'nullable|date|after_or_equal:from_date',
                 'department_id'   => 'nullable|integer|exists:departments,id',
-                'inspection_for'  => 'nullable|array',      // list of Act names / ids
+                'inspection_for'  => 'nullable|array',      
                 'inspection_for.*' => 'string',
             ]);
 
             $from_date      = $request->from_date;
             $to_date        = $request->to_date;
             $department_id  = $request->department_id;
-            $inspection_for = $request->inspection_for;    // array from multiselect
+            $inspection_for = $request->inspection_for;    
 
             $query = Inspection::with([
                 'user:id,name_of_enterprise,registered_enterprise_address,mobile_no,email_id',
@@ -58,7 +58,7 @@ class ReportController extends Controller
             }
 
             if (!empty($inspection_for) && is_array($inspection_for)) {
-                // assuming inspection_type stores the Act name
+               
                 $query->whereIn('inspection_type', $inspection_for);
             }
 
@@ -676,8 +676,6 @@ class ReportController extends Controller
             ], 500);
         }
     }
-
-
 
 
     public function user_list(Request $request)
