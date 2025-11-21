@@ -18,11 +18,11 @@ return new class extends Migration
             $table->integer('renewalYear')->nullable();
             $table->string('applicationId')->nullable();
             $table->timestamp('application_date')->useCurrent();
-            $table->enum('status', ['saved','submitted', 'under_review', 'approved', 'rejected','send_back','re_submitted','extra_payment'])->default('submitted');
+            $table->enum('status', ['saved','submitted', 'under_review', 'approved', 'rejected','send_back','re_submitted','extra_payment'])->default('saved');
             $table->string('application_data')->nullable();
             $table->string('applied_fee')->nullable();
             $table->string('approved_fee')->nullable();
-            $table->enum('payment_status', ['pending', 'paid', 'failed'])->default('pending');
+            $table->string('payment_status')->nullable();
             $table->text('remarks')->nullable();
             $table->date('NOC_application_date')->nullable();
             $table->date('NOC_expiry_date')->nullable();
