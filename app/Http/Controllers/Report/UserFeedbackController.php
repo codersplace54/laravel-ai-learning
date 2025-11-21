@@ -33,9 +33,9 @@ class UserFeedbackController extends Controller
 
             if (!$user) {
                 return response()->json([
-                    'status' => 0,
+                    'status' => 1,
                     'message' => 'Email or username is incorrect.',
-                ], 404);
+                ], 422);
             }
 
             $user_feedback = UserFeedback::where('user_id', $user->id)
@@ -69,6 +69,7 @@ class UserFeedbackController extends Controller
                 DB::commit();
 
                 return response()->json([
+                    'status' => 1,
                     'message' => 'Feedback submitted successfully!',
                     'data' => $user_feedback
                 ], 201);
@@ -136,7 +137,7 @@ class UserFeedbackController extends Controller
 
             if ($department->feedbacks_count < 1) {
                 return response()->json([
-                    'status'  => 0,
+                    'status'  => 1,
                     'message' => 'No reviews found for this department.',
                 ], 404);
             }

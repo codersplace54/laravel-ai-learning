@@ -36,6 +36,7 @@ use App\Http\Controllers\Report\UserFeedbackController;
 use App\Http\Controllers\Inspection\InspectionController;
 use App\Http\Controllers\Service\ExistingLicenseController;
 use App\Http\Controllers\Dashboard\DashboardController;
+use App\Http\Controllers\KyaController;
 use App\Http\Controllers\Service\PaymentController;
 
 
@@ -299,6 +300,11 @@ Route::prefix('report')->group(function () {
     Route::post('department-user-list', [ReportController::class, 'department_user_list']);
     Route::post('approval-steps-list', [ReportController::class, 'approval_step_list']);
     Route::post('user-list', [ReportController::class, 'user_list']);
+    Route::post('industry-report-summary', [ReportController::class, 'industry_report_summary']);
+    Route::post('industry-report-details', [ReportController::class, 'industry_report_details']);
+    Route::post('department-approvals', [ReportController::class, 'departmental_approvals']);
+    Route::post('cis-summary-report', [ReportController::class, 'cis_summary_report']);
+    Route::post('cis-details-report', [ReportController::class, 'cis_details_report']);
 });
 
 Route::post('user-feedback-store', [UserFeedbackController::class, 'user_feedback_store']);
@@ -310,5 +316,13 @@ Route::post('get-unit-details', [InspectionController::class, 'get_unit_details'
 
 Route::post('user/third-party/return', [UserServiceApplicationController::class, 'third_party_return'])->name('third_party.return');
 Route::post('/third-party/status/update', [UserServiceApplicationController::class, 'update_third_party_status_log']);
+
+Route::prefix('kya')->group(function () {
+    Route::get('/sectors', [KyaController::class, 'get_sectors']);
+    Route::get('/risk-categories', [KyaController::class, 'get_risk_categories']);
+    Route::get('/industry-sectors', [KyaController::class, 'get_industry_sectors']);
+    Route::get('/questions', [KyaController::class, 'get_questions']);
+    Route::get('/approval-details', [KyaController::class, 'get_approval_details']);
+});
 
 
