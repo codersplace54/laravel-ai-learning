@@ -1574,4 +1574,103 @@ class UserServiceApplicationController extends Controller
             ], 500);
         }
     }
+
+    public function get_all_applications_list()
+    {
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+
+            $applications = UserServiceApplication::orderBy('id', 'DESC')->get();
+
+            if ($applications->isEmpty()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No applications found.',
+                ], 404);
+            }
+
+            $response_data = [];
+
+            foreach ($applications as $app) {
+                $response_data[] = [
+                    'id' => $app->id,
+                    'application_number' => $app->applicationId,
+                    'business' => $app->user->name_of_enterprise ?? null,
+                    'email_id' => $app->user->email_id ?? null,
+                    'mobile_no' => $app->user->mobile_no ?? null,
+                    'amount' => $app->total_fee ?? 0,
+                    'expiry_date' => $app->NOC_expiry_date ?? null,
+                    'status' => $app->payment_status,
+                    'method' => null,
+                    'comments' => $app->comments,
+                ];
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Applications fetched successfully.',
+                'data' => $response_data
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function mark_application_paid(Request $request)
+    {
+
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'application_id' => 'required|integer|exists:user_service_applications,id',
+                'GRN_number'     => 'required|string',
+                'comments'       => 'nullable|string',
+            ]);
+
+            $application = UserServiceApplication::where('id', $request->application_id)->first();
+
+            $application->update([
+                'GRN_number'     => $request->GRN_number,
+                'comments'       => $request->comments,
+                'payment_status' => 'paid',
+                'payment_time'   => now()
+            ]);
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Application marked as paid successfully.',
+                'data' => [
+                    'application_id' => $application->id,
+                    'payment_status' => $application->payment_status,
+                    'GRN_number'     => $application->GRN_number,
+                    'comments'       => $application->comments,
+                    'payment_time'   => $application->payment_time,
+                ]
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

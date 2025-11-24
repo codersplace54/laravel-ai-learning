@@ -167,6 +167,11 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('existing-license-update-status', [ExistingLicenseController::class, 'existing_license_update_status']);
         Route::post('existing-license-view', [ExistingLicenseController::class, 'existing_license_view']);
         Route::post('existing-license-details', [ExistingLicenseController::class, 'existing_license_details']);
+
+        Route::post('get-all-applications-list', [UserServiceApplicationController::class, 'get_all_applications_list']);
+        Route::post('mark-application-paid', [UserServiceApplicationController::class, 'mark_application_paid']);
+
+        Route::post('get-total-applications-by-admin', [DashboardController::class, 'get_total_applications_by_admin']);
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
