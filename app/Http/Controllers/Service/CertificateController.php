@@ -432,4 +432,90 @@ class CertificateController extends Controller
         }
     }
 
+
+    public function preview_certificate($application_id)
+    {
+
+        try {
+
+
+            $application = UserServiceApplication::with('service')->findOrFail($application_id);
+
+            if (!$application->service || !$application->service->form_template) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Certificate template not found.'
+                ]);
+            }
+
+            $user = Auth::user();
+
+            $template = (string) data_get($application, 'service.form_template', '');
+            $template = html_entity_decode($template, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $template = str_replace("\xC2\xA0", ' ', $template);
+
+            $name = $application->user->authorized_person_name ?? $user->name ?? '—';
+            $verifyUrl = 'https://swaagat.tripura.gov.in/verify';
+
+            $qrPayload = "Name: {$name}\nApplication Id: {$application->id}\n{$verifyUrl}";
+            $qrSvg = QrCode::format('svg')->size(220)->margin(0)->generate($qrPayload);
+            $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
+
+            $data = [
+                'form_title'        => 'FORM VI',
+                'rules_ref'         => '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
+                'government'        => 'Government of Tripura',
+                'issuing_office'    => 'Office of the Licensing Officer',
+                'verify_portal_url' => 'https://swaagat.tripura.gov.in',
+
+                'license_id'          => $application->id ?? '—',
+                'issue_date'          => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
+                'principal_employer'  => $application->user->authorized_person_name ?? '—',
+                'guardian_name'       => $application->user->management_details->owner_details_father_name ?? '—',
+                'address'             => $application->user->management_details->owner_details_residential_details ?? '—',
+                'work_location'       => $application->work_location ?? 'Tripura',
+                'registration_no'     => $application->id ?? '—',
+                'registration_date'   => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
+                'valid_upto'          => $application->NOC_expiry_date ? Carbon::parse($application->NOC_expiry_date)->format('d-m-Y') : '—',
+                'max_contract_labour' => (string) ($application->max_contract_labour ?? 0),
+                'fee_paid'            => (string) ($application->final_fee ?? 0),
+                'security_deposit'    => (string) ($application->security_deposit ?? ''),
+                'designation'         => $application->service->department->department_user->designation ?? '',
+                'signature_note'      => 'Not Required',
+                'user_name'           => $user->authorized_person_name ?? '',
+                'user_id'             => (string) $user->id,
+                'qr_code'             => $qrDataUri,
+            ];
+
+            $filled = preg_replace_callback('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', function ($m) use ($data) {
+                $key = $m[1];
+                return e($data[$key] ?? '');
+            }, $template);
+
+            if (stripos($filled, '<html') === false) {
+                $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
+            }
+
+            $pdf = Pdf::loadHTML($filled)->setPaper('a4', 'portrait');
+
+            $temp_file_name = 'preview_' . uniqid() . '.pdf';
+            $temp_path = storage_path('app/public/temp/' . $temp_file_name);
+            Storage::disk('public')->put('temp/' . $temp_file_name, $pdf->output());
+
+            $previewUrl = asset('storage/temp/' . $temp_file_name);
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Preview generated successfully.',
+                'pdf_url' => $previewUrl,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while generating preview.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
 }
