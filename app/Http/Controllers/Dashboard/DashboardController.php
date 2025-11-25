@@ -51,7 +51,7 @@ class DashboardController extends Controller
             $total_applications_for_this_department = Department::find($department_id)->applications()->count();
 
             $percentage_total_application = $total_applications_for_this_department > 0
-                ? round(($total_applications_for_this_department / $total_services_per_department) * 100, 2)
+                ? min(100, round(($total_applications_for_this_department / $total_services_per_department) * 100, 2))
                 : 0;
 
             $total_count_pending_application_in_department = ApplicationWorkflowAssignment::where('status', 'pending')
@@ -64,7 +64,7 @@ class DashboardController extends Controller
             $total_count_approved_application_in_department = ApplicationWorkflowAssignment::where('status', 'approved');
 
             $percentage_pending_application = $total_applications_for_this_department > 0
-                ? ($total_count_pending_application_in_department / $total_applications_for_this_department) * 100
+                ? min(100, round(($total_count_pending_application_in_department / $total_applications_for_this_department) * 100, 2))
                 : 0;
 
             $total_count_approved_application_in_department = ApplicationWorkflowAssignment::query()
@@ -76,13 +76,13 @@ class DashboardController extends Controller
 
 
             $percentage_approved_application = $total_applications_for_this_department > 0
-                ? ($total_count_approved_application_in_department / $total_applications_for_this_department) * 100
+                ? min(100, round(($total_count_approved_application_in_department / $total_applications_for_this_department) * 100, 2))
                 : 0;
 
             $total_count_rejected_application_in_department = UserServiceApplication::where('status', 'rejected')->count();
 
             $percentage_rejected_application = $total_applications_for_this_department > 0
-                ? ($total_count_rejected_application_in_department / $total_applications_for_this_department) * 100
+                ? min(100, round(($total_count_rejected_application_in_department / $total_applications_for_this_department) * 100, 2))
                 : 0;
 
 
@@ -213,7 +213,7 @@ class DashboardController extends Controller
             $total_applications_for_this_user = User::find($user_id)->applications()->count();
 
             $percentage_total_application = $total_applications_for_this_user > 0
-                ? round(($total_applications_for_this_user / $total_services_per_user) * 100, 2)
+                ? min(100, round(($total_applications_for_this_user / $total_services_per_user) * 100, 2))
                 : 0;
 
             $total_count_pending_application_in_user = UserServiceApplication::where('user_id', $request->user_id)
@@ -225,18 +225,18 @@ class DashboardController extends Controller
                 ->count();
 
             $percentage_pending_application = $total_applications_for_this_user > 0
-                ? ($total_count_pending_application_in_user / $total_applications_for_this_user) * 100
+                ? min(100, round(($total_count_pending_application_in_user / $total_applications_for_this_user) * 100, 2))
                 : 0;
 
 
             $percentage_approved_application = $total_applications_for_this_user > 0
-                ? ($total_count_approved_application_in_user / $total_applications_for_this_user) * 100
+                ? min(100, round(($total_count_approved_application_in_user / $total_applications_for_this_user) * 100, 2))
                 : 0;
 
             $total_count_rejected_application_in_department = UserServiceApplication::where('status', 'rejected')->count();
 
             $percentage_rejected_application = $total_applications_for_this_user > 0
-                ? ($total_count_rejected_application_in_department / $total_applications_for_this_user) * 100
+                ? min(100, round(($total_count_rejected_application_in_department / $total_applications_for_this_user) * 100, 2))
                 : 0;
 
             $services = ServiceMaster::withCount('applications')
@@ -295,6 +295,83 @@ class DashboardController extends Controller
                 '$total_count_rejected_application_in_department' => $total_count_rejected_application_in_department,
                 'application_count_per_service' => $application_count_per_service,
                 'clarification_required'       => $clarification_required,
+
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching the application count',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function get_total_applications_by_admin(Request $request)
+    {
+
+        try {
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $total_services = ServiceMaster::count();
+
+            $total_applications = UserServiceApplication::count();
+
+            $percentage_total_application = $total_services > 0
+                ? min(100, round(($total_applications / $total_services) * 100, 2))
+                : 0;
+
+            $total_count_pending_application = UserServiceApplication::whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review'])
+                ->count();
+
+            $total_count_approved_application = UserServiceApplication::where('status', 'approved')
+                ->count();
+
+            $percentage_pending_application = $total_applications > 0
+                ? min(100, round(($total_count_pending_application / $total_applications) * 100, 2))
+                : 0;
+
+
+            $percentage_approved_application = $total_applications > 0
+                ? min(100, round(($total_count_approved_application / $total_applications) * 100, 2))
+                : 0;
+
+            $total_count_rejected_application = UserServiceApplication::where('status', 'rejected')->count();
+
+            $percentage_rejected_application = $total_applications > 0
+                ? min(100, round(($total_count_rejected_application / $total_applications) * 100, 2))
+                : 0;
+
+            $services = ServiceMaster::withCount('applications')
+                ->get(['id', 'service_title_or_description']);
+
+            $application_count_per_service = $services->map(function ($service) {
+                return [
+                    'service_id' => $service->id,
+                    'service_name' => $service->service_title_or_description,
+                    'application_count' => $service->applications_count,
+                ];
+            });
+
+
+
+            return response()->json([
+                'status'            => 1,
+                'message'           => 'Total count applications under this department fetched successfully',
+                'total_applications' => $total_applications,
+                'percentage_total_application' => $percentage_total_application,
+                'total_count_pending_application' => $total_count_pending_application,
+                'percentage_pending_application' => $percentage_pending_application,
+                'percentage_approved_application' => $percentage_approved_application,
+                'percentage_rejected_application' => $percentage_rejected_application,
+                'total_count_approved_application' => $total_count_approved_application,
+                '$total_count_rejected_application' => $total_count_rejected_application,
+                'application_count_per_service' => $application_count_per_service,
 
             ], 200);
         } catch (\Exception $e) {
