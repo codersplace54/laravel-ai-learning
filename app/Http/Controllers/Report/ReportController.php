@@ -14,52 +14,53 @@ use App\Models\UnitDetail;
 use App\Models\Activity;
 use App\Models\User;
 use App\Models\ManagementDetails;
+use App\Models\Inspection;
+use App\Models\TripuraMasterData;
 
 class ReportController extends Controller
 {
-    public function cis_details_report(Request $request)
+    public function application_status(Request $request)
     {
         try {
             $request->validate([
-                'from_date'       => 'nullable|date',
-                'to_date'         => 'nullable|date|after_or_equal:from_date',
-                'department_id'   => 'nullable|integer|exists:departments,id',
-                'inspection_for'  => 'nullable|array',      
-                'inspection_for.*' => 'string',
+                'from_date'          => 'required|date',
+                'to_date'            => 'required|date|after_or_equal:from_date',
+                'department_id'      => 'nullable|integer',
+                'application_status' => 'nullable|string',
             ]);
 
-            $from_date      = $request->from_date;
-            $to_date        = $request->to_date;
-            $department_id  = $request->department_id;
-            $inspection_for = $request->inspection_for;    
+            $from_date          = $request->from_date;
+            $to_date            = $request->to_date;
+            $department_id      = $request->department_id;
+            $application_status = $request->application_status;
 
-            $query = Inspection::with([
-                'user:id,name_of_enterprise,registered_enterprise_address,mobile_no,email_id',
-                'department:id,name',
+            $query = UserServiceApplication::with([
+                'user:id,name_of_enterprise,authorized_person_name,mobile_no,email_id,registered_enterprise_address',
+                'service:id,department_id,service_title_or_description,target_days',
+                'service.department:id,name',
+                'workflow' => function ($q) {
+                    $q->orderBy('action_taken_at', 'asc');
+                },
             ]);
 
-            if (!empty($from_date)) {
-                $query->whereDate('inspection_date', '>=', $from_date);
-            }
-
-            if (!empty($to_date)) {
-                $query->whereDate('inspection_date', '<=', $to_date);
-            }
+            $query->whereDate('application_date', '>=', $from_date)
+                ->whereDate('application_date', '<=', $to_date);
 
             if (!empty($department_id)) {
-                $query->where('department_id', $department_id);
+                $query->whereHas('service', function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                });
             }
 
-            if (!empty($inspection_for) && is_array($inspection_for)) {
-               
-                $query->whereIn('inspection_type', $inspection_for);
+            if (!empty($application_status)) {
+                $query->where('status', $application_status);
             }
 
-            $inspections = $query
-                ->orderBy('inspection_date', 'asc')
+            $applications = $query
+                ->orderBy('application_date', 'asc')
                 ->get();
 
-            if ($inspections->isEmpty()) {
+            if ($applications->isEmpty()) {
                 return response()->json([
                     'status'  => 1,
                     'message' => 'No record found.',
@@ -67,40 +68,128 @@ class ReportController extends Controller
                 ]);
             }
 
-            $rows = $inspections->map(function ($inspection) {
-                $user = $inspection->user;
+            $rows = $applications->map(function ($application) {
+                $user       = $application->user;
+                $service    = $application->service;
+                $department = $service ? $service->department : null;
+                $workflow   = $application->workflow ?? collect();
 
-                $type_text = strtolower(trim((string) $inspection->inspection_type));
-                $self_certification  = '';
-                $third_party_cert    = '';
+                $approved_step = $workflow->where('status', 'approved')
+                    ->sortByDesc('action_taken_at')
+                    ->first();
 
-                if ($type_text !== '') {
-                    if (str_contains($type_text, 'self')) {
-                        $self_certification = 'Yes';
-                    }
+                $rejected_step = $workflow->where('status', 'rejected')
+                    ->sortByDesc('action_taken_at')
+                    ->first();
 
-                    if (str_contains($type_text, 'third')) {
-                        $third_party_cert = 'Yes';
+                $first_send_back_step = $workflow->where('status', 'send_back')
+                    ->sortBy('action_taken_at')
+                    ->first();
+
+                $application_date = $application->application_date
+                    ? Carbon::parse($application->application_date)
+                    : null;
+
+                $due_date = null;
+                if ($application_date && $service && $service->target_days !== null) {
+                    $due_date = $application_date->copy()->addDays((int) $service->target_days);
+                }
+
+                $decision_status = $application->status;
+                $decision_date   = null;
+
+                if ($approved_step) {
+                    $decision_status = 'approved';
+                    $decision_date   = $approved_step->action_taken_at
+                        ? Carbon::parse($approved_step->action_taken_at)
+                        : null;
+                } elseif ($rejected_step) {
+                    $decision_status = 'rejected';
+                    $decision_date   = $rejected_step->action_taken_at
+                        ? Carbon::parse($rejected_step->action_taken_at)
+                        : null;
+                }
+
+
+                $total_days_delayed = null;
+
+                if ($due_date && $decision_date) {
+                    if ($decision_date->lessThanOrEqualTo($due_date)) {
+                        $total_days_delayed = 0;
+                    } else {
+                        $total_days_delayed = (int) $due_date->diffInDays($decision_date);
                     }
                 }
 
+
+                $clarification_delay_days = null;
+
+                if ($first_send_back_step) {
+                    $send_back_date = $first_send_back_step->action_taken_at
+                        ? Carbon::parse($first_send_back_step->action_taken_at)
+                        : null;
+
+                    if ($send_back_date) {
+
+                        $resubmission_step = $workflow
+                            ->filter(function ($step) use ($first_send_back_step) {
+                                if (!$step->action_taken_at) {
+                                    return false;
+                                }
+
+
+                                if ($step->id === $first_send_back_step->id) {
+                                    return false;
+                                }
+
+                                return $step->action_taken_at > $first_send_back_step->action_taken_at
+                                    && $step->status !== 'send_back';
+                            })
+                            ->sortBy('action_taken_at')
+                            ->first();
+
+                        if ($resubmission_step && $resubmission_step->action_taken_at) {
+                            $resubmission_date = Carbon::parse($resubmission_step->action_taken_at);
+
+                            $clarification_delay_days = $resubmission_date->diffInDays($send_back_date);
+                        }
+                    }
+                }
+
+
                 return [
-                    'enterprise_name'                 => $user ? $user->name_of_enterprise : null,
-                    'address'                         => $user ? $user->registered_enterprise_address : null,
-                    'contact_no'                      => $user ? $user->mobile_no : null,
-                    'email'                           => $user ? $user->email_id : null,
-                    'act_name'                        => $inspection->inspection_type,
-                    'inspection_date'                 => $inspection->inspection_date
-                        ? Carbon::parse($inspection->inspection_date)->format('Y-m-d')
+                    'department_name'          => $department ? $department->name : null,
+                    'application_no'           => $application->applicationId ?? $application->id,
+                    'application_date'         => $application_date ? $application_date->format('Y-m-d') : null,
+                    'application_for'          => $service ? $service->service_title_or_description : null,
+                    'organization'             => $user
+                        ? ($user->name_of_enterprise ?: $user->authorized_person_name)
                         : null,
-                    'self_certification_exempt'       => $self_certification,
-                    'third_party_cert_exempt'         => $third_party_cert,
+                    'registered_address'       => $user ? $user->registered_enterprise_address : null,
+                    'mobile_no'                => $user ? $user->mobile_no : null,
+                    'email_id'                 => $user ? $user->email_id : null,
+
+                    'due_date'                 => $due_date ? $due_date->format('Y-m-d') : null,
+
+                    'approved_on'              => $approved_step && $approved_step->action_taken_at
+                        ? Carbon::parse($approved_step->action_taken_at)->format('Y-m-d')
+                        : null,
+                    'rejected_on'              => $rejected_step && $rejected_step->action_taken_at
+                        ? Carbon::parse($rejected_step->action_taken_at)->format('Y-m-d')
+                        : null,
+                    'send_back_on'             => $first_send_back_step && $first_send_back_step->action_taken_at
+                        ? Carbon::parse($first_send_back_step->action_taken_at)->format('Y-m-d')
+                        : null,
+
+                    'current_status'           => $decision_status,
+                    'total_days_delayed'       => $total_days_delayed,
+                    'clarification_delay_days' => $clarification_delay_days,
                 ];
             });
 
             return response()->json([
                 'status'  => 1,
-                'message' => 'CIS details report.',
+                'message' => 'Application status report.',
                 'data'    => $rows,
             ]);
         } catch (\Throwable $e) {
@@ -111,30 +200,73 @@ class ReportController extends Controller
         }
     }
 
-    public function cis_summary_report(Request $request)
+    public function department_user_list(Request $request)
     {
         try {
             $request->validate([
-                'year'  => 'nullable|integer',
-                'month' => 'nullable|integer|min:1|max:12',
+                'department_id' => 'nullable|integer|exists:departments,id',
+                'service_id'    => 'nullable|integer|exists:service_masters,id',
+                'approval_step' => 'nullable|string',
             ]);
 
-            $year  = $request->year;
-            $month = $request->month;
+            $department_id = $request->department_id;
+            $service_id    = $request->service_id;
+            $approval_step = $request->approval_step;
 
-            $inspection_query = Inspection::with(['department:id,name']);
+            $department_user_query = DepartmentUser::with([
+                'department:id,name',
+                'user:id,user_name,authorized_person_name,name_of_enterprise,email_id,mobile_no',
+            ])
+                ->where('is_active', 1);
 
-            if (!empty($year)) {
-                $inspection_query->whereYear('proposed_date', $year);
+            if (!empty($department_id)) {
+                $department_user_query->where('department_id', $department_id);
             }
 
-            if (!empty($month)) {
-                $inspection_query->whereMonth('proposed_date', $month);
+            $flows = collect();
+
+            if (!empty($department_id) || !empty($service_id) || !empty($approval_step)) {
+                $flow_query = ServiceApprovalFlow::query();
+
+                if (!empty($department_id)) {
+                    $flow_query->where('department_id', $department_id);
+                }
+
+                if (!empty($service_id)) {
+                    $flow_query->where('service_id', $service_id);
+                }
+
+                if (!empty($approval_step)) {
+                    $flow_query->where('step_type', $approval_step);
+                }
+
+                $flows = $flow_query->get();
+
+                if ($flows->isEmpty()) {
+                    return response()->json([
+                        'status'  => 1,
+                        'message' => 'No record found.',
+                        'data'    => [],
+                    ]);
+                }
+
+                $hierarchy_levels    = $flows->pluck('hierarchy_level')->filter()->unique()->values();
+                $flow_department_ids = $flows->pluck('department_id')->filter()->unique()->values();
+
+                if (empty($department_id) && $flow_department_ids->isNotEmpty()) {
+                    $department_user_query->whereIn('department_id', $flow_department_ids);
+                }
+
+                if ($hierarchy_levels->isNotEmpty()) {
+                    $department_user_query->whereIn('hierarchy_level', $hierarchy_levels->all());
+                }
             }
 
-            $inspections = $inspection_query->get();
+            $department_users = $department_user_query
+                ->orderBy('id', 'asc')
+                ->get();
 
-            if ($inspections->isEmpty()) {
+            if ($department_users->isEmpty()) {
                 return response()->json([
                     'status'  => 1,
                     'message' => 'No record found.',
@@ -142,80 +274,359 @@ class ReportController extends Controller
                 ]);
             }
 
-            $summary = [];
+            $service_label = null;
 
-            foreach ($inspections as $inspection) {
-                $department = $inspection->department;
-                if (!$department) {
-                    continue;
-                }
+            if (!empty($service_id)) {
+                $service = ServiceMaster::select('id', 'service_title_or_description')
+                    ->find($service_id);
 
-                $department_id   = $department->id;
-                $department_name = $department->name;
-
-                if (!isset($summary[$department_id])) {
-                    $summary[$department_id] = [
-                        'department_id'                            => $department_id,
-                        'department_name'                          => $department_name,
-                        'scheduled_inspections'                    => 0,
-                        'inspections_conducted'                    => 0,
-                        'pending_inspections'                      => 0,
-                        'self_certification_exempt_companies'      => 0,
-                        'third_party_cert_exempt_companies'        => 0,
-                        'reports_uploaded_within_48_hrs'           => 0,
-                        'reports_uploaded_beyond_48_hrs'           => 0,
-                    ];
-                }
-
-                $row = &$summary[$department_id];
-
-                $row['scheduled_inspections']++;
-
-                $inspection_date = $inspection->inspection_date
-                    ? Carbon::parse($inspection->inspection_date)
-                    : null;
-
-                if ($inspection_date) {
-                    $row['inspections_conducted']++;
-                }
-
-                $inspection_type = strtolower(trim((string) $inspection->inspection_type));
-
-                if ($inspection_type !== '') {
-                    if (str_contains($inspection_type, 'self')) {
-                        $row['self_certification_exempt_companies']++;
-                    } elseif (str_contains($inspection_type, 'third')) {
-                        $row['third_party_cert_exempt_companies']++;
-                    }
-                }
-
-                if ($inspection_date && $inspection->created_at) {
-                    $uploaded_at = Carbon::parse($inspection->created_at);
-                    $hours_diff  = $inspection_date->diffInHours($uploaded_at);
-
-                    if ($hours_diff <= 48) {
-                        $row['reports_uploaded_within_48_hrs']++;
-                    } else {
-                        $row['reports_uploaded_beyond_48_hrs']++;
-                    }
-                }
-
-                unset($row);
-            }
-
-            foreach ($summary as &$row) {
-                $row['pending_inspections'] = $row['scheduled_inspections'] - $row['inspections_conducted'];
-                if ($row['pending_inspections'] < 0) {
-                    $row['pending_inspections'] = 0;
+                if ($service) {
+                    $service_label = $service->service_title_or_description;
                 }
             }
-            unset($row);
 
-            $rows = array_values($summary);
+            $rows = $department_users->map(function ($department_user) use ($service_label) {
+                $department = $department_user->department;
+                $user       = $department_user->user;
+
+                $name = null;
+                if ($user) {
+                    $name = $user->authorized_person_name ?: $user->name_of_enterprise;
+                }
+
+                return [
+                    'department_name'    => $department ? $department->name : null,
+                    'role'               => $service_label,
+                    'user_name'          => $user ? $user->user_name : null,
+                    'name'               => $name,
+                    'designation'        => $department_user->designation,
+                    'email_id'           => $user ? $user->email_id : null,
+                    'mobile_number'      => $user ? $user->mobile_no : null,
+                    'date_of_assignment' => $department_user->created_at
+                        ? $department_user->created_at->format('Y-m-d')
+                        : null,
+                ];
+            });
 
             return response()->json([
                 'status'  => 1,
-                'message' => 'CIS summary report.',
+                'message' => 'Department user list.',
+                'data'    => $rows,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function industry_report_summary(Request $request)
+    {
+        try {
+            $request->validate([
+                'from_date'    => 'nullable|date',
+                'to_date'      => 'nullable|date|after_or_equal:from_date',
+                'district'     => 'nullable|integer',
+                'sub_division' => 'nullable|integer',
+            ]);
+
+            $from_date       = $request->from_date;
+            $to_date         = $request->to_date;
+            $district_id     = $request->district;
+            $sub_division_id = $request->sub_division;
+
+            $application_query = UserServiceApplication::query();
+
+            if (!empty($from_date)) {
+                $application_query->whereDate('application_date', '>=', $from_date);
+            }
+
+            if (!empty($to_date)) {
+                $application_query->whereDate('application_date', '<=', $to_date);
+            }
+
+            $user_ids = $application_query
+                ->whereNotNull('user_id')
+                ->pluck('user_id')
+                ->unique()
+                ->values();
+
+            if ($user_ids->isEmpty()) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'No record found.',
+                    'data'    => [],
+                ]);
+            }
+
+            $units = UnitDetail::whereIn('user_id', $user_ids)
+                ->get()
+                ->keyBy('user_id');
+
+            $activities = Activity::whereIn('user_id', $user_ids)
+                ->get()
+                ->keyBy('user_id');
+
+            $district_ids     = $units->pluck('unit_location_district')->filter()->unique()->values();
+            $sub_division_ids = $units->pluck('unit_location_subdivision')->filter()->unique()->values();
+
+            $master_rows = TripuraMasterData::select(
+                'district_code',
+                'district_name',
+                'sub_lgd_code',
+                'sub_division'
+            )
+                ->whereIn('district_code', $district_ids->all())
+                ->get();
+
+            $district_names    = [];
+            $subdivision_names = [];
+
+            foreach ($master_rows as $row) {
+                $d_code = (int) $row->district_code;
+                $s_code = (int) $row->sub_lgd_code;
+
+                if ($d_code && !empty($row->district_name)) {
+                    if (!isset($district_names[$d_code])) {
+                        $district_names[$d_code] = $row->district_name;
+                    }
+                }
+
+                if ($d_code && $s_code && !empty($row->sub_division)) {
+                    if (!isset($subdivision_names[$d_code])) {
+                        $subdivision_names[$d_code] = [];
+                    }
+                    $subdivision_names[$d_code][$s_code] = $row->sub_division;
+                }
+            }
+
+            $summary = [];
+
+            foreach ($user_ids as $user_id) {
+                $unit = $units->get($user_id);
+                if (!$unit) {
+                    continue;
+                }
+
+                $dist_id = $unit->unit_location_district;
+                $subd_id = $unit->unit_location_subdivision;
+
+                if (empty($dist_id) || empty($subd_id)) {
+                    continue;
+                }
+
+                if (!empty($district_id) && (int) $district_id !== (int) $dist_id) {
+                    continue;
+                }
+
+                if (!empty($sub_division_id) && (int) $sub_division_id !== (int) $subd_id) {
+                    continue;
+                }
+
+                $activity = $activities->get($user_id);
+                if (!$activity) {
+                    continue;
+                }
+
+                $type = strtolower(trim((string) $activity->activity_of_enterprise));
+                if ($type === '') {
+                    continue;
+                }
+
+                if (!isset($summary[$dist_id])) {
+                    $summary[$dist_id] = [];
+                }
+
+                if (!isset($summary[$dist_id][$subd_id])) {
+                    $district_name     = $district_names[$dist_id] ?? (string) $dist_id;
+                    $sub_division_name = $subdivision_names[$dist_id][$subd_id] ?? (string) $subd_id;
+
+                    $summary[$dist_id][$subd_id] = [
+                        'district_id'         => (int) $dist_id,
+                        'district_name'       => $district_name,
+                        'sub_division_id'     => (int) $subd_id,
+                        'sub_division_name'   => $sub_division_name,
+                        'manufacturing_count' => 0,
+                        'services_count'      => 0,
+                    ];
+                }
+
+                if (str_contains($type, 'manufact')) {
+                    $summary[$dist_id][$subd_id]['manufacturing_count']++;
+                } elseif (str_contains($type, 'service')) {
+                    $summary[$dist_id][$subd_id]['services_count']++;
+                }
+            }
+
+            if (empty($summary)) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'No record found.',
+                    'data'    => [],
+                ]);
+            }
+
+            $rows = [];
+            foreach ($summary as $district_rows) {
+                foreach ($district_rows as $row) {
+                    $rows[] = $row;
+                }
+            }
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Industry summary report.',
+                'data'    => $rows,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function industry_report_details(Request $request)
+    {
+        try {
+            $request->validate([
+                'from_date'      => 'required|date',
+                'to_date'        => 'required|date|after_or_equal:from_date',
+                'department_id'  => 'nullable|integer',
+                'district'       => 'nullable|string',
+                'sub_division'   => 'nullable|string',
+            ]);
+
+            $from_date     = $request->from_date;
+            $to_date       = $request->to_date;
+            $department_id = $request->department_id;
+            $district      = $request->district;
+            $sub_division  = $request->sub_division;
+
+            $application_query = UserServiceApplication::query()
+                ->whereDate('application_date', '>=', $from_date)
+                ->whereDate('application_date', '<=', $to_date)
+                ->whereNotNull('user_id');
+
+            if (!empty($department_id)) {
+                $application_query->whereHas('service', function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                });
+            }
+
+            $applications_by_user = $application_query->get()->groupBy('user_id');
+
+            if ($applications_by_user->isEmpty()) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'No record found.',
+                    'data'    => [],
+                ]);
+            }
+
+            $user_ids = $applications_by_user->keys();
+
+            $users = User::whereIn('id', $user_ids)->get()->keyBy('id');
+
+            $units = UnitDetail::whereIn('user_id', $user_ids)
+                ->get()
+                ->keyBy('user_id');
+
+            $activities = Activity::whereIn('user_id', $user_ids)
+                ->get()
+                ->keyBy('user_id');
+
+            $managements = ManagementDetails::whereIn('user_id', $user_ids)
+                ->get()
+                ->keyBy('user_id');
+
+            $rows = [];
+
+            foreach ($user_ids as $user_id) {
+                $user  = $users->get($user_id);
+                $unit  = $units->get($user_id);
+
+                if (!$user || !$unit) {
+                    continue;
+                }
+
+                $dist = trim((string) $unit->unit_location_district);
+                $subd = trim((string) $unit->unit_location_subdivision);
+
+                if ($dist === '') {
+                    $dist = 'N/A';
+                }
+
+                if ($subd === '') {
+                    $subd = 'N/A';
+                }
+
+                if (!empty($district) && $district !== $dist) {
+                    continue;
+                }
+
+                if (!empty($sub_division) && $sub_division !== $subd) {
+                    continue;
+                }
+
+                $user_apps = $applications_by_user->get($user_id) ?? collect();
+                $services_availed_count = $user_apps
+                    ->pluck('service_id')
+                    ->filter()
+                    ->unique()
+                    ->count();
+
+                $activity = $activities->get($user_id);
+                $activity_text = $activity ? (string) $activity->activity_of_enterprise : null;
+
+                $management = $managements->get($user_id);
+                $women_entrepreneur = null;
+                if ($management) {
+                    $flag = strtolower((string) $management->owner_details_is_women_entrepreneur);
+                    if ($flag === '1' || $flag === 'yes' || $flag === 'true') {
+                        $women_entrepreneur = 'Yes';
+                    } elseif ($flag !== '') {
+                        $women_entrepreneur = 'No';
+                    }
+                }
+
+                $rows[] = [
+                    'district'                       => $dist,
+                    'sub_division'                   => $subd,
+                    'unique_id'                      => $user->bin ?? $user->id,
+                    'enterprise_name'                => $user->name_of_enterprise,
+                    'mobile_no'                      => $user->mobile_no,
+                    'registration_date'              => $user->created_at
+                        ? $user->created_at->format('Y-m-d')
+                        : null,
+                    'services_availed_count'         => $services_availed_count,
+                    'activity'                       => $activity_text,
+                    'product_manufacturing_process'  => $unit->product_manufacturing_process ?? null,
+                    'category'                       => $unit->category_of_enterprise ?? null,
+                    'women_entrepreneur'            => $women_entrepreneur,
+                    'nic_2_digit'                    => $activity->nic_2_digit_code ?? null,
+                    'nic_4_digit'                    => $activity->nic_4_digit_code ?? null,
+                    'nic_5_digit'                    => $activity->nic_5_digit_code ?? null,
+                    'investment'                     => $unit->investment_details_total_project_cost ?? null,
+                    'employment'                     => $unit->employment_details_total_employment ?? null,
+                    'turnover'                       => $unit->annual_turnover ?? null,
+                    'land_type'                      => $unit->unit_location_land_type ?? null,
+                    'industrial_area_name'           => $unit->unit_location_estate_name ?? null,
+                ];
+            }
+
+            if (empty($rows)) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'No record found.',
+                    'data'    => [],
+                ]);
+            }
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Industry details report.',
                 'data'    => $rows,
             ]);
         } catch (\Throwable $e) {
@@ -391,37 +802,30 @@ class ReportController extends Controller
         }
     }
 
-    public function industry_report_details(Request $request)
+    public function cis_summary_report(Request $request)
     {
         try {
             $request->validate([
-                'from_date'      => 'required|date',
-                'to_date'        => 'required|date|after_or_equal:from_date',
-                'department_id'  => 'nullable|integer',
-                'district'       => 'nullable|string',
-                'sub_division'   => 'nullable|string',
+                'year'  => 'nullable|integer',
+                'month' => 'nullable|integer|min:1|max:12',
             ]);
 
-            $from_date     = $request->from_date;
-            $to_date       = $request->to_date;
-            $department_id = $request->department_id;
-            $district      = $request->district;
-            $sub_division  = $request->sub_division;
+            $year  = $request->year;
+            $month = $request->month;
 
-            $application_query = UserServiceApplication::query()
-                ->whereDate('application_date', '>=', $from_date)
-                ->whereDate('application_date', '<=', $to_date)
-                ->whereNotNull('user_id');
+            $inspection_query = Inspection::with(['department:id,name']);
 
-            if (!empty($department_id)) {
-                $application_query->whereHas('service', function ($q) use ($department_id) {
-                    $q->where('department_id', $department_id);
-                });
+            if (!empty($year)) {
+                $inspection_query->whereYear('proposed_date', $year);
             }
 
-            $applications_by_user = $application_query->get()->groupBy('user_id');
+            if (!empty($month)) {
+                $inspection_query->whereMonth('proposed_date', $month);
+            }
 
-            if ($applications_by_user->isEmpty()) {
+            $inspections = $inspection_query->get();
+
+            if ($inspections->isEmpty()) {
                 return response()->json([
                     'status'  => 1,
                     'message' => 'No record found.',
@@ -429,108 +833,80 @@ class ReportController extends Controller
                 ]);
             }
 
-            $user_ids = $applications_by_user->keys();
+            $summary = [];
 
-            $users = User::whereIn('id', $user_ids)->get()->keyBy('id');
-
-            $units = UnitDetail::whereIn('user_id', $user_ids)
-                ->get()
-                ->keyBy('user_id');
-
-            $activities = Activity::whereIn('user_id', $user_ids)
-                ->get()
-                ->keyBy('user_id');
-
-            $managements = ManagementDetails::whereIn('user_id', $user_ids)
-                ->get()
-                ->keyBy('user_id');
-
-            $rows = [];
-
-            foreach ($user_ids as $user_id) {
-                $user  = $users->get($user_id);
-                $unit  = $units->get($user_id);
-
-                if (!$user || !$unit) {
+            foreach ($inspections as $inspection) {
+                $department = $inspection->department;
+                if (!$department) {
                     continue;
                 }
 
-                $dist = trim((string) $unit->unit_location_district);
-                $subd = trim((string) $unit->unit_location_subdivision);
+                $department_id   = $department->id;
+                $department_name = $department->name;
 
-                if ($dist === '') {
-                    $dist = 'N/A';
+                if (!isset($summary[$department_id])) {
+                    $summary[$department_id] = [
+                        'department_id'                            => $department_id,
+                        'department_name'                          => $department_name,
+                        'scheduled_inspections'                    => 0,
+                        'inspections_conducted'                    => 0,
+                        'pending_inspections'                      => 0,
+                        'self_certification_exempt_companies'      => 0,
+                        'third_party_cert_exempt_companies'        => 0,
+                        'reports_uploaded_within_48_hrs'           => 0,
+                        'reports_uploaded_beyond_48_hrs'           => 0,
+                    ];
                 }
 
-                if ($subd === '') {
-                    $subd = 'N/A';
+                $row = &$summary[$department_id];
+
+                $row['scheduled_inspections']++;
+
+                $inspection_date = $inspection->inspection_date
+                    ? Carbon::parse($inspection->inspection_date)
+                    : null;
+
+                if ($inspection_date) {
+                    $row['inspections_conducted']++;
                 }
 
-                if (!empty($district) && $district !== $dist) {
-                    continue;
-                }
+                $inspection_type = strtolower(trim((string) $inspection->inspection_type));
 
-                if (!empty($sub_division) && $sub_division !== $subd) {
-                    continue;
-                }
-
-                $user_apps = $applications_by_user->get($user_id) ?? collect();
-                $services_availed_count = $user_apps
-                    ->pluck('service_id')
-                    ->filter()
-                    ->unique()
-                    ->count();
-
-                $activity = $activities->get($user_id);
-                $activity_text = $activity ? (string) $activity->activity_of_enterprise : null;
-
-                $management = $managements->get($user_id);
-                $women_entrepreneur = null;
-                if ($management) {
-                    $flag = strtolower((string) $management->owner_details_is_women_entrepreneur);
-                    if ($flag === '1' || $flag === 'yes' || $flag === 'true') {
-                        $women_entrepreneur = 'Yes';
-                    } elseif ($flag !== '') {
-                        $women_entrepreneur = 'No';
+                if ($inspection_type !== '') {
+                    if (str_contains($inspection_type, 'self')) {
+                        $row['self_certification_exempt_companies']++;
+                    } elseif (str_contains($inspection_type, 'third')) {
+                        $row['third_party_cert_exempt_companies']++;
                     }
                 }
 
-                $rows[] = [
-                    'district'                       => $dist,
-                    'sub_division'                   => $subd,
-                    'unique_id'                      => $user->bin ?? $user->id,
-                    'enterprise_name'                => $user->name_of_enterprise,
-                    'mobile_no'                      => $user->mobile_no,
-                    'registration_date'              => $user->created_at
-                        ? $user->created_at->format('Y-m-d')
-                        : null,
-                    'services_availed_count'         => $services_availed_count,
-                    'activity'                       => $activity_text,
-                    'product_manufacturing_process'  => $unit->product_manufacturing_process ?? null,
-                    'category'                       => $unit->category_of_enterprise ?? null,
-                    'women_entrepreneur'            => $women_entrepreneur,
-                    'nic_2_digit'                    => $activity->nic_2_digit_code ?? null,
-                    'nic_4_digit'                    => $activity->nic_4_digit_code ?? null,
-                    'nic_5_digit'                    => $activity->nic_5_digit_code ?? null,
-                    'investment'                     => $unit->investment_details_total_project_cost ?? null,
-                    'employment'                     => $unit->employment_details_total_employment ?? null,
-                    'turnover'                       => $unit->annual_turnover ?? null,
-                    'land_type'                      => $unit->unit_location_land_type ?? null,
-                    'industrial_area_name'           => $unit->unit_location_estate_name ?? null,
-                ];
+                if ($inspection_date && $inspection->created_at) {
+                    $uploaded_at = Carbon::parse($inspection->created_at);
+                    $hours_diff  = $inspection_date->diffInHours($uploaded_at);
+
+                    if ($hours_diff <= 48) {
+                        $row['reports_uploaded_within_48_hrs']++;
+                    } else {
+                        $row['reports_uploaded_beyond_48_hrs']++;
+                    }
+                }
+
+                unset($row);
             }
 
-            if (empty($rows)) {
-                return response()->json([
-                    'status'  => 1,
-                    'message' => 'No record found.',
-                    'data'    => [],
-                ]);
+            foreach ($summary as &$row) {
+                $row['pending_inspections'] = $row['scheduled_inspections'] - $row['inspections_conducted'];
+                if ($row['pending_inspections'] < 0) {
+                    $row['pending_inspections'] = 0;
+                }
             }
+            unset($row);
+
+            $rows = array_values($summary);
 
             return response()->json([
                 'status'  => 1,
-                'message' => 'Industry details report.',
+                'message' => 'CIS summary report.',
                 'data'    => $rows,
             ]);
         } catch (\Throwable $e) {
@@ -541,38 +917,49 @@ class ReportController extends Controller
         }
     }
 
-    public function industry_report_summary(Request $request)
+    public function cis_details_report(Request $request)
     {
         try {
             $request->validate([
-                'from_date'    => 'nullable|date',
-                'to_date'      => 'nullable|date|after_or_equal:from_date',
-                'district'     => 'nullable|integer',
-                'sub_division' => 'nullable|integer',
+                'from_date'       => 'nullable|date',
+                'to_date'         => 'nullable|date|after_or_equal:from_date',
+                'department_id'   => 'nullable|integer|exists:departments,id',
+                'inspection_for'  => 'nullable|array',
+                'inspection_for.*' => 'string',
             ]);
 
             $from_date      = $request->from_date;
             $to_date        = $request->to_date;
-            $district_id    = $request->district;
-            $sub_division_id = $request->sub_division;
+            $department_id  = $request->department_id;
+            $inspection_for = $request->inspection_for;
 
-            $application_query = UserServiceApplication::query();
+            $query = Inspection::with([
+                'user:id,name_of_enterprise,registered_enterprise_address,mobile_no,email_id',
+                'department:id,name',
+            ]);
 
             if (!empty($from_date)) {
-                $application_query->whereDate('application_date', '>=', $from_date);
+                $query->whereDate('inspection_date', '>=', $from_date);
             }
 
             if (!empty($to_date)) {
-                $application_query->whereDate('application_date', '<=', $to_date);
+                $query->whereDate('inspection_date', '<=', $to_date);
             }
 
-            $user_ids = $application_query
-                ->whereNotNull('user_id')
-                ->pluck('user_id')
-                ->unique()
-                ->values();
+            if (!empty($department_id)) {
+                $query->where('department_id', $department_id);
+            }
 
-            if ($user_ids->isEmpty()) {
+            if (!empty($inspection_for) && is_array($inspection_for)) {
+
+                $query->whereIn('inspection_type', $inspection_for);
+            }
+
+            $inspections = $query
+                ->orderBy('inspection_date', 'asc')
+                ->get();
+
+            if ($inspections->isEmpty()) {
                 return response()->json([
                     'status'  => 1,
                     'message' => 'No record found.',
@@ -580,86 +967,40 @@ class ReportController extends Controller
                 ]);
             }
 
-            $units = UnitDetail::whereIn('user_id', $user_ids)
-                ->get()
-                ->keyBy('user_id');
+            $rows = $inspections->map(function ($inspection) {
+                $user = $inspection->user;
 
-            $activities = Activity::whereIn('user_id', $user_ids)
-                ->get()
-                ->keyBy('user_id');
+                $type_text = strtolower(trim((string) $inspection->inspection_type));
+                $self_certification  = '';
+                $third_party_cert    = '';
 
-            $summary = [];
+                if ($type_text !== '') {
+                    if (str_contains($type_text, 'self')) {
+                        $self_certification = 'Yes';
+                    }
 
-            foreach ($user_ids as $user_id) {
-                $unit = $units->get($user_id);
-                if (!$unit) {
-                    continue;
+                    if (str_contains($type_text, 'third')) {
+                        $third_party_cert = 'Yes';
+                    }
                 }
 
-                $dist_id = $unit->unit_location_district;
-                $subd_id = $unit->unit_location_subdivision;
-
-                if (empty($dist_id) || empty($subd_id)) {
-                    continue;
-                }
-
-                if (!empty($district_id) && (int) $district_id !== (int) $dist_id) {
-                    continue;
-                }
-
-                if (!empty($sub_division_id) && (int) $sub_division_id !== (int) $subd_id) {
-                    continue;
-                }
-
-                $activity = $activities->get($user_id);
-                if (!$activity) {
-                    continue;
-                }
-
-                $type = strtolower(trim((string) $activity->activity_of_enterprise));
-                if ($type === '') {
-                    continue;
-                }
-
-                if (!isset($summary[$dist_id])) {
-                    $summary[$dist_id] = [];
-                }
-
-                if (!isset($summary[$dist_id][$subd_id])) {
-                    $summary[$dist_id][$subd_id] = [
-                        'district_id'     => (int) $dist_id,
-                        'sub_division_id' => (int) $subd_id,
-                        'manufacturing_count' => 0,
-                        'services_count'      => 0,
-                    ];
-                }
-
-                if (str_contains($type, 'manufact')) {
-                    $summary[$dist_id][$subd_id]['manufacturing_count']++;
-                } elseif (str_contains($type, 'service')) {
-                    $summary[$dist_id][$subd_id]['services_count']++;
-                }
-            }
-
-            if (empty($summary)) {
-                return response()->json([
-                    'status'  => 1,
-                    'message' => 'No record found.',
-                    'data'    => [],
-                ]);
-            }
-
-            $rows = [];
-
-            foreach ($summary as $district_rows) {
-                foreach ($district_rows as $row) {
-                    $rows[] = $row;
-                }
-            }
+                return [
+                    'enterprise_name'                 => $user ? $user->name_of_enterprise : null,
+                    'address'                         => $user ? $user->registered_enterprise_address : null,
+                    'contact_no'                      => $user ? $user->mobile_no : null,
+                    'email'                           => $user ? $user->email_id : null,
+                    'act_name'                        => $inspection->inspection_type,
+                    'inspection_date'                 => $inspection->inspection_date
+                        ? Carbon::parse($inspection->inspection_date)->format('Y-m-d')
+                        : null,
+                    'self_certification_exempt'       => $self_certification,
+                    'third_party_cert_exempt'         => $third_party_cert,
+                ];
+            });
 
             return response()->json([
                 'status'  => 1,
-                'message' => 'Industry summary report.',
+                'message' => 'CIS details report.',
                 'data'    => $rows,
             ]);
         } catch (\Throwable $e) {
@@ -669,7 +1010,6 @@ class ReportController extends Controller
             ], 500);
         }
     }
-
 
     public function user_list(Request $request)
     {
@@ -792,129 +1132,6 @@ class ReportController extends Controller
         }
     }
 
-
-    public function department_user_list(Request $request)
-    {
-        try {
-            $request->validate([
-                'department_id' => 'nullable|integer|exists:departments,id',
-                'service_id'    => 'nullable|integer|exists:service_masters,id',
-                'approval_step' => 'nullable|string',
-            ]);
-
-            $department_id = $request->department_id;
-            $service_id    = $request->service_id;
-            $approval_step = $request->approval_step;
-
-            $department_user_query = DepartmentUser::with([
-                'department:id,name',
-                'user:id,user_name,authorized_person_name,name_of_enterprise,email_id,mobile_no',
-            ])
-                ->where('is_active', 1);
-
-            if (!empty($department_id)) {
-                $department_user_query->where('department_id', $department_id);
-            }
-
-            $flows = collect();
-
-            if (!empty($department_id) || !empty($service_id) || !empty($approval_step)) {
-                $flow_query = ServiceApprovalFlow::query();
-
-                if (!empty($department_id)) {
-                    $flow_query->where('department_id', $department_id);
-                }
-
-                if (!empty($service_id)) {
-                    $flow_query->where('service_id', $service_id);
-                }
-
-                if (!empty($approval_step)) {
-                    $flow_query->where('step_type', $approval_step);
-                }
-
-                $flows = $flow_query->get();
-
-                if ($flows->isEmpty()) {
-                    return response()->json([
-                        'status'  => 1,
-                        'message' => 'No record found.',
-                        'data'    => [],
-                    ]);
-                }
-
-                $hierarchy_levels    = $flows->pluck('hierarchy_level')->filter()->unique()->values();
-                $flow_department_ids = $flows->pluck('department_id')->filter()->unique()->values();
-
-                if (empty($department_id) && $flow_department_ids->isNotEmpty()) {
-                    $department_user_query->whereIn('department_id', $flow_department_ids);
-                }
-
-                if ($hierarchy_levels->isNotEmpty()) {
-                    $department_user_query->whereIn('hierarchy_level', $hierarchy_levels->all());
-                }
-            }
-
-            $department_users = $department_user_query
-                ->orderBy('id', 'asc')
-                ->get();
-
-            if ($department_users->isEmpty()) {
-                return response()->json([
-                    'status'  => 1,
-                    'message' => 'No record found.',
-                    'data'    => [],
-                ]);
-            }
-
-            $service_label = null;
-
-            if (!empty($service_id)) {
-                $service = ServiceMaster::select('id', 'service_title_or_description')
-                    ->find($service_id);
-
-                if ($service) {
-                    $service_label = $service->service_title_or_description;
-                }
-            }
-
-            $rows = $department_users->map(function ($department_user) use ($service_label) {
-                $department = $department_user->department;
-                $user       = $department_user->user;
-
-                $name = null;
-                if ($user) {
-                    $name = $user->authorized_person_name ?: $user->name_of_enterprise;
-                }
-
-                return [
-                    'department_name'    => $department ? $department->name : null,
-                    'role'               => $service_label,
-                    'user_name'          => $user ? $user->user_name : null,
-                    'name'               => $name,
-                    'designation'        => $department_user->designation,
-                    'email_id'           => $user ? $user->email_id : null,
-                    'mobile_number'      => $user ? $user->mobile_no : null,
-                    'date_of_assignment' => $department_user->created_at
-                        ? $department_user->created_at->format('Y-m-d')
-                        : null,
-                ];
-            });
-
-            return response()->json([
-                'status'  => 1,
-                'message' => 'Department user list.',
-                'data'    => $rows,
-            ]);
-        } catch (\Throwable $e) {
-            return response()->json([
-                'status'  => 0,
-                'message' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
-
     public function approval_step_list(Request $request)
     {
         try {
@@ -963,190 +1180,6 @@ class ReportController extends Controller
             ], 500);
         }
     }
-
-
-    public function application_status(Request $request)
-    {
-        try {
-            $request->validate([
-                'from_date'          => 'required|date',
-                'to_date'            => 'required|date|after_or_equal:from_date',
-                'department_id'      => 'nullable|integer',
-                'application_status' => 'nullable|string',
-            ]);
-
-            $from_date          = $request->from_date;
-            $to_date            = $request->to_date;
-            $department_id      = $request->department_id;
-            $application_status = $request->application_status;
-
-            $query = UserServiceApplication::with([
-                'user:id,name_of_enterprise,authorized_person_name,mobile_no,email_id,registered_enterprise_address',
-                'service:id,department_id,service_title_or_description,target_days',
-                'service.department:id,name',
-                'workflow' => function ($q) {
-                    $q->orderBy('action_taken_at', 'asc');
-                },
-            ]);
-
-            $query->whereDate('application_date', '>=', $from_date)
-                ->whereDate('application_date', '<=', $to_date);
-
-            if (!empty($department_id)) {
-                $query->whereHas('service', function ($q) use ($department_id) {
-                    $q->where('department_id', $department_id);
-                });
-            }
-
-            if (!empty($application_status)) {
-                $query->where('status', $application_status);
-            }
-
-            $applications = $query
-                ->orderBy('application_date', 'asc')
-                ->get();
-
-            if ($applications->isEmpty()) {
-                return response()->json([
-                    'status'  => 1,
-                    'message' => 'No record found.',
-                    'data'    => [],
-                ]);
-            }
-
-            $rows = $applications->map(function ($application) {
-                $user       = $application->user;
-                $service    = $application->service;
-                $department = $service ? $service->department : null;
-                $workflow   = $application->workflow ?? collect();
-
-                $approved_step = $workflow->where('status', 'approved')
-                    ->sortByDesc('action_taken_at')
-                    ->first();
-
-
-                $rejected_step = $workflow->where('status', 'rejected')
-                    ->sortByDesc('action_taken_at')
-                    ->first();
-
-                $first_send_back_step = $workflow->where('status', 'send_back')
-                    ->sortBy('action_taken_at')
-                    ->first();
-
-                $application_date = $application->application_date
-                    ? Carbon::parse($application->application_date)
-                    : null;
-
-                $due_date = null;
-                if ($application_date && $service && $service->target_days !== null) {
-                    $due_date = $application_date->copy()->addDays((int) $service->target_days);
-                }
-
-                $decision_status = $application->status;
-                $decision_date   = null;
-
-                if ($approved_step) {
-                    $decision_status = 'approved';
-                    $decision_date   = $approved_step->action_taken_at
-                        ? Carbon::parse($approved_step->action_taken_at)
-                        : null;
-                } elseif ($rejected_step) {
-                    $decision_status = 'rejected';
-                    $decision_date   = $rejected_step->action_taken_at
-                        ? Carbon::parse($rejected_step->action_taken_at)
-                        : null;
-                }
-
-
-                $total_days_delayed = null;
-
-                if ($due_date && $decision_date) {
-                    if ($decision_date->lessThanOrEqualTo($due_date)) {
-                        $total_days_delayed = 0;
-                    } else {
-                        $total_days_delayed = (int) $due_date->diffInDays($decision_date);
-                    }
-                }
-
-
-                $clarification_delay_days = null;
-
-                if ($first_send_back_step) {
-                    $send_back_date = $first_send_back_step->action_taken_at
-                        ? Carbon::parse($first_send_back_step->action_taken_at)
-                        : null;
-
-                    if ($send_back_date) {
-
-                        $resubmission_step = $workflow
-                            ->filter(function ($step) use ($first_send_back_step) {
-                                if (!$step->action_taken_at) {
-                                    return false;
-                                }
-
-
-                                if ($step->id === $first_send_back_step->id) {
-                                    return false;
-                                }
-
-                                return $step->action_taken_at > $first_send_back_step->action_taken_at
-                                    && $step->status !== 'send_back';
-                            })
-                            ->sortBy('action_taken_at')
-                            ->first();
-
-                        if ($resubmission_step && $resubmission_step->action_taken_at) {
-                            $resubmission_date = Carbon::parse($resubmission_step->action_taken_at);
-
-                            $clarification_delay_days = $resubmission_date->diffInDays($send_back_date);
-                        }
-                    }
-                }
-
-
-                return [
-                    'department_name'          => $department ? $department->name : null,
-                    'application_no'           => $application->applicationId ?? $application->id,
-                    'application_date'         => $application_date ? $application_date->format('Y-m-d') : null,
-                    'application_for'          => $service ? $service->service_title_or_description : null,
-                    'organization'             => $user
-                        ? ($user->name_of_enterprise ?: $user->authorized_person_name)
-                        : null,
-                    'registered_address'       => $user ? $user->registered_enterprise_address : null,
-                    'mobile_no'                => $user ? $user->mobile_no : null,
-                    'email_id'                 => $user ? $user->email_id : null,
-
-                    'due_date'                 => $due_date ? $due_date->format('Y-m-d') : null,
-
-                    'approved_on'              => $approved_step && $approved_step->action_taken_at
-                        ? Carbon::parse($approved_step->action_taken_at)->format('Y-m-d')
-                        : null,
-                    'rejected_on'              => $rejected_step && $rejected_step->action_taken_at
-                        ? Carbon::parse($rejected_step->action_taken_at)->format('Y-m-d')
-                        : null,
-                    'send_back_on'             => $first_send_back_step && $first_send_back_step->action_taken_at
-                        ? Carbon::parse($first_send_back_step->action_taken_at)->format('Y-m-d')
-                        : null,
-
-                    'current_status'           => $decision_status,
-                    'total_days_delayed'       => $total_days_delayed,
-                    'clarification_delay_days' => $clarification_delay_days,
-                ];
-            });
-
-            return response()->json([
-                'status'  => 1,
-                'message' => 'Application status report.',
-                'data'    => $rows,
-            ]);
-        } catch (\Throwable $e) {
-            return response()->json([
-                'status'  => 0,
-                'message' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
 
     public function online_single_windows(Request $request)
     {

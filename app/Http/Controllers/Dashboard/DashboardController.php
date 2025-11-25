@@ -13,6 +13,7 @@ use App\Models\ApplicationWorkflowHistory;
 use App\Models\ServiceApprovalFlow;
 use App\Models\Department;
 use App\Models\User;
+use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
@@ -140,16 +141,93 @@ class DashboardController extends Controller
 
             $clarification_required = ApplicationWorkflowHistory::where('department_id', $department_id)
                 ->where('status', 'send_back')
-                ->with(['application:id,applicationId,NOC_letter_number'])
+                ->with([
+                    'application' => function ($q) {
+                        $q->select('id', 'applicationId', 'service_id', 'application_date', 'remarks')
+                            ->with('service:id,service_title_or_description');
+                    },
+                ])
                 ->get(['id', 'application_id', 'status', 'status_file'])
                 ->map(function ($item) {
+
+                    $workflow   = $application->workflow ?? collect();
+
+                    $latest_send_back_step = $workflow->where('status', 'send_back')
+                    ->sortByDesc('action_taken_at')
+                    ->first();
+
+                    $send_back_date = $latest_send_back_step
+                        ? Carbon::parse($latest_send_back_step->action_taken_at)
+                        : null;
+
+                    $application = $item->application;
+                    $service     = $application ? $application->service : null;
                     return [
                         'application_id'     => $item->application_id,
                         'applicationId'      => $item->application->applicationId ?? null,
-                        'NOC_letter_number'  => $item->application->NOC_letter_number ?? null,
                         'status_file'        =>  $item->status_file ? url($item->status_file) : null,
+                        'service_name'              => $service->service_title_or_description ?? null,
+                        'remark'                    => $item->remarks ?? null,
+                        'application_date'          => $application->application_date ?? null,
+                        'clarification_raised_date' => $send_back_date ?? null,
                     ];
                 });
+
+            $services_with_license_count = ServiceMaster::where('department_id', $department_id)
+                ->withCount([
+                    'applications as licenses_issued_count' => function ($q) {
+                        $q->where('status', 'approved');
+                    }
+                ])->get(['id', 'service_title_or_description']);
+
+            $license_issued_per_service = $services_with_license_count->map(function ($service) {
+                return [
+                    'service_id'         => $service->id,
+                    'service_name'       => $service->service_title_or_description,
+                    'licenses_issued'    => $service->licenses_issued_count,
+                ];
+            });
+
+            $approved_applications = UserServiceApplication::with([
+                'service:id,service_title_or_description,department_id',
+                'latestWorkflow' => function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                }
+            ])
+                ->where('status', 'approved')
+                ->whereHas('service', function ($q) use ($department_id) {
+                    $q->where('department_id', $department_id);
+                })
+                ->get();
+
+            $avg_approval_time_per_service = $approved_applications
+                ->groupBy(function ($application) {
+                    return $application->service->id;
+                })
+                ->map(function ($applications, $service_id) {
+                    $first_application = $applications->first();
+                    $service          = $first_application->service;
+
+                    $total_days = 0;
+                    $count = $applications->count();
+
+                    foreach ($applications as $application) {
+                        $total_days += $application->application_date->diffInDays(
+                            $application->latestWorkflow->updated_at
+                        );
+                    }
+
+                    $avg_days = $count > 0 ? $total_days / $count : 0;
+
+                    return [
+                        'service_id'        => $service_id,
+                        'service_name'      => $service->service_title_or_description,
+                        'avg_approval_days' => round($avg_days, 2),
+                    ];
+                })
+                ->values();
+
+
 
             return response()->json([
                 'status'            => 1,
@@ -161,13 +239,14 @@ class DashboardController extends Controller
                 'percentage_approved_application' => $percentage_approved_application,
                 'percentage_rejected_application' => $percentage_rejected_application,
                 'total_count_approved_application_in_department' => $total_count_approved_application_in_department,
-                '$total_count_rejected_application_in_department' => $total_count_rejected_application_in_department,
+                'total_count_rejected_application_in_department' => $total_count_rejected_application_in_department,
                 'number_of_NOC_issued_by_department' => $number_of_NOC_issued_by_department,
                 'application_count_per_service' => $application_count_per_service,
                 'district_wise_application_in_department' => $district_wise_application_in_department,
                 'district_wise_application_per_service' => $district_wise_application_per_service,
                 'clarification_required' => $clarification_required,
-
+                'license_issued_per_service'     => $license_issued_per_service,
+                'avg_approval_time_per_service'  => $avg_approval_time_per_service
             ], 200);
         } catch (\Exception $e) {
 

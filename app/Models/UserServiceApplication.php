@@ -66,6 +66,7 @@ class UserServiceApplication extends Model
         'NOC_generationDate' => 'datetime:Y-m-d H:i:s',
         'NOC_expiry_date' => 'datetime:Y-m-d H:i:s',
         'PreviousNOCexpiryDate' => 'datetime:Y-m-d H:i:s',
+        'application_date' => 'datetime:Y-m-d H:i:s',
     ];
 
     public function service()
