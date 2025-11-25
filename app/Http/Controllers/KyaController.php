@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\KyaMaster;
+use App\Models\KyaUtility;
 use Illuminate\Http\Request;
 use Exception;
 
@@ -156,11 +157,14 @@ class KyaController extends Controller
                     'risk_category',
                 ]);
 
+            $utility_questions = KyaUtility::pluck('question');
+
             return response()->json([
                 'status'   => true,
                 'industry' => $request->industry,
                 'risk_category' => $questions->first()->risk_category ?? null,
-                'data'     => $questions,
+                'industry'     => $questions,
+                'utility'     => $utility_questions,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -181,49 +185,66 @@ class KyaController extends Controller
      * Return Approval Details for a selected question/record
      */
     public function get_approval_details(Request $request)
-    {
-        try {
-            $request->validate(
-                [
-                    'ids'     => 'required|array',
-                ],
-                [
-                    'id.required'     => 'Id is required.',
-                ]
-            );
+{
+    try {
+        $request->validate([
+            'ids'          => 'nullable|array',
+            'utility_ids'  => 'nullable|array',
+        ]);
 
-            $records = KyaMaster::whereIn('id', $request->ids)->get();
+        // Fetch approvals
+        $records = $request->ids
+            ? KyaMaster::whereIn('id', $request->ids)->get()
+            : collect();
 
-            $mapped = $records->map(function ($item) {
-                return [
-                    'id'                => $item->id,
-                    'approval_name'     => $item->approval_name,
-                    'stage_of_business' => $item->stage_of_business,
-                    'sla_days'          => $item->sla_days,
-                    'steps'             => $item->steps,
-                    'documents_required' => $item->documents_required,
-                    'fees'              => $item->fees,
-                    'legal_provision'   => $item->legal_provision,
-                    'more_info'         => $item->more_info,
-                ];
-            });
+        // Fetch utilities only if utility_ids exist
+        $utilities = $request->utility_ids
+            ? KyaUtility::whereIn('id', $request->utility_ids)->get()
+            : collect();
 
-            return response()->json([
-                'status' => true,
-                'records' => $mapped,
-            ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Validation failed',
-                'errors'  => $e->errors(),
-            ], 422);
-        } catch (Exception $e) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Failed to retrieve approval details.',
-                'error'   => $e->getMessage(),
-            ], 500);
-        }
+        // Map approval data
+        $mapped = $records->map(function ($item) {
+            return [
+                'id'                 => $item->id,
+                'approval_name'      => $item->approval_name,
+                'stage_of_business'  => $item->stage_of_business,
+                'sla_days'           => $item->sla_days,
+                'steps'              => $item->steps,
+                'documents_required' => $item->documents_required,
+                'fees'               => $item->fees,
+                'legal_provision'    => $item->legal_provision,
+                'more_info'          => $item->more_info,
+            ];
+        });
+
+        // Map utility data
+        $utilities_data = $utilities->map(function ($item) {
+            return [
+                'id'       => $item->id,
+                'question' => $item->question,
+            ];
+        });
+
+        return response()->json([
+            'status'         => true,
+            'records'        => $mapped,
+            'utilities_data' => $utilities_data,
+        ]);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'status'  => false,
+            'message' => 'Validation failed',
+            'errors'  => $e->errors(),
+        ], 422);
+
+    } catch (Exception $e) {
+        return response()->json([
+            'status'  => false,
+            'message' => 'Failed to retrieve approval details.',
+            'error'   => $e->getMessage(),
+        ], 500);
     }
+}
+
 }
