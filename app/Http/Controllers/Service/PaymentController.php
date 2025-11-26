@@ -34,7 +34,7 @@ class PaymentController extends Controller
 
             $user = Auth::user();
             $user_id = $user->id;
-
+            
             $application_ids = $request->input('application_id');
             $applications = UserServiceApplication::whereIn('id', $application_ids)
                 ->where('user_id', $user_id)
@@ -96,7 +96,7 @@ class PaymentController extends Controller
             ]);
 
             DB::beginTransaction();
-
+            
             $order_id = $request->input('order_id');
             $payment_order = PaymentOrder::where('id', $order_id)->first();
 
@@ -211,7 +211,7 @@ class PaymentController extends Controller
 
     public function payment_callback(Request $request)
     {
-
+        Log:info("Payment callback req: " . json_encode($request->all()));
         try {
 
 
@@ -224,6 +224,7 @@ class PaymentController extends Controller
             $payment_type = $request->input('payment_type');
             $bankcode = $request->input('bankcode');
             $hash = $request->input('hash');
+            $trandatetime = $request->input('trandatetime');
 
             DB::beginTransaction();
 
@@ -258,11 +259,13 @@ class PaymentController extends Controller
             }
 
             $payment->update([
-                //  'payment_status'    => $status,
+                'payment_status'    => $status,
                 'payment_amount'    => $total,
                 'gateway'           => 'egras',
                 'gateway_order_id'  => $order_id,
                 'transaction_id'    => $CIN,
+                'GRN_number'        => $grn,
+                'payment_datetime'      => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime),
                 'gateway_response'  => json_encode($request->all()),
                 'updated_at' => now()
             ]);
@@ -287,7 +290,7 @@ class PaymentController extends Controller
                         'status'           => 'submitted',
                         'GRN_number'       => $grn,
                         'payment_transId'  => $CIN,
-                        'payment_time'     => now(),
+                        'payment_time'     => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime),
                         'updated_at'       => now(),
                     ]);
                 }
@@ -397,5 +400,70 @@ class PaymentController extends Controller
         }
 
         return $sum;
+    }
+
+    public function user_service_applications_by_payment_status(Request $request)
+    {
+
+        try {
+
+            $request->validate([
+                'payment_status' => 'required|string|in:pending,paid',
+            ]);
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $user_id = Auth::id();
+
+            $service_user_application = UserServiceApplication::where('user_id', $user_id)->where('payment_status', $request->payment_status)->get();
+
+            if ($service_user_application->isEmpty()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No applications found for the given status.',
+                ], 404);
+            }
+
+            foreach ($service_user_application as $application) {
+                $amount = null;
+                $payment_type = null;
+
+                if (!is_null($application->total_fee)) {
+
+                    $amount = $application->total_fee;
+                    $payment_type = 'Application Fee Payment';
+
+                } elseif (!is_null($application->extra_payment)) {
+
+                    $amount = $application->extra_payment;
+                    $payment_type = 'Extra Payment Raised';
+                    
+                }
+                $response_data[] = [
+                    'application_id' => $application->applicationId,
+                    'service_title_or_description' => $application->service->service_title_or_description ?? null,
+                    'application_date' => $application->application_date ?? null,
+                    'payment_type' => $payment_type,
+                    'amount' => $amount,
+                    'payment_status'  => $application->payment_status ?? null,
+                ];
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Service user application fetched successfully.',
+                'data' => $response_data
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 }

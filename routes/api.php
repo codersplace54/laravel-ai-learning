@@ -198,7 +198,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('process-payment', [PaymentController::class, 'process_payment']);
         Route::post('update-payment', [PaymentController::class, 'update_payment']);
-        Route::post('payment-callback', [PaymentController::class, 'payment_callback']);
+        Route::post('user-service-applications-by-payment-status', [PaymentController::class, 'user_service_applications_by_payment_status']);
 
         Route::post('existing-license-store', [ExistingLicenseController::class, 'existing_license_store']);
         Route::post('existing-license-update', [ExistingLicenseController::class, 'existing_license_update']);
@@ -330,4 +330,4 @@ Route::prefix('kya')->group(function () {
     Route::get('/approval-details', [KyaController::class, 'get_approval_details']);
 });
 
-
+Route::post('user/payment-callback', [PaymentController::class, 'payment_callback']);

@@ -18,6 +18,8 @@ class PaymentOrder extends Model
         'gateway_response',
         'created_at',
         'updated_at',
+        'GRN_number',
+        'payment_datetime',
     ];
 
     protected $casts = [
