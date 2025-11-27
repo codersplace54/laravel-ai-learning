@@ -17,6 +17,9 @@ use App\Models\ServiceQuestionnaire;
 use App\Models\ServiceMaster;
 use App\Models\ThirdPartyStatusLog;
 use App\Models\ApplicationWorkflowHistory;
+use App\Models\RenewalFeeRule;
+use App\Models\RenewalCycle;
+use App\Models\PaymentOrder;
 
 
 class UserServiceApplicationController extends Controller
@@ -34,6 +37,7 @@ class UserServiceApplicationController extends Controller
             $request->validate([
                 'service_id'            => 'required|integer|exists:service_masters,id',
                 'renewal_cycle_id'      => 'nullable|integer|exists:renewal_cycles,id',
+                'previous_application_id' => 'nullable|integer',
                 'renewal'               => 'nullable|in:yes,no',
                 'renewalYear'           => 'nullable|integer|min:1|max:10',
                 'applicationId'         => 'nullable|string|max:255',
@@ -104,10 +108,6 @@ class UserServiceApplicationController extends Controller
                     ->orderBy('step_number', 'asc')
                     ->first();
 
-                $dateTime = now()->format('dmYHi');
-
-                $application_number = strtoupper($service_data->noc_name) . $dateTime;
-
                 if (!$approval_flow) {
                     return response()->json([
                         'status'  => 0,
@@ -118,10 +118,7 @@ class UserServiceApplicationController extends Controller
                 $application_date = Carbon::parse($request->NOC_application_date ?? now());
                 $target_days = $service_data->target_days ?? 0;
 
-
                 $max_processing_date = $this->add_working_days($application_date, $target_days);
-
-
 
                 $user_service_application = UserServiceApplication::where('user_id', $user->id)
                     ->where('service_id', $request->service_id)
@@ -201,7 +198,7 @@ class UserServiceApplicationController extends Controller
                         'renewal_cycle_id'      => $request->renewal_cycle_id,
                         'renewal'               => $request->renewal,
                         'renewalYear'           => $request->renewalYear,
-                        'applicationId'         => $application_number,
+                        //  'applicationId'         => $application_number,
                         'application_date'      => $request->application_date ?? now(),
                         'status'                => $request->status ?? 're_submitted',
                         'application_data'      => $user_service_application->application_data,
@@ -289,7 +286,6 @@ class UserServiceApplicationController extends Controller
                         'renewal_cycle_id'      => $request->renewal_cycle_id,
                         'renewal'               => $request->renewal,
                         'renewalYear'           => $request->renewalYear,
-                        'applicationId'         => $application_number,
                         'application_date'      => $request->application_date ?? now(),
                         'status'                => $request->status ?? 'saved',
                         'application_data'      => json_encode($application_data ?: null),
@@ -320,6 +316,11 @@ class UserServiceApplicationController extends Controller
                         'max_processing_date'   => $max_processing_date,
                     ]);
 
+                    $application_number = $this->generate_application_number($request->service_id, $user_service_application->id);
+
+                    $user_service_application->update([
+                        'applicationId' => $application_number
+                    ]);
 
                     ApplicationWorkflowAssignment::create([
                         'application_id'     => $user_service_application->id,
@@ -536,7 +537,7 @@ class UserServiceApplicationController extends Controller
                 'renewal_cycle_id'      => $request->renewal_cycle_id,
                 'renewal'               => $request->renewal,
                 'renewalYear'           => $request->renewalYear,
-                'applicationId'         => $request->applicationId,
+                // 'applicationId'         => $request->applicationId,
                 'application_date'      => $request->application_date ?? now(),
                 'status'                => $request->status ?? 're_submitted',
                 'application_data'      => json_encode($request->application_data ?? null),
@@ -1017,6 +1018,8 @@ class UserServiceApplicationController extends Controller
                 ->where('id', $request->application_id)
                 ->first();
 
+            $renewal_details = $this->get_renewal_details($application);
+
             if (!$application) {
                 return response()->json([
                     'status'  => 0,
@@ -1101,6 +1104,7 @@ class UserServiceApplicationController extends Controller
                 'application_data'  => $formatted_data,
                 'history_data'    => $history_data,
                 'service_name'    => $application->service->service_title_or_description,
+                'renewal_details' => $renewal_details,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -1595,16 +1599,25 @@ class UserServiceApplicationController extends Controller
                 ], 404);
             }
 
+            $amount = 0;
+
             $response_data = [];
 
             foreach ($applications as $app) {
+
+                if (!empty($app->effective_fee)) {
+                    $amount = $app->effective_fee;
+                } else {
+                    $amount = $app->total_fee ?? 0;
+                }
+
                 $response_data[] = [
                     'id' => $app->id,
                     'application_number' => $app->applicationId,
                     'business' => $app->user->name_of_enterprise ?? null,
                     'email_id' => $app->user->email_id ?? null,
                     'mobile_no' => $app->user->mobile_no ?? null,
-                    'amount' => $app->total_fee ?? 0,
+                    'amount' => $amount,
                     'expiry_date' => $app->NOC_expiry_date ?? null,
                     'status' => $app->payment_status,
                     'method' => null,
@@ -1646,11 +1659,30 @@ class UserServiceApplicationController extends Controller
 
             $application = UserServiceApplication::where('id', $request->application_id)->first();
 
+            $effective_fee = $application->effective_fee;
+            $total_fee     = $application->total_fee ?? 0;
+
+            $current_payment = isset($effective_fee) ? $effective_fee : $total_fee;
+            $previous_paid = $application->paid_amount ?? 0;
+            $final_paid_amount = $previous_paid + $current_payment;
+
             $application->update([
                 'GRN_number'     => $request->GRN_number,
                 'comments'       => $request->comments,
                 'payment_status' => 'paid',
-                'payment_time'   => now()
+                'payment_time'   => now(),
+                'paid_amount'    => $final_paid_amount,
+            ]);
+
+            PaymentOrder::create([
+                'application_id'    => json_encode([(int) $request->application_id]),
+                'payment_status'    => 'success',
+                'payment_amount'    => $application->total_fee,
+                'gateway'           => 'offline',
+                'GRN_number'        => $request->application_id,
+                'payment_datetime'  => now()->toIso8601String(),
+                'gateway_response'  => null,
+                'updated_at' => now()
             ]);
 
             return response()->json([
@@ -1662,6 +1694,7 @@ class UserServiceApplicationController extends Controller
                     'GRN_number'     => $application->GRN_number,
                     'comments'       => $application->comments,
                     'payment_time'   => $application->payment_time,
+                    'paid_amount'    => $application->total_fee,
                 ]
             ]);
         } catch (\Exception $e) {
@@ -1672,5 +1705,487 @@ class UserServiceApplicationController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function get_renewal_details($application)
+    {
+        $service = $application->service;
+        $application_date = Carbon::parse($application->application_date);
+
+        if (!empty($service->noc_validity)) {
+            $expiry_date = $application_date->copy()->addDays((int)$service->noc_validity);
+        } elseif (!empty($service->fixed_expiry_date)) {
+            $expiry_date = Carbon::parse($service->fixed_expiry_date);
+        } else {
+            $expiry_date = null;
+        }
+
+        $today = Carbon::today();
+        $renewal_data = [];
+        $renewal_cycles = $service->renewalCycles;
+
+        foreach ($renewal_cycles as $cycle) {
+
+            $renewal_start = null;
+            $renewal_end = null;
+
+            if (!empty($cycle->fixed_renewal_start_date) && !empty($cycle->fixed_renewal_end_date)) {
+                $renewal_start = Carbon::parse($cycle->fixed_renewal_start_date);
+                $renewal_end   = Carbon::parse($cycle->fixed_renewal_end_date);
+            } else {
+
+                if (!empty($cycle->renewal_target_days)) {
+                    $renewal_start = $expiry_date->copy()->subDays((int)$cycle->renewal_target_days);
+                    $renewal_end   = $expiry_date->copy();
+                }
+
+                if (!empty($cycle->renewal_window_days)) {
+                    $window_start = $expiry_date->copy();
+                    $window_end   = $expiry_date->copy()->addDays((int)$cycle->renewal_window_days);
+
+                    if ($renewal_start === null || $window_start < $renewal_start) {
+                        $renewal_start = $window_start;
+                    }
+
+                    if ($renewal_end === null || $window_end > $renewal_end) {
+                        $renewal_end = $window_end;
+                    }
+                }
+            }
+            $can_renew = false;
+            if ($renewal_start && $renewal_end) {
+                if ($today->between($renewal_start, $renewal_end)) {
+                    $can_renew = true;
+                }
+            }
+
+            $renewal_data[] = [
+                'renewal_cycle_id'   => $cycle->id,
+                'can_renew'          => $can_renew,
+                'renewal_start_date' => optional($renewal_start)->toDateString(),
+                'renewal_end_date'   => optional($renewal_end)->toDateString(),
+                'post_days'          => $cycle->post_days,
+            ];
+        }
+
+        return [
+            'expiry_date'    => optional($expiry_date)->toDateString(),
+            'renewal_cycles' => $renewal_data,
+        ];
+    }
+
+
+    public function calculate_renewal_final_fee($service_id, $application, $application_data, $cycle)
+    {
+
+        $rules = RenewalFeeRule::where('service_id', $service_id)->get();
+
+        $final_fee = 0;
+        $minimum_fee = 0;
+
+        foreach ($rules as $rule) {
+
+            if ($rule->condition_label_question_id) {
+                $pre_value = $application_data[$rule->condition_label_question_id] ?? null;
+
+                if ($pre_value === null) {
+                    continue;
+                }
+
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $pre_value)) {
+                    $pre_value = date('md', strtotime($pre_value));
+                }
+
+                if (is_numeric($pre_value)) {
+                    $pre_value = (float) $pre_value;
+                }
+
+                if ($rule->pre_condition_operator === 'between') {
+
+                    $start = (int) $rule->pre_start_value;
+                    $end   = (int) $rule->pre_end_value;
+
+                    $pre_match = ($pre_value >= $start && $pre_value <= $end);
+                } else {
+
+                    $pre_match = match ($rule->pre_condition_operator) {
+                        '='  => $pre_value == $rule->pre_condition_value,
+                        '!=' => $pre_value != $rule->pre_condition_value,
+                        '<'  => $pre_value <  $rule->pre_condition_value,
+                        '<=' => $pre_value <= $rule->pre_condition_value,
+                        '>'  => $pre_value >  $rule->pre_condition_value,
+                        '>=' => $pre_value >= $rule->pre_condition_value,
+                        default => true,
+                    };
+                }
+
+                if (!$pre_match) {
+                    continue;
+                }
+            }
+
+            $user_answer = $application_data[$rule->question_id] ?? null;
+            if ($user_answer === null) continue;
+
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $user_answer)) {
+                $user_answer = date('md', strtotime($user_answer));
+            }
+
+            if (is_numeric($user_answer)) {
+                $user_answer = (float) $user_answer;
+            }
+
+            $match = match ($rule->condition_operator) {
+                '='  => $user_answer == $rule->condition_value_start,
+                '!=' => $user_answer != $rule->condition_value_start,
+                '<'  => $user_answer <  $rule->condition_value_start,
+                '<=' => $user_answer <= $rule->condition_value_start,
+                '>'  => $user_answer >  $rule->condition_value_start,
+                '>=' => $user_answer >= $rule->condition_value_start,
+                'between' => $user_answer >= $rule->condition_value_start &&
+                    $user_answer <= $rule->condition_value_end,
+                default => true,
+            };
+
+            if (!$match) continue;
+
+            switch ($rule->fee_type) {
+                case 'hardcoded':
+                    if (!empty($rule->fixed_calculated_fee)) {
+                        $final_fee += (float) $rule->fixed_calculated_fee;
+                    }
+                    break;
+
+                case 'calculated':
+                case 'estimated':
+                    $temp_fee = 0;
+
+                    if (!empty($rule->per_unit_fee)) {
+                        $temp_fee += $user_answer * (float) $rule->per_unit_fee;
+                    }
+
+                    if (!empty($rule->fixed_calculated_fee)) {
+                        $temp_fee += (float) $rule->fixed_calculated_fee;
+                    }
+
+                    $final_fee += $temp_fee;
+                    break;
+            }
+
+            if (!empty($rule->minimum_fee) && $rule->minimum_fee > $minimum_fee) {
+                $minimum_fee = (float) $rule->minimum_fee;
+            }
+        }
+
+        if ($minimum_fee > 0 && $final_fee < $minimum_fee) {
+            $final_fee = $minimum_fee;
+        }
+
+        $late_fee = $this->calculate_late_fee($application, $cycle);
+        $final_fee += $late_fee;
+
+        return [
+            'final_fee'        => round($final_fee, 2),
+            'late_fee'         => round($late_fee, 2),
+            'effective_fee'    => round($final_fee, 2)
+        ];
+    }
+
+    public function calculate_late_fee($application, $renewal_cycle)
+    {
+        if (!$renewal_cycle) {
+            return 0;
+        }
+
+        if ($renewal_cycle->late_fee_applicable != 'yes') {
+            return 0;
+        }
+
+        $renewal = $this->get_renewal_details($application);
+
+        if (empty($renewal['expiry_date'])) {
+            return 0;
+        }
+
+        $expiry_date = Carbon::parse($renewal['expiry_date']);
+        $today = Carbon::today();
+
+        if ($today->lte($expiry_date)) {
+            return 0;
+        }
+
+        $days_late = $today->diffInDays($expiry_date);
+        $months_late = $today->diffInMonths($expiry_date);
+
+        $base_fee = $renewal_cycle->late_fee_fixed_amount ?? 0;
+
+        switch ($renewal_cycle->late_fee_calculation_dynamic) {
+
+            case 'fixed':
+                return (float) $renewal_cycle->late_fee_fixed_amount;
+
+            case 'percentage':
+                $percentage = (float) $renewal_cycle->late_fee_fixed_amount;
+                return ($base_fee * $percentage) / 100;
+
+            case 'per_day':
+                return $days_late * (float) $renewal_cycle->late_fee_fixed_amount;
+
+            case 'per_month':
+                $months_late = max($months_late, 1);
+                return $months_late * (float) $renewal_cycle->late_fee_fixed_amount;
+        }
+
+        return 0;
+    }
+
+
+    public function calculate_renewal_fee(Request $request)
+    {
+        if (!Auth::check()) {
+            return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+        }
+
+        $request->validate([
+            'application_id'     => 'required|integer|exists:user_service_applications,id',
+            'renewal_cycle_id'   => 'required|integer|exists:renewal_cycles,id',
+            'application_data'   => 'nullable|array',
+        ]);
+
+        $application = UserServiceApplication::find($request->application_id);
+        $application_data = $request->application_data ?? [];
+
+        $cycle = RenewalCycle::where('id', $request->renewal_cycle_id)
+            ->where('service_id', $application->service_id)
+            ->first();
+
+        if (!$cycle) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Selected renewal cycle does not belong to this service.'
+            ], 400);
+        }
+
+        $renewal_details = $this->get_renewal_details($application);
+
+        $selected_cycle_details = collect($renewal_details['renewal_cycles'])
+            ->firstWhere('renewal_cycle_id', $cycle->id);
+
+        if (!$selected_cycle_details) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Renewal cycle not found in renewal details.'
+            ], 400);
+        }
+
+        if ($selected_cycle_details['can_renew'] === false) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Renewal window is not active for selected cycle.',
+                'details' => $selected_cycle_details
+            ], 400);
+        }
+
+        $final_fee = $this->calculate_renewal_final_fee(
+            $application->service_id,
+            $application,
+            $application_data,
+            $cycle
+        );
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Renewal fee calculated successfully.',
+            'data' => [
+                'final_fee' => $final_fee
+            ]
+        ]);
+    }
+
+    public function update_renewed_application(Request $request)
+    {
+
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'application_id'      => 'required|integer|exists:user_service_applications,id',
+                'renewal_cycle_id'    => 'required|integer|exists:renewal_cycles,id',
+                'application_data'    => 'nullable|array',
+            ]);
+
+            DB::beginTransaction();
+
+            $old_application = UserServiceApplication::find($request->application_id);
+            $renewal_cycle   = RenewalCycle::find($request->renewal_cycle_id);
+
+            $old_data = json_decode($old_application->application_data, true) ?? [];
+            $new_data = $request->input('application_data', []);
+
+            $final_data = $old_data;
+            foreach ($new_data as $key => $value) {
+                $final_data[(string)$key] = $value;
+            }
+
+            $data_changed = ($old_data != $final_data);
+
+            $status = $data_changed ? "re_submitted" : "approved";
+
+            $calculated_fee = $this->calculate_renewal_final_fee(
+                $old_application->service_id,
+                $old_application,
+                $final_data,
+                $renewal_cycle
+            );
+
+            $service = $old_application->service;
+            $today = Carbon::today();
+
+            if (!empty($service->noc_validity)) {
+                $noc_expiry_date = $today->copy()->addDays((int) $service->noc_validity);
+            } elseif (!empty($service->fixed_expiry_date)) {
+                $noc_expiry_date = Carbon::parse($service->fixed_expiry_date);
+            } else {
+                $noc_expiry_date = null;
+            }
+
+            $old_application_date = Carbon::parse($old_application->application_date);
+            if (!empty($service->noc_validity)) {
+                $previous_noc_expiry_date = $old_application_date->copy()->addDays((int) $service->noc_validity);
+            } elseif (!empty($service->fixed_expiry_date)) {
+                $previous_noc_expiry_date = Carbon::parse($service->fixed_expiry_date);
+            } else {
+                $previous_noc_expiry_date = null;
+            }
+
+
+            if ($status == "re_submitted") {
+                $current_step_number = 1;
+                $noc_certificate = null;
+            } elseif ($status == "approved") {
+                $noc_certificate = $old_application->NOC_certificate;
+                $current_step_number = $old_application->current_step_number;
+            }
+
+            $approval_flow = ServiceApprovalFlow::where('service_id', $old_application->service_id)
+                ->orderBy('step_number', 'asc')
+                ->first();
+
+            $latest_assignment = ApplicationWorkflowAssignment::where('application_id', $old_application->id)
+                ->orderByDesc('id')
+                ->first();
+
+            $new_application = UserServiceApplication::create([
+                'user_id'                   => $old_application->user_id,
+                'service_id'                => $old_application->service_id,
+                'renewal_cycle_id'          => $request->renewal_cycle_id,
+                'remarks'                   => $request->remarks,
+                'application_date'          =>  now(),
+                'previous_application_id' => $old_application->id,
+                'renewal'                 => 1,
+                'renewalYear'            => now()->year,
+                'application_data'        => json_encode($final_data),
+                'PreviousNOCexpiryDate'   => $previous_noc_expiry_date,
+                'total_fee'               => $calculated_fee['final_fee'],
+                'final_fee'               => $calculated_fee['final_fee'],
+                'effective_fee'           => 0,
+                'paid_amount'             => 0,
+                'payment_status'          => 'pending',
+                'status'                  => $status,
+                'payment_time'            => null,
+                'NOC_expiry_date'         => $noc_expiry_date,
+                'NOC_certificate'         => $noc_certificate,
+                'max_processing_date'     => $old_application->max_processing_date,
+                'current_step_number'     => $current_step_number,
+            ]);
+
+            $application_number = $this->generate_application_number($service->id, $new_application->id);
+
+            $new_application->update([
+                'applicationId' => $application_number
+            ]);
+
+            if ($status == "re_submitted") {
+                ApplicationWorkflowAssignment::create([
+                    'application_id'     => $new_application->id,
+                    'service_id'         => $old_application->service_id,
+                    'step_number'        => $approval_flow->step_number ?? null,
+                    'step_type'          => $approval_flow->step_type ?? null,
+                    'department_id'      => $approval_flow->department_id ?? null,
+                    'hierarchy_level'    => $approval_flow->hierarchy_level ?? null,
+                    'assigned_to_group'  => true,
+                    'status'             => 'pending',
+                    'action_taken_by'    => null,
+                    'action_taken_at'    => null,
+                    'remarks'            => null,
+                ]);
+            } elseif ($status == "approved") {
+                ApplicationWorkflowAssignment::create([
+                    'application_id'     => $new_application->id,
+                    'service_id'         => $old_application->service_id,
+                    'step_number'        => $latest_assignment->step_number ?? null,
+                    'step_type'          => $latest_assignment->step_type ?? null,
+                    'department_id'      => $latest_assignment->department_id ?? null,
+                    'hierarchy_level'    => $latest_assignment->hierarchy_level ?? null,
+                    'assigned_to_group'  => true,
+                    'status'             => $latest_assignment->status,
+                    'action_taken_by'    => $latest_assignment->action_taken_by,
+                    'action_taken_at'    => $latest_assignment->action_taken_at,
+                    'remarks'            => $latest_assignment->remarks,
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Your Application has been renewed.',
+                'data'    => [
+                    'new_application_id'     => $new_application->id,
+                    'previous_application_id' => $new_application->previous_application_id,
+                    'status'                 => $new_application->status,
+                    'application_data'       => json_decode($new_application->application_data, true),
+                    'total_fee'              => $new_application->total_fee,
+                    'final_fee'              => $new_application->final_fee,
+                ]
+            ]);
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Failed to renew application.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function generate_application_number($service_id, $application_id)
+    {
+
+        $service = ServiceMaster::find($service_id);
+
+        if (!$service) {
+            return null;
+        }
+
+        $format = $service->generated_id_format;
+
+        $current_year = date('Y');
+
+        $application_number = strtoupper($service->noc_name);
+        if (!empty($format)) {
+
+            $application_number = str_replace('{year}', $current_year, $format);
+            $application_number = str_replace('{SEQ}', $application_id, $application_number);
+        }
+
+        return $application_number;
     }
 }

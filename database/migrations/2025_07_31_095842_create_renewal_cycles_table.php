@@ -20,7 +20,7 @@ return new class extends Migration
             $table->date('fixed_renewal_start_date')->nullable();
             $table->date('fixed_renewal_end_date')->nullable();
             $table->enum('late_fee_applicable', ['yes', 'no']);
-            $table->enum('late_fee_calculation_dynamic', ['yes', 'no']);
+            $table->string('late_fee_calculation_dynamic')->nullable();
             $table->string('late_fee_fixed_amount')->nullable();
             $table->string('late_fee_calculated_amount')->nullable();
             $table->enum('allow_renewal_input_form', ['yes', 'no']);

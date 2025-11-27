@@ -14,6 +14,7 @@ return new class extends Migration
             $table->bigInteger('user_id')->nullable();
             $table->bigInteger('service_id');
             $table->bigInteger('renewal_cycle_id')->nullable();
+            $table->bigInteger('previous_application_id')->nullable();
             $table->enum('renewal', ['yes', 'no'])->nullable();
             $table->integer('renewalYear')->nullable();
             $table->string('applicationId')->nullable();
