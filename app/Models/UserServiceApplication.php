@@ -11,6 +11,7 @@ class UserServiceApplication extends Model
         'user_id',
         'service_id',
         'renewal_cycle_id',
+        'previous_application_id',
         'renewal',
         'renewalYear',
         'applicationId',

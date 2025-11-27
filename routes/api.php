@@ -217,6 +217,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         });
 
     Route::post('/get-total-applications-by-user', [DashboardController::class, 'get_total_applications_by_user']);
+
+    Route::post('calculate-renewal-fee', [UserServiceApplicationController::class, 'calculate_renewal_fee']);
+     Route::post('update-renewed-application', [UserServiceApplicationController::class, 'update_renewed_application']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
