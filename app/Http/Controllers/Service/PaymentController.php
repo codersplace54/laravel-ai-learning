@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\JsonResponse;
 use App\Models\PaymentOrder;
 use App\Models\UserServiceApplication;
+use App\Models\User;
 use App\Models\ApplicationWorkflowHistory;
 
 class PaymentController extends Controller
@@ -34,8 +35,10 @@ class PaymentController extends Controller
 
             $user = Auth::user();
             $user_id = $user->id;
-            
+
             $application_ids = $request->input('application_id');
+            $application_ids = array_map('intval', $application_ids);
+
             $applications = UserServiceApplication::whereIn('id', $application_ids)
                 ->where('user_id', $user_id)
                 ->get();
@@ -61,19 +64,21 @@ class PaymentController extends Controller
 
             DB::commit();
 
-            $host = $request->getSchemeAndHttpHost();
-            $redirect_url = $host . '/process-payment';
+            return $this->process_payment($payment_order);
 
-            return  response()->json([
-                'status' => 1,
-                'message' => 'Your payment is redirected',
-                'result' => [
-                    'order_id' => $payment_order->id,
-                    'redirect_url' => $redirect_url,
-                    'total_amount' => $total_amount,
-                    'applications' => $application_ids,
-                ],
-            ]);
+            // $host = $request->getSchemeAndHttpHost();
+            // $redirect_url = $host . '/process-payment';
+
+            // return  response()->json([
+            //     'status' => 1,
+            //     'message' => 'Your payment is redirected',
+            //     'result' => [
+            //         'order_id' => $payment_order->id,
+            //         'redirect_url' => $redirect_url,
+            //         'total_amount' => $total_amount,
+            //         'applications' => $application_ids,
+            //     ],
+            // ]);
         } catch (\Exception $e) {
 
             DB::rollBack();
@@ -85,28 +90,14 @@ class PaymentController extends Controller
         }
     }
 
-    public function process_payment(Request $request)
+    private function process_payment(PaymentOrder $payment_order)
     {
 
 
         try {
 
-            $request->validate([
-                'order_id' => 'required|integer',
-            ]);
-
             DB::beginTransaction();
             
-            $order_id = $request->input('order_id');
-            $payment_order = PaymentOrder::where('id', $order_id)->first();
-
-            if (!$payment_order || $payment_order->payment_status !== 'initiated') {
-                return response()->json([
-                    'status' => 0,
-                    'status_message' => 'Invalid or already processed payment order.',
-                ], 404);
-            }
-
             $application_ids = json_decode($payment_order->application_id, true);
             if (!is_array($application_ids) || empty($application_ids)) {
                 return response()->json([
@@ -126,6 +117,7 @@ class PaymentController extends Controller
 
             $user = Auth::user();
             $total_amount = $applications->sum('total_fee');
+            $order_id = $payment_order->id;
             $dept_code = 'FIN';
             $dto_code = '99';
             $ddo_code = '99001';
@@ -137,7 +129,7 @@ class PaymentController extends Controller
 
 
             $return_url = 'https://swaagatbackend.tripura.gov.in/process-payment';
-            // $return_url = 'http://127.0.0.1:8000/api/user/payment-callback';
+            // $return_url = 'http://swaagat_backend.test/api/user/payment-callback';
             $secret_key = config('egras.secret_key');
             //   $return_url = url('/payment-callback');
 
@@ -159,37 +151,40 @@ class PaymentController extends Controller
             $hash = base64_encode(hash_hmac('sha256', $hash_string, $secret_key, true));
 
             $form_html  = '<html><body>';
-            $form_html .= '<p>Redirecting to e-GRAS. Please wait...</p>';
+            $form_html .= '<p>Review and edit values before sending to e-GRAS.</p>';
             $form_html .= '<form id="egrasForm" name="process_payment" method="POST" action="https://www.egras.tripura.gov.in/DeptPrePaymentReqHandler.aspx">';
+            $form_html .= '<table>';
 
-            $form_html .= '<input type="hidden" name="DTO" value="' . $dto_code . '"/>';
-            $form_html .= '<input type="hidden" name="STO" value="' . $sto_code . '"/>';
-            $form_html .= '<input type="hidden" name="DDO" value="' . $ddo_code . '"/>';
-            $form_html .= '<input type="hidden" name="Deptcode" value="' . $dept_code . '"/>';
-            $form_html .= '<input type="hidden" name="UserID" value="' . $user_id . '"/>';
-            $form_html .= '<input type="hidden" name="Applicationnumber" value="' . $order_id . '"/>';
-            $form_html .= '<input type="hidden" name="Fullname" value="' . $user->authorized_person_name . '"/>';
-            $form_html .= '<input type="hidden" name="Cityname" value="' . $user->registered_enterprise_city . '"/>';
-            $form_html .= '<input type="hidden" name="Address" value="' . $user->registered_enterprise_address . '"/>';
-            $form_html .= '<input type="hidden" name="Officename" value="' . $user->name_of_enterprise . '"/>';
-            $form_html .= '<input type="hidden" name="ChallanYear" value="2526"/>';
-            $form_html .= '<input type="hidden" name="PINCODE" value="799001"/>';
-            $form_html .= '<input type="hidden" name="Bank" value="0001509"/>';
-            $form_html .= '<input type="hidden" name="Remarks" value="Swaagat Payment"/>';
-            $form_html .= '<input type="hidden" name="Securityemail" value="' . $user->email_id . '"/>';
-            $form_html .= '<input type="hidden" name="Securityphone" value="' . $user->mobile_no . '"/>';
-            $form_html .= '<input type="hidden" name="VALID_UPTO" value="20/11/2025"/>';
-            $form_html .= '<input type="hidden" name="ptype" value="N"/>';
-            $form_html .= '<input type="hidden" name="paymentmode" value=""/>';
-            $form_html .= '<input type="hidden" name="TotalAmount" value="' . $total_amount . '"/>';
-            $form_html .= '<input type="hidden" name="hash" value="' . $hash . '"/>';
-            $form_html .= '<input type="hidden" name="UURL" value="' . $return_url . '"/>';
-            $form_html .= '<input type="hidden" name="SCHEMECOUNT" value="1"/>';
-            $form_html .= '<input type="hidden" name="SCHEMENAME1" value="1475-00-106-21-06"/>';
-            $form_html .= '<input type="hidden" name="FEEAMOUNT1" value="' . $fee_amount1 . '"/>';
+            $form_html .= '<tr><td>DTO Code</td><td><input type="text" name="DTO" value="' . $dto_code . '"/></td></tr>';
+            $form_html .= '<tr><td>STO Code</td><td><input type="text" name="STO" value="' . $sto_code . '"/></td></tr>';
+            $form_html .= '<tr><td>DDO Code</td><td><input type="text" name="DDO" value="' . $ddo_code . '"/></td></tr>';
+            $form_html .= '<tr><td>Department Code</td><td><input type="text" name="Deptcode" value="' . $dept_code . '"/></td></tr>';
+            $form_html .= '<tr><td>User ID</td><td><input type="text" name="UserID" value="' . $user_id . '"/></td></tr>';
+            $form_html .= '<tr><td>Order id</td><td><input type="text" name="Applicationnumber" value="' . $order_id . '"/></td></tr>';
+            $form_html .= '<tr><td>Full Name</td><td><input type="text" name="Fullname" value="' . $user->authorized_person_name . '"/></td></tr>';
+            $form_html .= '<tr><td>City</td><td><input type="text" name="Cityname" value="' . $user->registered_enterprise_city . '"/></td></tr>';
+            $form_html .= '<tr><td>Address</td><td><input type="text" name="Address" value="' . $user->registered_enterprise_address . '"/></td></tr>';
+            $form_html .= '<tr><td>Office Name</td><td><input type="text" name="Officename" value="' . $user->name_of_enterprise . '"/></td></tr>';
+            $form_html .= '<tr><td>Challan Year</td><td><input type="text" name="ChallanYear" value="2526"/></td></tr>';
+            $form_html .= '<tr><td>PIN Code</td><td><input type="text" name="PINCODE" value="799001"/></td></tr>';
+            $form_html .= '<tr><td>Bank Code</td><td><input type="text" name="Bank" value="0001509"/></td></tr>';
+            $form_html .= '<tr><td>Remarks</td><td><input type="text" name="Remarks" value="Swaagat Payment"/></td></tr>';
+            $form_html .= '<tr><td>Email</td><td><input type="text" name="Securityemail" value="' . $user->email_id . '"/></td></tr>';
+            $form_html .= '<tr><td>Phone</td><td><input type="text" name="Securityphone" value="' . $user->mobile_no . '"/></td></tr>';
+            $form_html .= '<tr><td>Valid Upto</td><td><input type="text" name="VALID_UPTO" value="20/11/2025"/></td></tr>';
+            $form_html .= '<tr><td>Payment Type</td><td><input type="text" name="ptype" value="N"/></td></tr>';
+            $form_html .= '<tr><td>Payment Mode</td><td><input type="text" name="paymentmode" value=""/></td></tr>';
+            $form_html .= '<tr><td>Total Amount</td><td><input type="text" name="TotalAmount" value="' . $total_amount . '"/></td></tr>';
+            $form_html .= '<tr><td>Hash</td><td><input type="text" name="hash" value="' . $hash . '"/></td></tr>';
+            $form_html .= '<tr><td>Return URL</td><td><input type="text" name="UURL" value="' . $return_url . '"/></td></tr>';
+            $form_html .= '<tr><td>Scheme Count</td><td><input type="text" name="SCHEMECOUNT" value="1"/></td></tr>';
+            $form_html .= '<tr><td>Scheme Name 1</td><td><input type="text" name="SCHEMENAME1" value="1475-00-106-21-06"/></td></tr>';
+            $form_html .= '<tr><td>Fee Amount 1</td><td><input type="text" name="FEEAMOUNT1" value="' . $fee_amount1 . '"/></td></tr>';
 
+            $form_html .= '</table>';
+
+            $form_html .= '<button type="submit">Send to e-GRAS</button>';
             $form_html .= '</form>';
-            $form_html .= '<script>document.getElementById("egrasForm").submit();</script>';
             $form_html .= '</body></html>';
 
             return $form_html;
@@ -211,9 +206,9 @@ class PaymentController extends Controller
 
     public function payment_callback(Request $request)
     {
-        Log:info("Payment callback req: " . json_encode($request->all()));
-        try {
+        Log::info("Payment callback req: ".json_encode($request->all()));
 
+        try {
 
             $order_id = $request->input('Applicationnumber');
             $total = $request->input('amount');
@@ -228,12 +223,15 @@ class PaymentController extends Controller
 
             DB::beginTransaction();
 
-            if (!$order_id) {
-                return response()->json(['status' => 0, 'message' => 'Order ID not found'], 400);
-            }
-
             $secret = config('egras.secret_key');
-            $success_url = config('payment.frontendsuccessurl');
+            $frontendurl = config('payment.frontendurl');
+
+            if (!$order_id) {
+                $msg = 'Order ID not found';
+                return redirect()->away(
+                    $frontendurl . '?status=failed&message=' . urlencode($msg)
+                );
+            }
 
             $hash_str = $order_id . "|" . $total . "|" . $grn . "|" . $status . "|" . $CIN . "|" . $tdate . "|" . $payment_type . "|" . $bankcode;
             $generated_hash = base64_encode(hash_hmac('sha256', $hash_str, $secret, true));
@@ -252,10 +250,10 @@ class PaymentController extends Controller
                 ->first();
 
             if (!$payment) {
-                return response()->json([
-                    'status' => 0,
-                    'message' => 'Already processed or invalid order'
-                ], 400);
+                $msg = 'Already processed or invalid order';
+                return redirect()->away(
+                    $frontendurl . '?status=failed&order_id=' . $order_id . '&message=' . urlencode($msg)
+                );
             }
 
             $payment->update([
@@ -265,7 +263,7 @@ class PaymentController extends Controller
                 'gateway_order_id'  => $order_id,
                 'transaction_id'    => $CIN,
                 'GRN_number'        => $grn,
-                'payment_datetime'      => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime),
+                'payment_datetime'      => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime)->toIso8601String(),
                 'gateway_response'  => json_encode($request->all()),
                 'updated_at' => now()
             ]);
@@ -275,7 +273,10 @@ class PaymentController extends Controller
                 $ids = json_decode($payment->application_id, true);
 
                 if (!is_array($ids) || count($ids) === 0) {
-                    return response()->json(['status' => 0, 'message' => 'Invalid application IDs'], 400);
+                    $msg = 'Invalid application IDs';
+                    return redirect()->away(
+                        $frontendurl . '?status=failed&order_id=' . $order_id . '&message=' . urlencode($msg)
+                    );
                 }
 
                 $applications = UserServiceApplication::whereIn('id', $ids)->get();
@@ -290,7 +291,7 @@ class PaymentController extends Controller
                         'status'           => 'submitted',
                         'GRN_number'       => $grn,
                         'payment_transId'  => $CIN,
-                        'payment_time'     => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime),
+                        'payment_time'     => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime)->toIso8601String(),
                         'updated_at'       => now(),
                     ]);
                 }
@@ -300,20 +301,36 @@ class PaymentController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'status' => 1,
-                'order_id' => $order_id,
-                'message' => 'Payment processed successfully',
-            ]);
+            if ($status == 'success') {
+                $msg = 'Payment processed successfully';
+                return redirect()->away(
+                    $frontendurl
+                        . '?status=success'
+                        . '&order_id=' . $order_id
+                        . '&amount=' . $total
+                        . '&message=' . urlencode($msg)
+                );
+            } else {
+                $msg = 'Payment failed with status: ' . $status;
+                return redirect()->away(
+                    $frontendurl
+                        . '?status=failed'
+                        . '&order_id=' . $order_id
+                        . '&amount=' . $total
+                        . '&message=' . urlencode($msg)
+                );
+            }
         } catch (\Exception $e) {
 
             DB::rollBack();
 
-            return response()->json([
-                'status' => 0,
-                'message' => 'Something went wrong.',
-                'error' => $e->getMessage(),
-            ], 500);
+            $msg = 'Exception: ' . $e->getMessage();
+
+            return redirect()->away(
+                config('payment.frontendurl')
+                    . '?status=failed'
+                    . '&message=' . urlencode($msg)
+            );
         }
     }
 
@@ -434,20 +451,21 @@ class PaymentController extends Controller
 
                     $amount = $application->total_fee;
                     $payment_type = 'Application Fee Payment';
-
                 } elseif (!is_null($application->extra_payment)) {
 
                     $amount = $application->extra_payment;
                     $payment_type = 'Extra Payment Raised';
-                    
                 }
                 $response_data[] = [
+                    'user_service_application_id' => $application->id,
                     'application_id' => $application->applicationId,
                     'service_title_or_description' => $application->service->service_title_or_description ?? null,
                     'application_date' => $application->application_date ?? null,
                     'payment_type' => $payment_type,
                     'amount' => $amount,
                     'payment_status'  => $application->payment_status ?? null,
+                    'grn_number'  => $application->GRN_number ?? null,
+                    'payment_date'  => $application->payment_datetime ?? null,
                 ];
             }
 
