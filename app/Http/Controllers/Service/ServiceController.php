@@ -854,7 +854,7 @@ class ServiceController extends Controller
                     $application->update([
                         'current_step_number' => $first_step_flow->step_number,
                         'payment_status'      => 'pending',
-                        'total_fee'           =>  $total_fee,
+                       // 'total_fee'           =>  $total_fee,
                         'extra_payment'       => $request->extra_payment,
                         'remarks'             => $request->remarks,
                         'status'              => 'extra_payment',
