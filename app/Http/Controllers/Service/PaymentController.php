@@ -34,8 +34,9 @@ class PaymentController extends Controller
 
             $user = Auth::user();
             $user_id = $user->id;
-            
-            $application_ids = $request->input('application_id');
+
+            $application_ids = array_map('intval', $request->input('application_id'));
+
             $applications = UserServiceApplication::whereIn('id', $application_ids)
                 ->where('user_id', $user_id)
                 ->get();
@@ -43,7 +44,7 @@ class PaymentController extends Controller
             if ($applications->isEmpty()) {
                 return response()->json([
                     'status' => 0,
-                    'message' => 'No unpaid applications found for the given IDs.',
+                    'message' => 'No applications found for the given IDs.',
                 ], 404);
             }
 
@@ -61,100 +62,52 @@ class PaymentController extends Controller
 
             DB::commit();
 
-            $host = $request->getSchemeAndHttpHost();
-            $redirect_url = $host . '/process-payment';
-
-            return  response()->json([
-                'status' => 1,
-                'message' => 'Your payment is redirected',
-                'result' => [
-                    'order_id' => $payment_order->id,
-                    'redirect_url' => $redirect_url,
-                    'total_amount' => $total_amount,
-                    'applications' => $application_ids,
-                ],
-            ]);
-        } catch (\Exception $e) {
-
-            DB::rollBack();
-
-            return response()->json([
-                'status' => 0,
-                'status_message' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
-    public function process_payment(Request $request)
-    {
-
-
-        try {
-
-            $request->validate([
-                'order_id' => 'required|integer',
-            ]);
-
-            DB::beginTransaction();
-            
-            $order_id = $request->input('order_id');
-            $payment_order = PaymentOrder::where('id', $order_id)->first();
-
-            if (!$payment_order || $payment_order->payment_status !== 'initiated') {
-                return response()->json([
-                    'status' => 0,
-                    'status_message' => 'Invalid or already processed payment order.',
-                ], 404);
-            }
-
-            $application_ids = json_decode($payment_order->application_id, true);
-            if (!is_array($application_ids) || empty($application_ids)) {
-                return response()->json([
-                    'status' => 0,
-                    'status_message' => 'Invalid application list.',
-                ], 400);
-            }
-
-            $applications = UserServiceApplication::whereIn('id', $application_ids)->get();
-
-            if ($applications->isEmpty()) {
-                return response()->json([
-                    'status' => 0,
-                    'status_message' => 'Applications not found.',
-                ], 404);
-            }
-
-            $user = Auth::user();
             $total_amount = $applications->sum('total_fee');
+            $scheme_count = $applications->count();
+            
+            $order_id = $payment_order->id;
             $dept_code = 'FIN';
             $dto_code = '99';
             $ddo_code = '99001';
             $sto_code = '99';
-            $user_id = $user->id;
-            $scheme_count = '1';
-            $scheme_name1 = '1475-00-106-21-06';
-            $fee_amount1 = '500';
+            $scheme_count = $scheme_count;
 
+            $scheme_names = [];
+            $fee_amounts  = [];
 
-            $return_url = 'https://swaagatbackend.tripura.gov.in/process-payment';
-            // $return_url = 'http://127.0.0.1:8000/api/user/payment-callback';
+            foreach ($applications as $application) {
+                $scheme_names[] = $application->service->service_title_or_description ?? 'NA';
+                $fee_amounts[]  = $application->total_fee ?? 0;
+            }
+
+            $scheme_count = count($scheme_names);
+
+            // $return_url = 'https://swaagatbackend.tripura.gov.in/process-payment';
+            $return_url = 'http://swaagatstaging.tripura.cloud/api/user/payment-callback';
             $secret_key = config('egras.secret_key');
             //   $return_url = url('/payment-callback');
 
-            $hash_string =
-                $dto_code . "|" .
-                $sto_code . "|" .
-                $ddo_code . "|" .
-                $dept_code . "|" .
-                $user_id . "|" .
-                $order_id . "|" .
-                $user->authorized_person_name . "|" .
-                $user->mobile_no . "|" .
-                $total_amount . "|" .
-                $scheme_count . "|" .
-                $scheme_name1 . "|" .
-                $fee_amount1 . "|" .
-                $return_url;
+            $hash_parts = [
+                $dto_code,
+                $sto_code,
+                $ddo_code,
+                $dept_code,
+                $user_id,
+                $order_id,
+                $user->authorized_person_name,
+                $user->mobile_no,
+                $total_amount,
+                $scheme_count,
+            ];
+
+            for ($i = 0; $i < $scheme_count; $i++) {
+                $hash_parts[] = $scheme_names[$i];
+                $hash_parts[] = $fee_amounts[$i];
+            }
+
+            $hash_parts[] = $return_url;
+
+            $hash_string = implode('|', $hash_parts);
 
             $hash = base64_encode(hash_hmac('sha256', $hash_string, $secret_key, true));
 
@@ -162,42 +115,42 @@ class PaymentController extends Controller
             $form_html .= '<p>Redirecting to e-GRAS. Please wait...</p>';
             $form_html .= '<form id="egrasForm" name="process_payment" method="POST" action="https://www.egras.tripura.gov.in/DeptPrePaymentReqHandler.aspx">';
 
-            $form_html .= '<input type="hidden" name="DTO" value="' . $dto_code . '"/>';
-            $form_html .= '<input type="hidden" name="STO" value="' . $sto_code . '"/>';
-            $form_html .= '<input type="hidden" name="DDO" value="' . $ddo_code . '"/>';
-            $form_html .= '<input type="hidden" name="Deptcode" value="' . $dept_code . '"/>';
-            $form_html .= '<input type="hidden" name="UserID" value="' . $user_id . '"/>';
-            $form_html .= '<input type="hidden" name="Applicationnumber" value="' . $order_id . '"/>';
-            $form_html .= '<input type="hidden" name="Fullname" value="' . $user->authorized_person_name . '"/>';
-            $form_html .= '<input type="hidden" name="Cityname" value="' . $user->registered_enterprise_city . '"/>';
-            $form_html .= '<input type="hidden" name="Address" value="' . $user->registered_enterprise_address . '"/>';
-            $form_html .= '<input type="hidden" name="Officename" value="' . $user->name_of_enterprise . '"/>';
-            $form_html .= '<input type="hidden" name="ChallanYear" value="2526"/>';
-            $form_html .= '<input type="hidden" name="PINCODE" value="799001"/>';
-            $form_html .= '<input type="hidden" name="Bank" value="0001509"/>';
-            $form_html .= '<input type="hidden" name="Remarks" value="Swaagat Payment"/>';
-            $form_html .= '<input type="hidden" name="Securityemail" value="' . $user->email_id . '"/>';
-            $form_html .= '<input type="hidden" name="Securityphone" value="' . $user->mobile_no . '"/>';
-            $form_html .= '<input type="hidden" name="VALID_UPTO" value="20/11/2025"/>';
-            $form_html .= '<input type="hidden" name="ptype" value="N"/>';
-            $form_html .= '<input type="hidden" name="paymentmode" value=""/>';
-            $form_html .= '<input type="hidden" name="TotalAmount" value="' . $total_amount . '"/>';
-            $form_html .= '<input type="hidden" name="hash" value="' . $hash . '"/>';
-            $form_html .= '<input type="hidden" name="UURL" value="' . $return_url . '"/>';
-            $form_html .= '<input type="hidden" name="SCHEMECOUNT" value="1"/>';
-            $form_html .= '<input type="hidden" name="SCHEMENAME1" value="1475-00-106-21-06"/>';
-            $form_html .= '<input type="hidden" name="FEEAMOUNT1" value="' . $fee_amount1 . '"/>';
+            $form_html .= '<tr><td>DTO Code</td><td><input type="text" name="DTO" value="' . $dto_code . '"/></td></tr>';
+            $form_html .= '<tr><td>STO Code</td><td><input type="text" name="STO" value="' . $sto_code . '"/></td></tr>';
+            $form_html .= '<tr><td>DDO Code</td><td><input type="text" name="DDO" value="' . $ddo_code . '"/></td></tr>';
+            $form_html .= '<tr><td>Department Code</td><td><input type="text" name="Deptcode" value="' . $dept_code . '"/></td></tr>';
+            $form_html .= '<tr><td>User ID</td><td><input type="text" name="UserID" value="' . $user_id . '"/></td></tr>';
+            $form_html .= '<tr><td>Order id</td><td><input type="text" name="Applicationnumber" value="' . $order_id . '"/></td></tr>';
+            $form_html .= '<tr><td>Full Name</td><td><input type="text" name="Fullname" value="' . $user->authorized_person_name . '"/></td></tr>';
+            $form_html .= '<tr><td>City</td><td><input type="text" name="Cityname" value="' . $user->registered_enterprise_city . '"/></td></tr>';
+            $form_html .= '<tr><td>Address</td><td><input type="text" name="Address" value="' . $user->registered_enterprise_address . '"/></td></tr>';
+            $form_html .= '<tr><td>Office Name</td><td><input type="text" name="Officename" value="' . $user->name_of_enterprise . '"/></td></tr>';
+            $form_html .= '<tr><td>Challan Year</td><td><input type="text" name="ChallanYear" value="2526"/></td></tr>';
+            $form_html .= '<tr><td>PIN Code</td><td><input type="text" name="PINCODE" value="799001"/></td></tr>';
+            $form_html .= '<tr><td>Bank Code</td><td><input type="text" name="Bank" value="0001509"/></td></tr>';
+            $form_html .= '<tr><td>Remarks</td><td><input type="text" name="Remarks" value="Swaagat Payment"/></td></tr>';
+            $form_html .= '<tr><td>Email</td><td><input type="text" name="Securityemail" value="' . $user->email_id . '"/></td></tr>';
+            $form_html .= '<tr><td>Phone</td><td><input type="text" name="Securityphone" value="' . $user->mobile_no . '"/></td></tr>';
+            $form_html .= '<tr><td>Valid Upto</td><td><input type="text" name="VALID_UPTO" value="20/11/2025"/></td></tr>';
+            $form_html .= '<tr><td>Payment Type</td><td><input type="text" name="ptype" value="N"/></td></tr>';
+            $form_html .= '<tr><td>Payment Mode</td><td><input type="text" name="paymentmode" value=""/></td></tr>';
+            $form_html .= '<tr><td>Total Amount</td><td><input type="text" name="TotalAmount" value="' . $total_amount . '"/></td></tr>';
+            $form_html .= '<tr><td>Hash</td><td><input type="text" name="hash" value="' . $hash . '"/></td></tr>';
+            $form_html .= '<tr><td>Return URL</td><td><input type="text" name="UURL" value="' . $return_url . '"/></td></tr>';
+            $form_html .= '<tr><td>Scheme Count</td><td><input type="text" name="SCHEMECOUNT" value="1"/></td></tr>';
+            for ($i = 0; $i < $scheme_count; $i++) {
+                $idx = $i + 1;
+                $schemeName = htmlspecialchars($scheme_names[$i], ENT_QUOTES, 'UTF-8');
+
+                $form_html .= '<tr><td>Scheme Name ' . $idx . '</td><td><input type="text" name="SCHEMENAME' . $idx . '" value="' . $schemeName . '"/></td></tr>';
+                $form_html .= '<tr><td>Fee Amount ' . $idx . '</td><td><input type="text" name="FEEAMOUNT' . $idx . '" value="' . $fee_amounts[$i] . '"/></td></tr>';
+            }
 
             $form_html .= '</form>';
             $form_html .= '<script>document.getElementById("egrasForm").submit();</script>';
             $form_html .= '</body></html>';
 
             return $form_html;
-
-
-            DB::commit();
-
-            return response($form_html);
         } catch (\Exception $e) {
 
             DB::rollBack();
@@ -211,14 +164,15 @@ class PaymentController extends Controller
 
     public function payment_callback(Request $request)
     {
-        Log:info("Payment callback req: " . json_encode($request->all()));
+        Log::info("Payment callback req: " . json_encode($request->all()));
+
         try {
 
 
             $order_id = $request->input('Applicationnumber');
             $total = $request->input('amount');
             $grn = $request->input('GRN');
-            $status = strtolower($request->input('status'));
+            $status = $request->input('status');
             $CIN = $request->input('CIN');
             $tdate = $request->input('tdate');
             $payment_type = $request->input('payment_type');
@@ -239,13 +193,14 @@ class PaymentController extends Controller
             $generated_hash = base64_encode(hash_hmac('sha256', $hash_str, $secret, true));
 
 
-            // if ($generated_hash !== $hash) {
-            //     return response()->json([
-            //         'status' => 0,
-            //         'status_message' => 'Hash verification failed',
-            //         'order_id' => $order_id,
-            //     ], 400);
-            // }
+            if ($generated_hash !== $hash) {
+                if (!$order_id) {
+                    $msg = 'Hash verification failed';
+                    return redirect()->away(
+                        $frontendurl . '?status=failed&message=' . urlencode($msg)
+                    );
+                }
+            }
 
             $payment = PaymentOrder::where('id', $order_id)
                 ->where('payment_status', 'initiated')
@@ -259,7 +214,7 @@ class PaymentController extends Controller
             }
 
             $payment->update([
-                'payment_status'    => $status,
+                'payment_status'    => strtolower($request->input('status')),
                 'payment_amount'    => $total,
                 'gateway'           => 'egras',
                 'gateway_order_id'  => $order_id,
