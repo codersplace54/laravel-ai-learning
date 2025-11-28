@@ -1685,6 +1685,17 @@ class UserServiceApplicationController extends Controller
                 'updated_at' => now()
             ]);
 
+            PaymentOrder::create([
+                'application_id'    => json_encode([(int) $request->application_id]),
+                'payment_status'    => 'success',
+                'payment_amount'    => $application->total_fee,
+                'gateway'           => 'offline',
+                'GRN_number'        => $request->application_id,
+                'payment_datetime'  => now()->toIso8601String(),
+                'gateway_response'  => null,
+                'updated_at' => now()
+            ]);
+
             return response()->json([
                 'status' => 1,
                 'message' => 'Application marked as paid successfully.',
