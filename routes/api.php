@@ -223,6 +223,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
     Route::post('service-feedback-store', [FeedbackController::class, 'service_feedback_store']);
     Route::post('service-feedback-list', [FeedbackController::class, 'service_feedback_list']);
+    Route::post('update-renewed-application', [UserServiceApplicationController::class, 'update_renewed_application']);
+    Route::post('get-applications-ready-for-renewal', [UserServiceApplicationController::class, 'get_applications_ready_for_renewal']);
+    Route::post('service/renewal-cycles', [UserServiceApplicationController::class, 'get_service_renewal_cycles']);
+
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);

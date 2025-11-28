@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\JsonResponse;
 use App\Models\PaymentOrder;
 use App\Models\UserServiceApplication;
+use App\Models\User;
 use App\Models\ApplicationWorkflowHistory;
 
 class PaymentController extends Controller
@@ -112,8 +113,9 @@ class PaymentController extends Controller
             $hash = base64_encode(hash_hmac('sha256', $hash_string, $secret_key, true));
 
             $form_html  = '<html><body>';
-            $form_html .= '<p>Redirecting to e-GRAS. Please wait...</p>';
+            $form_html .= '<p>Review and edit values before sending to e-GRAS.</p>';
             $form_html .= '<form id="egrasForm" name="process_payment" method="POST" action="https://www.egras.tripura.gov.in/DeptPrePaymentReqHandler.aspx">';
+            $form_html .= '<table>';
 
             $form_html .= '<tr><td>DTO Code</td><td><input type="text" name="DTO" value="' . $dto_code . '"/></td></tr>';
             $form_html .= '<tr><td>STO Code</td><td><input type="text" name="STO" value="' . $sto_code . '"/></td></tr>';
@@ -147,7 +149,6 @@ class PaymentController extends Controller
             }
 
             $form_html .= '</form>';
-            $form_html .= '<script>document.getElementById("egrasForm").submit();</script>';
             $form_html .= '</body></html>';
 
             return $form_html;
@@ -164,10 +165,9 @@ class PaymentController extends Controller
 
     public function payment_callback(Request $request)
     {
-        Log::info("Payment callback req: " . json_encode($request->all()));
+        Log::info("Payment callback req: ".json_encode($request->all()));
 
         try {
-
 
             $order_id = $request->input('Applicationnumber');
             $total = $request->input('amount');
@@ -182,12 +182,15 @@ class PaymentController extends Controller
 
             DB::beginTransaction();
 
-            if (!$order_id) {
-                return response()->json(['status' => 0, 'message' => 'Order ID not found'], 400);
-            }
-
             $secret = config('egras.secret_key');
-            $success_url = config('payment.frontendsuccessurl');
+            $frontendurl = config('payment.frontendurl');
+
+            if (!$order_id) {
+                $msg = 'Order ID not found';
+                return redirect()->away(
+                    $frontendurl . '?status=failed&message=' . urlencode($msg)
+                );
+            }
 
             $hash_str = $order_id . "|" . $total . "|" . $grn . "|" . $status . "|" . $CIN . "|" . $tdate . "|" . $payment_type . "|" . $bankcode;
             $generated_hash = base64_encode(hash_hmac('sha256', $hash_str, $secret, true));
@@ -207,10 +210,10 @@ class PaymentController extends Controller
                 ->first();
 
             if (!$payment) {
-                return response()->json([
-                    'status' => 0,
-                    'message' => 'Already processed or invalid order'
-                ], 400);
+                $msg = 'Already processed or invalid order';
+                return redirect()->away(
+                    $frontendurl . '?status=failed&order_id=' . $order_id . '&message=' . urlencode($msg)
+                );
             }
 
             $payment->update([
@@ -220,7 +223,7 @@ class PaymentController extends Controller
                 'gateway_order_id'  => $order_id,
                 'transaction_id'    => $CIN,
                 'GRN_number'        => $grn,
-                'payment_datetime'      => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime),
+                'payment_datetime'      => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime)->toIso8601String(),
                 'gateway_response'  => json_encode($request->all()),
                 'updated_at' => now()
             ]);
@@ -230,7 +233,10 @@ class PaymentController extends Controller
                 $ids = json_decode($payment->application_id, true);
 
                 if (!is_array($ids) || count($ids) === 0) {
-                    return response()->json(['status' => 0, 'message' => 'Invalid application IDs'], 400);
+                    $msg = 'Invalid application IDs';
+                    return redirect()->away(
+                        $frontendurl . '?status=failed&order_id=' . $order_id . '&message=' . urlencode($msg)
+                    );
                 }
 
                 $applications = UserServiceApplication::whereIn('id', $ids)->get();
@@ -245,7 +251,7 @@ class PaymentController extends Controller
                         'status'           => 'submitted',
                         'GRN_number'       => $grn,
                         'payment_transId'  => $CIN,
-                        'payment_time'     => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime),
+                        'payment_time'     => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime)->toIso8601String(),
                         'updated_at'       => now(),
                     ]);
                 }
@@ -255,20 +261,36 @@ class PaymentController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'status' => 1,
-                'order_id' => $order_id,
-                'message' => 'Payment processed successfully',
-            ]);
+            if ($status == 'success') {
+                $msg = 'Payment processed successfully';
+                return redirect()->away(
+                    $frontendurl
+                        . '?status=success'
+                        . '&order_id=' . $order_id
+                        . '&amount=' . $total
+                        . '&message=' . urlencode($msg)
+                );
+            } else {
+                $msg = 'Payment failed with status: ' . $status;
+                return redirect()->away(
+                    $frontendurl
+                        . '?status=failed'
+                        . '&order_id=' . $order_id
+                        . '&amount=' . $total
+                        . '&message=' . urlencode($msg)
+                );
+            }
         } catch (\Exception $e) {
 
             DB::rollBack();
 
-            return response()->json([
-                'status' => 0,
-                'message' => 'Something went wrong.',
-                'error' => $e->getMessage(),
-            ], 500);
+            $msg = 'Exception: ' . $e->getMessage();
+
+            return redirect()->away(
+                config('payment.frontendurl')
+                    . '?status=failed'
+                    . '&message=' . urlencode($msg)
+            );
         }
     }
 
@@ -389,20 +411,21 @@ class PaymentController extends Controller
 
                     $amount = $application->total_fee;
                     $payment_type = 'Application Fee Payment';
-
                 } elseif (!is_null($application->extra_payment)) {
 
                     $amount = $application->extra_payment;
                     $payment_type = 'Extra Payment Raised';
-                    
                 }
                 $response_data[] = [
+                    'user_service_application_id' => $application->id,
                     'application_id' => $application->applicationId,
                     'service_title_or_description' => $application->service->service_title_or_description ?? null,
                     'application_date' => $application->application_date ?? null,
                     'payment_type' => $payment_type,
                     'amount' => $amount,
                     'payment_status'  => $application->payment_status ?? null,
+                    'grn_number'  => $application->GRN_number ?? null,
+                    'payment_date'  => $application->payment_datetime ?? null,
                 ];
             }
 
