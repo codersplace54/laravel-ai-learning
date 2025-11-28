@@ -13,5 +13,4 @@ return [
     'department_code' => env('EGRAS_DEPARTMENT_CODE'),
     'remarks' => env('EGRAS_REMARKS'),
     'return_url' => env('EGRAS_RETURN_URL'),
-    'secret_key' => env('EGRAS_SECRET_KEY'),
 ];

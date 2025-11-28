@@ -38,7 +38,6 @@ use App\Http\Controllers\Service\ExistingLicenseController;
 use App\Http\Controllers\Dashboard\DashboardController;
 use App\Http\Controllers\KyaController;
 use App\Http\Controllers\Service\PaymentController;
-use App\Http\Controllers\Service\FeedbackController;
 
 
 Route::prefix('user')->group(function () {
@@ -197,6 +196,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
         Route::post('calculate-fee', [UserServiceApplicationController::class, 'calculate_fee']);
 
+        Route::post('process-payment', [PaymentController::class, 'process_payment']);
         Route::post('update-payment', [PaymentController::class, 'update_payment']);
         Route::post('user-service-applications-by-payment-status', [PaymentController::class, 'user_service_applications_by_payment_status']);
 
@@ -219,10 +219,6 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('/get-total-applications-by-user', [DashboardController::class, 'get_total_applications_by_user']);
 
     Route::post('calculate-renewal-fee', [UserServiceApplicationController::class, 'calculate_renewal_fee']);
-     Route::post('update-renewed-application', [UserServiceApplicationController::class, 'update_renewed_application']);
-
-    Route::post('service-feedback-store', [FeedbackController::class, 'service_feedback_store']);
-    Route::post('service-feedback-list', [FeedbackController::class, 'service_feedback_list']);
     Route::post('update-renewed-application', [UserServiceApplicationController::class, 'update_renewed_application']);
     Route::post('get-applications-ready-for-renewal', [UserServiceApplicationController::class, 'get_applications_ready_for_renewal']);
     Route::post('service/renewal-cycles', [UserServiceApplicationController::class, 'get_service_renewal_cycles']);
