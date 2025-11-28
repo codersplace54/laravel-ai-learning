@@ -10,6 +10,7 @@ class UserFeedback extends Model
     protected $fillable = [
         'id',
         'user_id',
+        'service_id',
         'department_id',
         'satisfaction',
         'feedback',
@@ -17,6 +18,11 @@ class UserFeedback extends Model
         'created_at',
         'updated_at',
     ];
+
+    public function service()
+    {
+        return $this->belongsTo(ServiceMaster::class);
+    }
 
     public function department()
     {
