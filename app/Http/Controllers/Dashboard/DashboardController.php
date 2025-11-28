@@ -153,8 +153,8 @@ class DashboardController extends Controller
                     $workflow   = $application->workflow ?? collect();
 
                     $latest_send_back_step = $workflow->where('status', 'send_back')
-                    ->sortByDesc('action_taken_at')
-                    ->first();
+                        ->sortByDesc('action_taken_at')
+                        ->first();
 
                     $send_back_date = $latest_send_back_step
                         ? Carbon::parse($latest_send_back_step->action_taken_at)
@@ -212,9 +212,13 @@ class DashboardController extends Controller
                     $count = $applications->count();
 
                     foreach ($applications as $application) {
-                        $total_days += $application->application_date->diffInDays(
-                            $application->latestWorkflow->updated_at
-                        );
+                        $workflow = $application->latestWorkflow;
+
+                        if (!$workflow || !$workflow->updated_at) {
+                            continue;
+                        }
+
+                        $total_days += $application->application_date->diffInDays($workflow->updated_at);
                     }
 
                     $avg_days = $count > 0 ? $total_days / $count : 0;
