@@ -200,7 +200,7 @@ class UserServiceApplicationController extends Controller
                         'renewalYear'           => $request->renewalYear,
                         //  'applicationId'         => $application_number,
                         'application_date'      => $request->application_date ?? now(),
-                        'status'                => $request->status ?? 're_submitted',
+                        'status'                => $request->status ?? 'saved',
                         'application_data'      => $user_service_application->application_data,
                         'applied_fee'           => $request->applied_fee,
                         'approved_fee'          => $request->approved_fee,
@@ -524,6 +524,15 @@ class UserServiceApplicationController extends Controller
             $target_days = $service->target_days ?? 0;
             $max_processing_date = $this->add_working_days($application_date, $target_days);
 
+            // if ($user_service_application->extra_payment != null && $user_service_application->payment_status == "pending") {
+            //     if ($request->extra_payment == null || $request->extra_payment != $user_service_application->extra_payment) {
+            //         return response()->json([
+            //             'status' => 0,
+            //             'message' => "An extra payment of Rs. $user_service_application->extra_payment has been raised. Please make the payment."
+            //         ], 403);
+            //     }
+            // }
+
             $total_fee =  $final_fee;
             $previous_paid = $user_service_application->paid_amount ?? 0;
             $effective_fee = $total_fee - $previous_paid;
@@ -539,7 +548,7 @@ class UserServiceApplicationController extends Controller
                 'renewalYear'           => $request->renewalYear,
                 // 'applicationId'         => $request->applicationId,
                 'application_date'      => $request->application_date ?? now(),
-                'status'                => $request->status ?? 're_submitted',
+                'status'                => $request->status ?? 'saved',
                 'application_data'      => json_encode($request->application_data ?? null),
                 'applied_fee'           => $request->applied_fee,
                 'approved_fee'          => $request->approved_fee,
@@ -736,6 +745,7 @@ class UserServiceApplicationController extends Controller
 
         $previous_paid = 0;
         $db_extra_payment = 0;
+        $effective_fee = 0;
 
         if ($application_id) {
             $existing_application = UserServiceApplication::find($application_id);
@@ -751,7 +761,9 @@ class UserServiceApplicationController extends Controller
 
         $final_fee += $extra_payment;
 
-        $effective_fee = max($final_fee - $previous_paid, 0);
+        if (!empty($previous_paid)) {
+            $effective_fee = max($final_fee - $previous_paid, 0);
+        }
 
         return [
             'final_fee'     => round($final_fee, 2),
@@ -782,9 +794,11 @@ class UserServiceApplicationController extends Controller
             $service_id = $request->service_id;
             $application_data = $request->application_data;
             $application_id = $request->application_id;
-            $request_extra_payment = $request->extra_payment;
+         //   $request_extra_payment = $request->extra_payment;
 
-            $final_fee = $this->calculate_final_fee($service_id, $application_data, $application_id, $request_extra_payment);
+            $extra_payment = UserServiceApplication::where('id', $application_id)->value('extra_payment');
+
+            $final_fee = $this->calculate_final_fee($service_id, $application_data, $application_id, $extra_payment);
 
             return response()->json([
                 'status' => 1,
@@ -1659,6 +1673,13 @@ class UserServiceApplicationController extends Controller
 
             $application = UserServiceApplication::where('id', $request->application_id)->first();
 
+            if ($application->payment_status === 'paid') {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'This application is already marked as paid.',
+                ], 400);
+            }
+
             $effective_fee = $application->effective_fee;
             $total_fee     = $application->total_fee ?? 0;
 
@@ -1672,15 +1693,17 @@ class UserServiceApplicationController extends Controller
                 'payment_status' => 'paid',
                 'payment_time'   => now(),
                 'paid_amount'    => $final_paid_amount,
+                'status'         => "submitted",
             ]);
 
             PaymentOrder::create([
                 'application_id'    => json_encode([(int) $request->application_id]),
+                'user_id'           => $application->user_id,
                 'payment_status'    => 'success',
                 'payment_amount'    => $application->total_fee,
                 'gateway'           => 'offline',
                 'GRN_number'        => $request->application_id,
-                'payment_datetime'  => now()->toIso8601String(),
+                'payment_datetime'  => now(),
                 'gateway_response'  => null,
                 'updated_at' => now()
             ]);
@@ -1695,6 +1718,7 @@ class UserServiceApplicationController extends Controller
                     'comments'       => $application->comments,
                     'payment_time'   => $application->payment_time,
                     'paid_amount'    => $application->total_fee,
+                    'status'         => "submitted"
                 ]
             ]);
         } catch (\Exception $e) {
@@ -1761,6 +1785,7 @@ class UserServiceApplicationController extends Controller
 
             $renewal_data[] = [
                 'renewal_cycle_id'   => $cycle->id,
+                'renewal_title'      => $cycle->renewal_title,
                 'can_renew'          => $can_renew,
                 'renewal_start_date' => optional($renewal_start)->toDateString(),
                 'renewal_end_date'   => optional($renewal_end)->toDateString(),
@@ -2187,5 +2212,147 @@ class UserServiceApplicationController extends Controller
         }
 
         return $application_number;
+    }
+
+    public function get_applications_ready_for_renewal()
+    {
+
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+
+            $user_id = Auth::id();
+
+            $service = UserServiceApplication::where('user_id', $user_id)->with(['service.renewalCycles']);
+
+            $applications = $service->get();
+
+            $renewable_applications = [];
+
+            foreach ($applications as $app) {
+
+                $renewal_details = $this->get_renewal_details($app);
+                $canRenew = collect($renewal_details['renewal_cycles'])
+                    ->contains(fn($cycle) => $cycle['can_renew'] === true);
+
+                $renewal_details = $this->get_renewal_details($app);
+
+                if ($canRenew) {
+                    $renewable_applications[] = [
+                        'application_id'     => $app->id,
+                        'application_number' => $app->applicationId,
+                        'service_id'         => $app->service_id,
+                        'service_name'       => $app->service->service_name ?? null,
+                        'department_name'    => $app->service->department->name,
+                        'status'             => $app->status ?? null,
+                        'expiry_date'        => $renewal_details['expiry_date'],
+                        'renewal_start_date' => $renewal_details['renewal_cycles'][0]['renewal_start_date'] ?? null,
+                        'renewal_end_date'   => $renewal_details['renewal_cycles'][0]['renewal_end_date'] ?? null,
+                        // 'renewal_cycles'     => $renewal_details['renewal_cycles'],
+                    ];
+                }
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Applications eligible for renewal retrieved successfully.',
+                'data' => $renewable_applications,
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to retrieve renewable applications.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function get_service_renewal_cycles(Request $request)
+    {
+
+        $request->validate([
+            'service_id' => 'nullable|integer|exists:service_masters,id'
+        ]);
+
+        $service = ServiceMaster::with('renewalCycles')->find($request->service_id);
+
+        if (!$service) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Service not found'
+            ], 404);
+        }
+
+        $cycles = [];
+        $today = Carbon::today();
+
+        foreach ($service->renewalCycles as $cycle) {
+
+            $renewal_start = null;
+            $renewal_end   = null;
+
+            if (!empty($cycle->fixed_renewal_start_date) && !empty($cycle->fixed_renewal_end_date)) {
+
+                $renewal_start = Carbon::parse($cycle->fixed_renewal_start_date);
+                $renewal_end   = Carbon::parse($cycle->fixed_renewal_end_date);
+            } else {
+
+                if (!empty($service->noc_validity)) {
+                    $expiry_date = $today->copy()->addDays((int) $service->noc_validity);
+                } elseif (!empty($service->fixed_expiry_date)) {
+                    $expiry_date = Carbon::parse($service->fixed_expiry_date);
+                } else {
+                    $expiry_date = null;
+                }
+
+                if ($expiry_date) {
+
+                    if (!empty($cycle->renewal_target_days)) {
+                        $renewal_start = $expiry_date->copy()->subDays((int)$cycle->renewal_target_days);
+                        $renewal_end   = $expiry_date->copy();
+                    }
+
+                    if (!empty($cycle->renewal_window_days)) {
+                        $window_start = $expiry_date->copy();
+                        $window_end   = $expiry_date->copy()->addDays((int)$cycle->renewal_window_days);
+
+                        if (!$renewal_start || $window_start < $renewal_start) {
+                            $renewal_start = $window_start;
+                        }
+
+                        if (!$renewal_end || $window_end > $renewal_end) {
+                            $renewal_end = $window_end;
+                        }
+                    }
+                }
+            }
+
+            $cycles[] = [
+                'id'                  => $cycle->id,
+                'renewal_title'       => $cycle->renewal_title ?? null,
+                'renewal_start_date' => optional($renewal_start)->toDateString(),
+                'renewal_end_date'   => optional($renewal_end)->toDateString(),
+                'pre_window_days'          => $cycle->renewal_target_days,
+                'post_window_days'          => $cycle->renewal_window_days,
+                'late_fee_type'      => $cycle->late_fee_calculation_dynamic,
+                'late_fee_amount'    => $cycle->late_fee_fixed_amount,
+                'late_fee_applicable' => $cycle->late_fee_applicable,
+            ];
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Renewal cycles fetched successfully',
+            'service_id' => $service->id,
+            'service_name' => $service->service_name,
+            'cycles' => $cycles
+        ]);
     }
 }
