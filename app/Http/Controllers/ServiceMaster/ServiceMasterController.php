@@ -72,14 +72,6 @@ class ServiceMasterController extends Controller
 
             DB::beginTransaction();
 
-            $service_code = sprintf(
-                "%04d-%02d-%03d-%02d-%02d",
-                rand(1000, 9999),
-                rand(0, 99),
-                rand(0, 999),
-                rand(0, 99),
-                rand(0, 99)
-            );
             
             $service_master = ServiceMaster::create([
                 'added_by' => Auth::id(),
@@ -118,7 +110,7 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? 1,
                 'created_by' => $admin->email_id,
-                'service_code'=> $service_code,
+                'service_code'=> "1475-00-106-21-06",
             ]);
 
             $service_master->depends_on_services = json_decode($service_master->depends_on_services, true);
