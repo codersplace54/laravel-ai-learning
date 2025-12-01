@@ -49,44 +49,44 @@ class PaymentController extends Controller
                 ], 404);
             }
 
-            $total_amount = $applications->sum('total_fee');
-
-            $payment_order = PaymentOrder::create([
-                'user_id' => $user_id,
-                'application_id' => json_encode($application_ids),
-                'payment_amount' => $total_amount,
-                'payment_created_on' => now(),
-                'payment_updated_on' => now(),
-                'payment_status' => 'initiated',
-                'transaction_id' => null,
-            ]);
-
-            DB::commit();
-
-            $total_amount = $applications->sum('total_fee');
-            $scheme_count = $applications->count();
-
-            $order_id = $payment_order->id;
-            $dept_code = 'FIN';
-            $dto_code = '99';
-            $ddo_code = '99001';
-            $sto_code = '99';
-            $user_id = "finswgt";
-            $valid_upto = Carbon::today()->format('d/m/Y');
-
-            $scheme_count = $scheme_count;
-
             $scheme_names = [];
             $fee_amounts  = [];
 
             foreach ($applications as $application) {
+                if ($application->extra_payment !== null && $application->payment_status === 'pending') {
+                    $amount = $application->extra_payment;
+                } else {
+                    $amount = $application->effective_fee ?? $application->total_fee ?? 0;
+                }
+
                 $scheme_names[] = $application->service->service_code ?? 'NA';
-                $fee_amounts[]  = $application->total_fee ?? 0;
+                $fee_amounts[]  = $amount;
             }
 
             $scheme_count = count($scheme_names);
-            $return_url = request()->getSchemeAndHttpHost() . '/api/user/payment-callback';
+            $total_amount = array_sum($fee_amounts); 
 
+            $payment_order = PaymentOrder::create([
+                'user_id'            => $user_id,
+                'application_id'     => json_encode($application_ids),
+                'payment_amount'     => $total_amount,
+                'payment_created_on' => now(),
+                'payment_updated_on' => now(),
+                'payment_status'     => 'initiated',
+                'transaction_id'     => null,
+            ]);
+
+            DB::commit();
+
+            $order_id   = $payment_order->id;
+            $dept_code  = 'FIN';
+            $dto_code   = '99';
+            $ddo_code   = '99001';
+            $sto_code   = '99';
+            $egrasUserId = 'finswgt'; 
+            $valid_upto = Carbon::today()->format('d/m/Y');
+
+            $return_url = request()->getSchemeAndHttpHost() . '/api/user/payment-callback';
             $secret_key = config('egras.secret_key');
 
             $hash_parts = [
@@ -94,11 +94,11 @@ class PaymentController extends Controller
                 $sto_code,
                 $ddo_code,
                 $dept_code,
-                $user_id,
+                $egrasUserId,
                 $order_id,
                 $user->authorized_person_name,
                 $user->mobile_no,
-                $total_amount,
+                $total_amount,      
                 $scheme_count,
             ];
 
@@ -109,9 +109,7 @@ class PaymentController extends Controller
 
             $hash_parts[] = $return_url;
 
-            $hash_string = implode('|', $hash_parts);
-
-            $hash = base64_encode(hash_hmac('sha256', $hash_string, $secret_key, true));
+            $hash        = base64_encode(hash_hmac('sha256', implode('|', $hash_parts), $secret_key, true));
 
             $form_html  = '<html><body>';
             $form_html .= '<p>Review and edit values before sending to e-GRAS.</p>';
@@ -122,7 +120,7 @@ class PaymentController extends Controller
             $form_html .= '<tr><td>STO Code</td><td><input type="text" name="STO" value="' . $sto_code . '"/></td></tr>';
             $form_html .= '<tr><td>DDO Code</td><td><input type="text" name="DDO" value="' . $ddo_code . '"/></td></tr>';
             $form_html .= '<tr><td>Department Code</td><td><input type="text" name="Deptcode" value="' . $dept_code . '"/></td></tr>';
-            $form_html .= '<tr><td>User ID</td><td><input type="text" name="UserID" value="' . $user_id . '"/></td></tr>';
+            $form_html .= '<tr><td>User ID</td><td><input type="text" name="UserID" value="' . $egrasUserId . '"/></td></tr>';
             $form_html .= '<tr><td>Order id</td><td><input type="text" name="Applicationnumber" value="' . $order_id . '"/></td></tr>';
             $form_html .= '<tr><td>Full Name</td><td><input type="text" name="Fullname" value="' . $user->authorized_person_name . '"/></td></tr>';
             $form_html .= '<tr><td>City</td><td><input type="text" name="Cityname" value="' . $user->registered_enterprise_city . '"/></td></tr>';
@@ -141,6 +139,7 @@ class PaymentController extends Controller
             $form_html .= '<tr><td>Hash</td><td><input type="text" name="hash" value="' . $hash . '"/></td></tr>';
             $form_html .= '<tr><td>Return URL</td><td><input type="text" name="UURL" value="' . $return_url . '"/></td></tr>';
             $form_html .= '<tr><td>Scheme Count</td><td><input type="text" name="SCHEMECOUNT" value="1"/></td></tr>';
+            
             for ($i = 0; $i < $scheme_count; $i++) {
                 $idx = $i + 1;
                 $schemeName = htmlspecialchars($scheme_names[$i], ENT_QUOTES, 'UTF-8');
@@ -163,6 +162,7 @@ class PaymentController extends Controller
             return response()->json([
                 'status' => 0,
                 'status_message' => $e->getMessage(),
+                'line' => $e->getLine(),
             ], 500);
         }
     }
@@ -250,21 +250,19 @@ class PaymentController extends Controller
 
                 $applications = UserServiceApplication::whereIn('id', $ids)->get();
 
-                foreach ($applications as $app) {
+                foreach ($applications as $application) {
 
-                    if (!is_null($app->total_fee)) {
-
-                        $amount_to_pay = $app->total_fee;
-                        $status = 'submitted';
-                    } elseif (!is_null($app->extra_payment)) {
-
-                        $amount_to_pay = $app->extra_payment;
+                    if ($application->extra_payment != null && $application->payment_status == "pending") {
+                        $amount = $application->extra_payment;
                         $status = 're_submitted';
+                    } else {
+                        $amount = $application->effective_fee ?? $application->total_fee ?? 0;
+                        $status = 'submitted';
                     }
 
-                    UserServiceApplication::where('id', $app->id)->update([
+                    UserServiceApplication::where('id', $application->id)->update([
                         'payment_status'   => 'paid',
-                        'paid_amount'      => $amount_to_pay,
+                        'paid_amount'      => $amount,
                         'status'           => $status,
                         'GRN_number'       => $grn,
                         'payment_transId'  => $CIN,
@@ -424,15 +422,14 @@ class PaymentController extends Controller
                 $amount = null;
                 $payment_type = null;
 
-                if (!is_null($application->total_fee)) {
-
-                    $amount = $application->total_fee;
-                    $payment_type = 'Application Fee Payment';
-                } elseif (!is_null($application->extra_payment)) {
-
+                if ($application->extra_payment != null && $application->payment_status == "pending") {
                     $amount = $application->extra_payment;
                     $payment_type = 'Extra Payment Raised';
+                } else {
+                    $amount = $application->effective_fee ?? $application->total_fee ?? 0;
+                    $payment_type = 'Application Fee Payment';
                 }
+
                 $response_data[] = [
                     'user_service_application_id' => $application->id,
                     'application_id' => $application->applicationId,

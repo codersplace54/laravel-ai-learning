@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\KyaMaster;
-use App\Models\KyaUtility;
 use Illuminate\Http\Request;
 use Exception;
 
@@ -17,6 +16,7 @@ class KyaController extends Controller
     {
         try {
             $sectors = KyaMaster::query()
+                ->where('approval_type', 'industry')
                 ->whereNotNull('sector')
                 ->distinct()
                 ->orderBy('sector')
@@ -58,6 +58,7 @@ class KyaController extends Controller
             );
 
             $riskCategories = KyaMaster::query()
+                ->where('approval_type', 'industry')
                 ->where('sector', $request->sector)
                 ->whereNotNull('risk_category')
                 ->distinct()
@@ -101,6 +102,7 @@ class KyaController extends Controller
             );
 
             $industry_sectors = KyaMaster::query()
+                ->where('approval_type', 'industry')
                 ->where('sector', $request->sector)
                 ->whereNotNull('industry_sector')
                 ->distinct()
@@ -143,7 +145,8 @@ class KyaController extends Controller
                 ]
             );
 
-            $questions = KyaMaster::query()
+            $industry_questions = KyaMaster::query()
+                ->where('approval_type', 'industry')
                 ->where('industry_sector', $request->industry)
                 ->orderBy('serial_no')
                 ->get([
@@ -157,22 +160,36 @@ class KyaController extends Controller
                     'risk_category',
                 ]);
 
-            $utility_questions = KyaUtility::pluck('question');
+            $utility_questions = KyaMaster::query()
+                ->where('approval_type', 'utility')
+                ->orderBy('serial_no')
+                ->get([
+                    'id',
+                    'serial_no',
+                    'question',
+                    'department',
+                    'approval_name',
+                    'stage_of_business',
+                    'sla_days',
+                ]);
+
 
             return response()->json([
                 'status'   => true,
                 'industry' => $request->industry,
-                'risk_category' => $questions->first()->risk_category ?? null,
-                'industry'     => $questions,
+                'risk_category' => $industry_questions->first()->risk_category ?? null,
+                'industry'     => $industry_questions,
                 'utility'     => $utility_questions,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
+
             return response()->json([
                 'status'  => false,
                 'message' => 'Validation failed',
                 'errors'  => $e->errors(),
             ], 422);
         } catch (Exception $e) {
+
             return response()->json([
                 'status'  => false,
                 'message' => 'Failed to fetch questions.',
@@ -185,66 +202,77 @@ class KyaController extends Controller
      * Return Approval Details for a selected question/record
      */
     public function get_approval_details(Request $request)
-{
-    try {
-        $request->validate([
-            'ids'          => 'nullable|array',
-            'utility_ids'  => 'nullable|array',
-        ]);
+    {
+        try {
+            $request->validate([
+                'ids'         => 'nullable|array', 
+                'utility_ids' => 'nullable|array', 
+            ]);
 
-        // Fetch approvals
-        $records = $request->ids
-            ? KyaMaster::whereIn('id', $request->ids)->get()
-            : collect();
+            $industry_ids = $request->ids ?? [];
+            $utility_ids  = $request->utility_ids ?? [];
 
-        // Fetch utilities only if utility_ids exist
-        $utilities = $request->utility_ids
-            ? KyaUtility::whereIn('id', $request->utility_ids)->get()
-            : collect();
+            $industry_records = [];
+            if (!empty($industry_ids)) {
+                $industry_rows = KyaMaster::where('approval_type', 'industry')
+                    ->whereIn('id', $industry_ids)
+                    ->get();
 
-        // Map approval data
-        $mapped = $records->map(function ($item) {
-            return [
-                'id'                 => $item->id,
-                'approval_name'      => $item->approval_name,
-                'stage_of_business'  => $item->stage_of_business,
-                'sla_days'           => $item->sla_days,
-                'steps'              => $item->steps,
-                'documents_required' => $item->documents_required,
-                'fees'               => $item->fees,
-                'legal_provision'    => $item->legal_provision,
-                'more_info'          => $item->more_info,
-            ];
-        });
+                foreach ($industry_rows as $row) {
+                    $industry_records[] = [
+                        'id'                 => $row->id,
+                        'approval_name'      => $row->approval_name,
+                        'stage_of_business'  => $row->stage_of_business,
+                        'sla_days'           => $row->sla_days,
+                        'steps'              => $row->steps,
+                        'documents_required' => $row->documents_required,
+                        'fees'               => $row->fees,
+                        'legal_provision'    => $row->legal_provision,
+                        'more_info'          => $row->more_info,
+                    ];
+                }
+            }
 
-        // Map utility data
-        $utilities_data = $utilities->map(function ($item) {
-            return [
-                'id'       => $item->id,
-                'question' => $item->question,
-            ];
-        });
+            $utility_records = [];
+            if (!empty($utility_ids)) {
+                $utility_rows = KyaMaster::where('approval_type', 'utility')
+                    ->whereIn('id', $utility_ids)
+                    ->get();
 
-        return response()->json([
-            'status'         => true,
-            'records'        => $mapped,
-            'utilities_data' => $utilities_data,
-        ]);
+                foreach ($utility_rows as $row) {
+                    $utility_records[] = [
+                        'id'                 => $row->id,
+                        'approval_name'      => $row->approval_name,
+                        'stage_of_business'  => $row->stage_of_business,
+                        'sla_days'           => $row->sla_days,
+                        'steps'              => $row->steps,
+                        'documents_required' => $row->documents_required,
+                        'fees'               => $row->fees,
+                        'legal_provision'    => $row->legal_provision,
+                        'more_info'          => $row->more_info,
+                    ];
+                }
+            }
 
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        return response()->json([
-            'status'  => false,
-            'message' => 'Validation failed',
-            'errors'  => $e->errors(),
-        ], 422);
+            return response()->json([
+                'status'  => true,
+                'records' => $industry_records,
+                'utilities_data'  => $utility_records,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
 
-    } catch (Exception $e) {
-        return response()->json([
-            'status'  => false,
-            'message' => 'Failed to retrieve approval details.',
-            'error'   => $e->getMessage(),
-        ], 500);
+            return response()->json([
+                'status'  => false,
+                'message' => 'Validation failed',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (Exception $e) {
+            
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to retrieve approval details.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
     }
-}
-
 }
