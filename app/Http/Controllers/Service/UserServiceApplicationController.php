@@ -42,7 +42,7 @@ class UserServiceApplicationController extends Controller
                 'renewalYear'           => 'nullable|integer|min:1|max:10',
                 'applicationId'         => 'nullable|string|max:255',
                 'application_date'      => 'nullable|date',
-                'status'                => 'nullable|in:submitted,under_review,approved,rejected,re_submitted,send_back,saved',
+                'status'                => 'nullable|in:submitted,under_review,approved,rejected,re_submitted,send_back,saved, expired',
                 'application_data'      => 'nullable|array',
                 'applied_fee'           => 'nullable|numeric',
                 'approved_fee'          => 'nullable|numeric',
@@ -452,7 +452,7 @@ class UserServiceApplicationController extends Controller
                 'renewalYear'          => 'nullable|integer|min:1|max:10',
                 'applicationId'        => 'nullable|string|max:255',
                 'application_date'     => 'nullable|date',
-                'status'                => 'in:submitted,under_review,approved,rejected,re_submitted,send_back,saved',
+                'status'                => 'in:submitted,under_review,approved,rejected,re_submitted,send_back,saved, expired',
                 'application_data'     => 'nullable|array',
                 'applied_fee'          => 'nullable|numeric',
                 'approved_fee'         => 'nullable|numeric',
@@ -794,7 +794,7 @@ class UserServiceApplicationController extends Controller
             $service_id = $request->service_id;
             $application_data = $request->application_data;
             $application_id = $request->application_id;
-         //   $request_extra_payment = $request->extra_payment;
+            //   $request_extra_payment = $request->extra_payment;
 
             $extra_payment = UserServiceApplication::where('id', $application_id)->value('extra_payment');
 
@@ -1708,17 +1708,6 @@ class UserServiceApplicationController extends Controller
                 'updated_at' => now()
             ]);
 
-            PaymentOrder::create([
-                'application_id'    => json_encode([(int) $request->application_id]),
-                'payment_status'    => 'success',
-                'payment_amount'    => $application->total_fee,
-                'gateway'           => 'offline',
-                'GRN_number'        => $request->application_id,
-                'payment_datetime'  => now()->toIso8601String(),
-                'gateway_response'  => null,
-                'updated_at' => now()
-            ]);
-
             return response()->json([
                 'status' => 1,
                 'message' => 'Application marked as paid successfully.',
@@ -1921,9 +1910,7 @@ class UserServiceApplicationController extends Controller
         $final_fee += $late_fee;
 
         return [
-            'final_fee'        => round($final_fee, 2),
-            'late_fee'         => round($late_fee, 2),
-            'effective_fee'    => round($final_fee, 2)
+            'renewal_fee'        => round($final_fee, 2)
         ];
     }
 
@@ -2014,13 +2001,13 @@ class UserServiceApplicationController extends Controller
             ], 400);
         }
 
-        if ($selected_cycle_details['can_renew'] === false) {
-            return response()->json([
-                'status' => 0,
-                'message' => 'Renewal window is not active for selected cycle.',
-                'details' => $selected_cycle_details
-            ], 400);
-        }
+        // if ($selected_cycle_details['can_renew'] === false) {
+        //     return response()->json([
+        //         'status' => 0,
+        //         'message' => 'Renewal window is not active for selected cycle.',
+        //         'details' => $selected_cycle_details
+        //     ], 400);
+        // }
 
         $final_fee = $this->calculate_renewal_final_fee(
             $application->service_id,
@@ -2119,7 +2106,7 @@ class UserServiceApplicationController extends Controller
             $new_application = UserServiceApplication::create([
                 'user_id'                   => $old_application->user_id,
                 'service_id'                => $old_application->service_id,
-                'renewal_cycle_id'          => $request->renewal_cycle_id,
+                'renewal_cycle_id'          => null,
                 'remarks'                   => $request->remarks,
                 'application_date'          =>  now(),
                 'previous_application_id' => $old_application->id,
@@ -2127,8 +2114,8 @@ class UserServiceApplicationController extends Controller
                 'renewalYear'            => now()->year,
                 'application_data'        => json_encode($final_data),
                 'PreviousNOCexpiryDate'   => $previous_noc_expiry_date,
-                'total_fee'               => $calculated_fee['final_fee'],
-                'final_fee'               => $calculated_fee['final_fee'],
+                'total_fee'               => $calculated_fee['renewal_fee'],
+                'final_fee'               => $calculated_fee['renewal_fee'],
                 'effective_fee'           => 0,
                 'paid_amount'             => 0,
                 'payment_status'          => 'pending',
@@ -2144,6 +2131,10 @@ class UserServiceApplicationController extends Controller
 
             $new_application->update([
                 'applicationId' => $application_number
+            ]);
+
+            $old_application->update([
+                'status' => 'expired'
             ]);
 
             if ($status == "re_submitted") {
@@ -2239,7 +2230,9 @@ class UserServiceApplicationController extends Controller
 
             $user_id = Auth::id();
 
-            $service = UserServiceApplication::where('user_id', $user_id)->with(['service.renewalCycles']);
+            $service = UserServiceApplication::where('user_id', $user_id)
+            ->where('status', '!=', 'expired')
+            ->with(['service.renewalCycles']);
 
             $applications = $service->get();
 
