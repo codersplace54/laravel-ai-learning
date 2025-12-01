@@ -50,7 +50,8 @@ class ServiceMaster extends Model
         'created_by',
         'updated_by',
         'verification_token',
-        'is_special'
+        'is_special',
+        'service_code'
     ];
 
     protected $casts = [
