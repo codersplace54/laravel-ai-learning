@@ -31,6 +31,15 @@ class AuthController extends Controller
 
             $user = JWTAuth::setToken($token)->toUser();
 
+            if ($user->status == "blocked") {
+                JWTAuth::invalidate($token);
+
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Your account is inactive. Please contact admin.'
+                ], 403);
+            }
+
             $old_token_row = JWTToken::where('user_id', $user->id)->first();
 
             if ($old_token_row) {

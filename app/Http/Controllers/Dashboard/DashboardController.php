@@ -49,38 +49,38 @@ class DashboardController extends Controller
 
             $total_services_per_department = ServiceMaster::where('department_id', $department_id)->count();
 
-            $total_applications_for_this_department = Department::find($department_id)->applications()->count();
-
-            $percentage_total_application = $total_applications_for_this_department > 0
-                ? min(100, round(($total_applications_for_this_department / $total_services_per_department) * 100, 2))
-                : 0;
-
-            $total_count_pending_application_in_department = ApplicationWorkflowAssignment::where('status', 'pending')
-                ->where('hierarchy_level', $hierarchy_level)
-                ->where('department_id', $request->department_id)
-                ->distinct('application_id')
-                ->count('application_id');
+            $total_applications_for_this_department = ApplicationWorkflowAssignment::select('application_id')
+                ->where('department_id', $department_id)
+                ->groupBy('application_id')
+                ->count();
 
 
-            $total_count_approved_application_in_department = ApplicationWorkflowAssignment::where('status', 'approved');
+            $percentage_total_application = 100;
+
+            $department_app_ids = ApplicationWorkflowAssignment::where('department_id', $department_id)
+                ->pluck('application_id')
+                ->unique();
+
+            $total_count_pending_application_in_department = UserServiceApplication::whereIn('id', $department_app_ids)
+                ->where('status', ['pending', 'under_review','re_submitted', 'saved', 'submitted'])
+                ->count();
+
+            $total_count_approved_application_in_department = UserServiceApplication::whereIn('id', $department_app_ids)
+                ->where('status', 'approved')
+                ->count();
 
             $percentage_pending_application = $total_applications_for_this_department > 0
                 ? min(100, round(($total_count_pending_application_in_department / $total_applications_for_this_department) * 100, 2))
                 : 0;
-
-            $total_count_approved_application_in_department = ApplicationWorkflowAssignment::query()
-
-                ->where('hierarchy_level', $hierarchy_level)
-                ->where('department_id', $request->department_id)
-                ->distinct('application_id')
-                ->count('application_id');
 
 
             $percentage_approved_application = $total_applications_for_this_department > 0
                 ? min(100, round(($total_count_approved_application_in_department / $total_applications_for_this_department) * 100, 2))
                 : 0;
 
-            $total_count_rejected_application_in_department = UserServiceApplication::where('status', 'rejected')->count();
+            $total_count_rejected_application_in_department = UserServiceApplication::whereIn('id', $department_app_ids)
+                ->where('status', 'rejected')
+                ->count();
 
             $percentage_rejected_application = $total_applications_for_this_department > 0
                 ? min(100, round(($total_count_rejected_application_in_department / $total_applications_for_this_department) * 100, 2))

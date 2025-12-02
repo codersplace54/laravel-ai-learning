@@ -20,6 +20,8 @@ use App\Models\ApplicationWorkflowHistory;
 use App\Models\RenewalFeeRule;
 use App\Models\RenewalCycle;
 use App\Models\PaymentOrder;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\ApplicationsExport;
 
 
 class UserServiceApplicationController extends Controller
@@ -1593,7 +1595,7 @@ class UserServiceApplicationController extends Controller
         }
     }
 
-    public function get_all_applications_list()
+    public function get_all_applications_list(Request $request)
     {
 
         try {
@@ -1603,8 +1605,8 @@ class UserServiceApplicationController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-
-            $applications = UserServiceApplication::orderBy('id', 'DESC')->get();
+            $perPage = $request->per_page ?? 10;
+            $applications = UserServiceApplication::orderBy('id', 'DESC')->paginate($perPage);
 
             if ($applications->isEmpty()) {
                 return response()->json([
@@ -1632,6 +1634,7 @@ class UserServiceApplicationController extends Controller
                     'email_id' => $app->user->email_id ?? null,
                     'mobile_no' => $app->user->mobile_no ?? null,
                     'amount' => $amount,
+                    'payment_time' => $app->payment_time ?? null,
                     'expiry_date' => $app->NOC_expiry_date ?? null,
                     'status' => $app->payment_status,
                     'method' => null,
@@ -1639,10 +1642,45 @@ class UserServiceApplicationController extends Controller
                 ];
             }
 
+            if ($request->has('export') && $request->export == 'excel') {
+
+                $all = UserServiceApplication::orderBy('id', 'DESC')->get();
+
+                $export_data = [];
+
+                foreach ($all as $app) {
+                    $amount = !empty($app->effective_fee)
+                        ? $app->effective_fee
+                        : ($app->total_fee ?? 0);
+
+                    $export_data[] = [
+                        'id' => $app->id,
+                        'application_number' => $app->applicationId,
+                        'business' => $app->user->name_of_enterprise ?? null,
+                        'email_id' => $app->user->email_id ?? null,
+                        'mobile_no' => $app->user->mobile_no ?? null,
+                        'amount' => $amount,
+                        'payment_time' => $app->payment_time ?? null,
+                        'expiry_date' => $app->NOC_expiry_date ?? null,
+                        'status' => $app->payment_status,
+                        'method' => null,
+                        'comments' => $app->comments,
+                    ];
+                }
+
+                return Excel::download(new ApplicationsExport($export_data), 'applications.xlsx');
+            }
+
             return response()->json([
                 'status' => 1,
                 'message' => 'Applications fetched successfully.',
-                'data' => $response_data
+                'data' => $response_data,
+                'pagination' => [
+                    'current_page' => $applications->currentPage(),
+                    'last_page' => $applications->lastPage(),
+                    'per_page' => $applications->perPage(),
+                    'total' => $applications->total(),
+                ]
             ]);
         } catch (\Exception $e) {
 
@@ -1702,7 +1740,7 @@ class UserServiceApplicationController extends Controller
                 'payment_status'    => 'success',
                 'payment_amount'    => $application->total_fee,
                 'gateway'           => 'offline',
-                'GRN_number'        => $request->application_id,
+                'GRN_number'        => $request->GRN_number,
                 'payment_datetime'  => now(),
                 'gateway_response'  => null,
                 'updated_at' => now()
@@ -2231,8 +2269,8 @@ class UserServiceApplicationController extends Controller
             $user_id = Auth::id();
 
             $service = UserServiceApplication::where('user_id', $user_id)
-            ->where('status', '!=', 'expired')
-            ->with(['service.renewalCycles']);
+                ->where('status', '!=', 'expired')
+                ->with(['service.renewalCycles']);
 
             $applications = $service->get();
 

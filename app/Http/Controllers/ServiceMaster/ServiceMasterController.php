@@ -72,7 +72,7 @@ class ServiceMasterController extends Controller
 
             DB::beginTransaction();
 
-            
+
             $service_master = ServiceMaster::create([
                 'added_by' => Auth::id(),
                 'department_id' => $request->department_id,
@@ -105,12 +105,13 @@ class ServiceMasterController extends Controller
 
                 'service_mode' => $request->service_mode ?? "native",
                 'third_party_portal_name' => $request->third_party_portal_name,
+                'third_party_payment_mode' => $request->third_party_payment_mode ?? "unified",
                 'third_party_redirect_url' => $request->third_party_redirect_url,
                 'third_party_return_url' => $request->third_party_return_url,
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? 1,
                 'created_by' => $admin->email_id,
-                'service_code'=> "1475-00-106-21-06",
+                'service_code' => "1475-00-106-21-06",
             ]);
 
             $service_master->depends_on_services = json_decode($service_master->depends_on_services, true);
@@ -229,6 +230,7 @@ class ServiceMasterController extends Controller
 
                 'service_mode' => $request->service_mode,
                 'third_party_portal_name' => $request->third_party_portal_name,
+                'third_party_payment_mode' => $request->third_party_payment_mode ?? $service->third_party_payment_mode,
                 'third_party_redirect_url' => $request->third_party_redirect_url,
                 'third_party_return_url' => $request->third_party_return_url,
                 'third_party_status_api_url' => $request->third_party_status_api_url,
@@ -359,7 +361,7 @@ class ServiceMasterController extends Controller
         }
     }
 
-    public function fetch_all_services()
+    public function fetch_all_services(Request $request)
     {
 
         try {
@@ -372,6 +374,8 @@ class ServiceMasterController extends Controller
             $user = Auth::user();
 
             $approval_flow_service = ServiceApprovalFlow::with('service_approval_flows')->pluck('service_id')->toArray();
+
+            $department_id = $request->department_id ?? null;
 
             $services = ServiceMaster::with([
                 'department:id,name',
@@ -399,6 +403,10 @@ class ServiceMasterController extends Controller
                     'verification_token',
                     'is_special'
                 ])
+                ->when($department_id, function ($query) use ($department_id) {
+                    $query->where('department_id', $department_id);
+                })
+
                 ->when($user->user_type === 'individual', function ($query) use ($approval_flow_service) {
                     $query->where(function ($q) use ($approval_flow_service) {
                         $q->where('service_mode', 'third_party')
