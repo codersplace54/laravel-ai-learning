@@ -51,7 +51,7 @@ class ServiceMaster extends Model
         'updated_by',
         'verification_token',
         'is_special',
-        'service_code'
+        'egras_scheme_code'
     ];
 
     protected $casts = [
