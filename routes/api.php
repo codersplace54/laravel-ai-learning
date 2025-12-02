@@ -43,6 +43,8 @@ use App\Http\Controllers\Service\FeedbackController;
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
+    Route::post('send-otp', [AuthController::class, 'send_otp']);
+    Route::post('verify-otp', [AuthController::class, 'verify_otp']);
 });
 
 Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function () {
