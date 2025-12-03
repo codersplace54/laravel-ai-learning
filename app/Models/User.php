@@ -32,7 +32,8 @@ class User extends Authenticatable implements JWTSubject
         'status',
         'current_token',
         'created_at',
-        'updated_at'
+        'updated_at',
+        'is_mobile_verified'
     ];
 
     protected $hidden = [

@@ -13,6 +13,7 @@ use App\Models\AclRule;
 use Exception;
 use Carbon\Carbon;
 use App\Models\DepartmentUser;
+use App\Models\Otp;
 
 class UserController extends Controller
 {
@@ -81,6 +82,20 @@ class UserController extends Controller
 
             DB::beginTransaction();
 
+            if ($request->user_type === 'individual') {
+
+                $user_otp_exist = Otp::where('mobile_no',$request->mobile_no)->first();
+
+                if(!$user_otp_exist || $user_otp_exist->is_verified == 0){
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'Please verify your mobile number with OTP before registering.',
+                    ], 422);
+                }
+                
+                $user_otp_exist->delete();
+            }
+            
             if ($request->user_type == "department") {
                 $admin = Auth::user();
                 if (!$admin) {
@@ -104,6 +119,7 @@ class UserController extends Controller
                 'pan' => $request->pan,
                 'password' => Hash::make($request->password),
                 'status' => 'active',
+                'is_mobile_verified' => $request->user_type === 'individual' ? 1 : 0,
             ]);
 
             if ($user->user_type == "department") {
@@ -146,6 +162,10 @@ class UserController extends Controller
 
 
             DB::commit();
+
+            if ($request->user_type === 'individual') {
+                session()->forget('verified_mobile_no');
+            }
 
             return response()->json([
                 'status' => 1,

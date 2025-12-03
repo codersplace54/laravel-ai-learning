@@ -67,7 +67,8 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => 'nullable|string',
                 'third_party_payment_mode' => 'nullable|in:unified,external',
                 'is_active' => 'nullable|integer',
-                'fixed_expiry_date' => 'nullable|date'
+                'fixed_expiry_date' => 'nullable|date',
+                'egras_scheme_code' => 'required|string'
             ]);
 
             DB::beginTransaction();
@@ -111,7 +112,7 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? 1,
                 'created_by' => $admin->email_id,
-                'service_code' => "1475-00-106-21-06",
+                'egras_scheme_code'=> $request->egras_scheme_code ?? "1475-00-106-21-06",
             ]);
 
             $service_master->depends_on_services = json_decode($service_master->depends_on_services, true);
@@ -185,7 +186,8 @@ class ServiceMasterController extends Controller
                 'third_party_return_url' => 'nullable|string',
                 'third_party_status_api_url' => 'nullable|string',
                 'third_party_payment_mode' => 'nullable|in:unified,external',
-                'is_active' => 'nullable|integer'
+                'is_active' => 'nullable|integer',
+                'egras_scheme_code' => 'required|string'
             ]);
 
             DB::beginTransaction();
@@ -235,7 +237,8 @@ class ServiceMasterController extends Controller
                 'third_party_return_url' => $request->third_party_return_url,
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? $service->is_active,
-                'updated_by' => $admin->email_id
+                'updated_by' => $admin->email_id,
+                'egras_scheme_code'=> $request->egras_scheme_code ?? $service->egras_scheme_code ?? "1475-00-106-21-06",
             ]);
 
             DB::commit();
