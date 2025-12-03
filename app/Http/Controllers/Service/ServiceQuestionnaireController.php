@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Models\ServiceQuestionnaire;
+use App\Models\ServiceMaster;
 
 
 class ServiceQuestionnaireController extends Controller
@@ -305,6 +306,7 @@ class ServiceQuestionnaireController extends Controller
                 'service_id' => 'required|integer|exists:service_masters,id',
             ]);
 
+            $service_name = ServiceMaster::where('id', $request->service_id)->value('service_title_or_description');
             $service_questionnaires = ServiceQuestionnaire::where('service_id', $request->service_id)->get();
 
             if ($service_questionnaires->isEmpty()) {
@@ -338,6 +340,7 @@ class ServiceQuestionnaireController extends Controller
                 'status' => 1,
                 'message' => 'Service questionnaires fetched successfully.',
                 'data' => $service_questionnaires,
+                'service_name' => $service_name
             ]);
         } catch (\Exception $e) {
 

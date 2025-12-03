@@ -615,6 +615,8 @@ class UserController extends Controller
                     'created_at'  => $user->created_at,
                     'updated_at'  => $user->updated_at,
                     'inspector'     => $user->department_user->inspector         ?? null,
+                    'created_by'  => $user->department_user->created_by ?? null,
+                    'updated_by'  => $user->department_user->updated_by ?? null,
                 ];
             });
 
