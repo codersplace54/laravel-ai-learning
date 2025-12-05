@@ -50,6 +50,8 @@ class CertificateController extends Controller
                 'user_name',
                 'user_id',
                 'qr_code',
+                'field_1',
+                'field_2',
             ];
 
             return response()->json([
@@ -115,6 +117,8 @@ class CertificateController extends Controller
                 'user_name'           => $user->authorized_person_name ?? null,
                 'user_id'             => $application->user->id,
                 'qr_code'             => $qrDataUri,
+                'filed_1'             => null,
+                'field_2'             => null,
             ];
 
             return response()->json([
@@ -202,6 +206,8 @@ class CertificateController extends Controller
                 'user_name'           => $user->name,
                 'user_id'             => $user->id,
                 'qr_code'             => $qr_data_uri,
+                'filed_1'             => $request->filed_1 ?? null,
+                'filed_2'             => $request->filed_2 ?? null,
             ];
 
             $filled = preg_replace_callback(
