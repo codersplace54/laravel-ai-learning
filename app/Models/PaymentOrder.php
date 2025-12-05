@@ -26,4 +26,9 @@ class PaymentOrder extends Model
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    public function application()
+    {
+        return $this->belongsTo(UserServiceApplication::class, 'application_id', 'id');
+    }
 }

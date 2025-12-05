@@ -7,6 +7,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\User;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\DepartmentUsersExport;
+use App\Exports\BussinessUsersExport;
 
 class AdminController extends Controller
 {
@@ -37,7 +40,8 @@ class AdminController extends Controller
             $query = User::where('user_type', 'individual')
                 ->with(['district', 'subdivision', 'ulb', 'ward', 'department_user.department']);
 
-            if (!empty($search)) {
+            if ($request->filled('search')) {
+                $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('name_of_enterprise', 'LIKE', "%$search%")
                         ->orWhere('authorized_person_name', 'LIKE', "%$search%")
@@ -46,6 +50,14 @@ class AdminController extends Controller
                         ->orWhere('pan', 'LIKE', "%$search%")
                         ->orWhere('user_name', 'LIKE', "%$search%");
                 });
+            }
+            if ($request->export == 'excel') {
+
+                $users = $query->get();
+
+                $filename = 'bussiness_users_' . time() . '.xlsx';
+
+                return Excel::download(new BussinessUsersExport($users), $filename);
             }
 
             $business_users = User::where('user_type', 'individual')->get();
@@ -94,7 +106,7 @@ class AdminController extends Controller
                 'data' => $business_users->items(),
                 'pagination' => [
                     'current_page' => $business_users->currentPage(),
-                    'row_count' => $business_users->perPage(),
+                    'row_count' => $business_users->count(),
                     'total' => $business_users->total(),
                     'start_row' => $business_users->firstItem(),
                     'end_row' => $business_users->lastItem(),
@@ -117,7 +129,6 @@ class AdminController extends Controller
     {
 
 
-
         try {
 
             $admin = Auth::user();
@@ -136,11 +147,39 @@ class AdminController extends Controller
                 ], 404);
             }
 
+            $query = User::where('user_type', 'department')
+                ->with(['district', 'subdivision', 'ulb', 'ward', 'department_user.department']);
+
+            if ($request->filled('search')) {
+                $search = $request->search;
+
+                $query->where(function ($q) use ($search) {
+                    $q->where('authorized_person_name', 'like', "%$search%")
+                        ->orWhere('email_id', 'like', "%$search%")
+                        ->orWhere('mobile_no', 'like', "%$search%");
+                });
+            }
+
+            if ($request->filled('department_id')) {
+                $departmentId = $request->department_id;
+
+                $query->whereHas('department_user', function ($q) use ($departmentId) {
+                    $q->where('department_id', $departmentId);
+                });
+            }
+
+            if ($request->export == 'excel') {
+
+                $users = $query->get();
+
+                $filename = 'department_users_' . time() . '.xlsx';
+
+                return Excel::download(new DepartmentUsersExport($users), $filename);
+            }
+
             $per_page = $request->get('per_page', 10);
 
-            $department_users = User::where('user_type', 'department')
-                ->with(['district', 'subdivision', 'ulb', 'ward', 'department_user.department'])
-                ->paginate($per_page)
+            $department_users = $query->paginate($per_page)
                 ->through(function ($user) {
                     return [
                         'id' => $user->id,
@@ -179,7 +218,7 @@ class AdminController extends Controller
                 'data' => $department_users->items(),
                 'pagination' => [
                     'current_page' => $department_users->currentPage(),
-                    'row_count'    => $department_users->perPage(),
+                    'row_count'    => $department_users->count(),
                     'total'        => $department_users->total(),
                     'start_row'    => $department_users->firstItem(),
                     'end_row'      => $department_users->lastItem(),
