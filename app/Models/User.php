@@ -33,7 +33,9 @@ class User extends Authenticatable implements JWTSubject
         'current_token',
         'created_at',
         'updated_at',
-        'is_mobile_verified'
+        'is_mobile_verified',
+        'business_activity',
+        'old_id',
     ];
 
     protected $hidden = [
@@ -68,6 +70,11 @@ class User extends Authenticatable implements JWTSubject
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
+
+    public function enterprise_details()
+    {
+        return $this->hasOne(EnterpriseDetail::class, 'user_id');
+    }
 
     public function management_details()
     {

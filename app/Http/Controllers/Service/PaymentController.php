@@ -113,7 +113,7 @@ class PaymentController extends Controller
 
             $form_html  = '<html><body>';
             $form_html .= '<p>Review and edit values before sending to e-GRAS.</p>';
-            $form_html .= '<form id="egrasForm" name="process_payment" method="POST" action="https://www.egras.tripura.gov.in/DeptPrePaymentReqHandler.aspx">';
+            $form_html .= '<form id="egrasForm" name="process_payment" method="POST" action="https://swaagatbackend.tripura.gov.in/test_payment.php">';
             $form_html .= '<table>';
 
             $form_html .= '<tr><td>DTO Code</td><td><input type="text" name="DTO" value="' . $dto_code . '"/></td></tr>';
@@ -231,7 +231,7 @@ class PaymentController extends Controller
                 'gateway_order_id'  => $order_id,
                 'transaction_id'    => $CIN,
                 'GRN_number'        => $grn,
-                'payment_datetime'      => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime)->toIso8601String(),
+                'payment_datetime'  => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime),
                 'gateway_response'  => json_encode($request->all()),
                 'updated_at' => now()
             ]);
@@ -255,7 +255,7 @@ class PaymentController extends Controller
                     if ($application->extra_payment != null && $application->payment_status == "pending") {
                         $amount = $application->extra_payment;
                         $status = 're_submitted';
-                    } else {
+                    } else { 
                         $amount = $application->effective_fee ?? $application->total_fee ?? 0;
                         $status = 'submitted';
                     }
@@ -266,7 +266,7 @@ class PaymentController extends Controller
                         'status'           => $status,
                         'GRN_number'       => $grn,
                         'payment_transId'  => $CIN,
-                        'payment_time'     => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime)->toIso8601String(),
+                        'payment_time'     => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime),
                         'updated_at'       => now(),
                     ]);
                 }
