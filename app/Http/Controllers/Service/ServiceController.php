@@ -415,7 +415,7 @@ class ServiceController extends Controller
                 'date_to'         => 'nullable|date|after_or_equal:date_from',
             ]);
 
-            $data = UserServiceApplication::with(['service', 'user'])
+            $data = UserServiceApplication::with(['service', 'user', 'latestWorkflow'])
                 ->whereHas('service', function ($service) use ($request) {
                     $service->where('department_id', $request->department_id);
                 });
@@ -467,7 +467,7 @@ class ServiceController extends Controller
                     'ulb_name' => $application->user->ulb->ulb_name ?? null,
                     'ward_code'   => $application->user->ward->gp_vc_ward_lgd_code ?? null,
                     'ward_name' => $application->user->ward->name_of_gp_vc_or_ward ?? null,
-                    'hierarchy'   => $application->user->department_user->hierarchy_level ?? null,
+                    'hierarchy_level'     => $application->latestWorkflow->hierarchy_level ?? null
                 ];
             });
 
@@ -517,7 +517,7 @@ class ServiceController extends Controller
 
             $is_just_before_final_step = false;
 
-            if ($current_step->step_number == $max_step) {
+            if ($current_step && $current_step->step_number == $max_step) {
                 $is_just_before_final_step = true;
             }
 
@@ -577,7 +577,7 @@ class ServiceController extends Controller
                     return [
                         'step_number'     => $flow->step_number,
                         'step_type'       => $flow->step_type,
-                        'department'      => $flow->department->name,
+                        'department'      => $flow->department?->name,
                         'status'          => $flow->status,
                         'action_taken_by' => $flow->actionTaker?->authorized_person_name ? $flow->actionTaker->authorized_person_name . ' (' . $flow->actionTaker->email_id . ')' : null,
                         'action_taken_at' => $flow->action_taken_at,
@@ -854,7 +854,7 @@ class ServiceController extends Controller
                     $application->update([
                         'current_step_number' => $first_step_flow->step_number,
                         'payment_status'      => 'pending',
-                       // 'total_fee'           =>  $total_fee,
+                        // 'total_fee'           =>  $total_fee,
                         'extra_payment'       => $request->extra_payment,
                         'remarks'             => $request->remarks,
                         'status'              => 'extra_payment',
@@ -1028,16 +1028,17 @@ class ServiceController extends Controller
         }
     }
 
-    public function get_department_user_assigned_applications($user_id)
+    public function get_department_user_assigned_applications(Request $request, $user_id)
     {
 
         try {
+
+            $per_age = $request->per_page ?? 10;
 
 
             $user = User::where('id', $user_id)
                 ->where('user_type', 'department')
                 ->first();
-
 
             if (!$user) {
                 return response()->json([
@@ -1054,27 +1055,34 @@ class ServiceController extends Controller
                 'department:id,name'
             ])
                 ->where('status', 'pending')
-                ->get()
-                ->filter(function ($assignment) use ($hierarchy_level) {
-                    return $assignment->hierarchy_level == $hierarchy_level;
-                })
-                ->map(function ($assignment) {
-                    return [
-                        'application_id'   => $assignment->application->id,
-                        'service_name'     => $assignment->application->service->service_title_or_description ?? null,
-                        'applicant_name'   => $assignment->application->user->authorized_person_name,
-                        'applicant_email'  => $assignment->application->user->email_id,
-                        'applicant_mobile' => $assignment->application->user->mobile_no,
-                        'department'       => $assignment->department->name,
-                        'status'           => $assignment->application->status,
-                        'current_step'     => $assignment->application->current_step_number,
-                        'hierarchy_level'    => $assignment->hierarchy_level,
-                    ];
-                });
+                ->where('hierarchy_level', $hierarchy_level)
+                ->paginate($per_age);
+
+            $applications->getCollection()->transform(function ($assignment) {
+                return [
+                    'application_id'   => $assignment->application->id ?? null,
+                    'service_name'     => $assignment->application->service->service_title_or_description ?? null,
+                    'applicant_name'   => $assignment->application->user->authorized_person_name ?? null,
+                    'applicant_email'  => $assignment->application->user->email_id ?? null,
+                    'applicant_mobile' => $assignment->application->user->mobile_no ?? null,
+                    'department'       => $assignment->department?->name ?? null,
+                    'status'           => $assignment->application->status ?? null,
+                    'current_step'     => $assignment->application->current_step_number ?? null,
+                    'hierarchy_level'    => $assignment->hierarchy_level ?? null,
+                ];
+            });
 
             return response()->json([
                 'success' => true,
-                'data'    => $applications
+                'data' => $applications->items(),
+                'pagination' => [
+                    'current_page' => $applications->currentPage(),
+                    'last_page'    => $applications->lastPage(),
+                    'per_page'     => $applications->per_age(),
+                    'total'        => $applications->total(),
+                    'next_page_url' => $applications->nextPageUrl(),
+                    'prev_page_url' => $applications->previousPageUrl(),
+                ]
             ], 200);
         } catch (\Exception $e) {
 
@@ -1271,7 +1279,7 @@ class ServiceController extends Controller
                 'list_of_NOC_issued_by_department' => $list_of_NOC_issued_by_department->items(),
                 'pagination' => [
                     'current_page' => $list_of_NOC_issued_by_department->currentPage(),
-                    'row_count'    => $list_of_NOC_issued_by_department->perPage(),
+                    'row_count'    => $list_of_NOC_issued_by_department->per_age(),
                     'total'        => $list_of_NOC_issued_by_department->total(),
                     'start_row'    => $list_of_NOC_issued_by_department->firstItem(),
                     'end_row'      => $list_of_NOC_issued_by_department->lastItem(),
@@ -1461,5 +1469,4 @@ class ServiceController extends Controller
         Storage::disk('public')->put($path, $pdf->output());
         $application->update(['NOC_certificate' => $path]);
     }
-
 }

@@ -105,4 +105,9 @@ class UserServiceApplication extends Model
     {
         return $this->hasMany(ApplicationWorkflowHistory::class, 'application_id', 'id');
     }
+
+    public function payments()
+    {
+        return $this->hasMany(PaymentOrder::class, 'application_id', 'id');
+    }
 }
