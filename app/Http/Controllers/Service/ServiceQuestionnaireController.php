@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Models\ServiceQuestionnaire;
 use App\Models\ServiceMaster;
+use App\Models\RenewalFeeRule;
+use App\Models\ServiceFeeRule;
+use App\Models\UserServiceApplication;
 
 
 class ServiceQuestionnaireController extends Controller
@@ -251,7 +254,31 @@ class ServiceQuestionnaireController extends Controller
 
             DB::beginTransaction();
 
-            $service_questionnaire = ServiceQuestionnaire::where('id', $request->id)->first();
+            $question_id = $request->id;
+
+            if (!$question_id) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'question_id is required.'
+                ], 400);
+            }
+
+            $exists_in_renewal_rules = RenewalFeeRule::where('question_id', $question_id)->exists();
+            $exists_in_service_rules = ServiceFeeRule::where('question_id', $question_id)->exists();
+            $exists_in_user_service_application = UserServiceApplication::where('application_data', 'LIKE', '%"' . $question_id . '"%')->exists();
+
+            if (
+                $exists_in_renewal_rules ||
+                $exists_in_service_rules ||
+                $exists_in_user_service_application
+            ) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Question cannot be deleted because it is assigned in fee rules or application data.',
+                ], 400);
+            }
+
+            $service_questionnaire = ServiceQuestionnaire::where('id', $question_id)->first();
 
             if (!$service_questionnaire) {
 

@@ -147,8 +147,11 @@ class DashboardController extends Controller
                 ->where('status', 'send_back')
                 ->with([
                     'application' => function ($q) {
-                        $q->select('id', 'applicationId', 'service_id', 'application_date', 'remarks')
-                            ->with('service:id,service_title_or_description');
+                        $q->select('id', 'applicationId', 'service_id', 'user_id', 'application_date', 'remarks')
+                            ->with([
+                                'service:id,service_title_or_description',
+                                'user:id,authorized_person_name'
+                            ]);
                     },
                 ])
                 ->get(['id', 'application_id', 'status', 'status_file'])
@@ -166,14 +169,16 @@ class DashboardController extends Controller
 
                     $application = $item->application;
                     $service     = $application ? $application->service : null;
+                    $applicant_name  = $application?->user?->authorized_person_name;
                     return [
-                        'application_id'     => $item->application_id,
-                        'applicationId'      => $item->application->applicationId ?? null,
-                        'status_file'        =>  $item->status_file ? url($item->status_file) : null,
+                        'application_id'            => $item->application_id,
+                        'applicationId'             => $item->application->applicationId ?? null,
+                        'status_file'               =>  $item->status_file ? url($item->status_file) : null,
                         'service_name'              => $service->service_title_or_description ?? null,
                         'remark'                    => $item->remarks ?? null,
                         'application_date'          => $application->application_date ?? null,
                         'clarification_raised_date' => $send_back_date ?? null,
+                        'applicant_name'            => $applicant_name ?? null,
                     ];
                 });
 
@@ -181,7 +186,7 @@ class DashboardController extends Controller
                 ->withCount([
                     'applications as licenses_issued_count' => function ($q) {
                         $q->whereNotNull('NOC_certificate')
-                        ->where('status', 'approved');
+                            ->where('status', 'approved');
                     }
                 ])->get(['id', 'service_title_or_description']);
 
@@ -360,7 +365,7 @@ class DashboardController extends Controller
                 return [
                     'service_id' => $service->id,
                     'service_name' => $service->service_title_or_description,
-                    'application_count' => $service->applications_count,
+                    'application_count' => $service->user_application_count,
                 ];
             });
 
@@ -389,7 +394,8 @@ class DashboardController extends Controller
                         $q->where('status', 'send_back')
                             ->orderBy('id', 'desc');
                     },
-                    'workflowHistory.department'
+                    'workflowHistory.department',
+                    'service:id,service_title_or_description',
                 ])
                 ->get()
                 ->map(function ($app) {
@@ -400,6 +406,7 @@ class DashboardController extends Controller
                         'application_id'    => $app->id,
                         'applicationId'     => $app->applicationId,
                         'service_id'        => $app->service_id,
+                        'service_name'      => $app->service->service_title_or_description ?? null,
                         'department_name'   => $latest_send_back && $latest_send_back->department
                             ? $latest_send_back->department->name
                             : null,
@@ -407,6 +414,8 @@ class DashboardController extends Controller
                         'status_file'       => $latest_send_back && $latest_send_back->status_file
                             ? url($latest_send_back->status_file)
                             : null,
+                            'comments'        => $app->comments,
+                            'remarks'        => $latest_send_back->remarks,
                     ];
                 });
 
