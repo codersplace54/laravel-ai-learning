@@ -1020,7 +1020,10 @@ class UserServiceApplicationController extends Controller
 
     public function get_details_user_service_applications(Request $request)
     {
+
+
         try {
+
             if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
@@ -1030,8 +1033,12 @@ class UserServiceApplicationController extends Controller
                 'application_id' => 'required|integer|exists:user_service_applications,id',
             ]);
 
+            $application_ids = is_array($request->application_id)
+                ? $request->application_id
+                : [$request->application_id];
+
             $application = UserServiceApplication::where('service_id', $request->service_id)
-                ->where('id', $request->application_id)
+                ->whereIn('id', $application_ids)
                 ->first();
 
             $renewal_details = $this->get_renewal_details($application);
@@ -1071,47 +1078,58 @@ class UserServiceApplicationController extends Controller
             }
 
             $history_data = ApplicationWorkflowHistory::where('application_id', $application->id)
-                ->orderByDesc('id')
-                ->first();
+                ->orderBy('id', 'desc')
+                ->get()
+                ->map(function ($history) {
+                    return [
+                        'id'              => $history->id,
+                        'step_number'     => $history->step_number,
+                        'status'          => $history->status,
+                        'remarks'         => $history->remarks,
+                        'status_file'     => $history->status_file ? asset('storage/' . $history->status_file) : null,
+                        'action_taken_at' => $history->action_taken_at,
+                        'action_taken_by' => $history->action_taken_by,
+                    ];
+                });
 
             if ($application->service && $application->service->service_mode === 'third_party') {
 
                 $third_party_logs = ThirdPartyStatusLog::where('application_id', $application->id)
                     ->orderByDesc('id')
-                    ->first();
-                if ($third_party_logs) {
-                    $history_data =  [
-                        'application_id'         => $third_party_logs->application_id,
-                        'service_status'     => $third_party_logs->service_status,
-                        'application_date'     => $third_party_logs->application_date,
-                        'payment_amount'     => $third_party_logs->payment_amount,
-                        'payment_status'     => $third_party_logs->payment_status,
-                        'remarks'    => $third_party_logs->remarks,
-                        'noc_file'       => !empty($third_party_logs->file)
-                            ? asset('storage/' . $third_party_logs->file)
-                            : null,
-                        'updated_at' => $third_party_logs->updated_at,
-                    ];
-                } else {
-                    $history = ApplicationWorkflowHistory::where('application_id', $application->id)
-                        ->orderByDesc('id')
-                        ->first();
-
-                    if ($history) {
-                        $history_data = [
-                            'id'              => $history->id,
-                            'step_number'     => $history->step_number,
-                            'status'          => $history->status,
-                            'remarks'         => $history->remarks,
-                            'status_file'     => $history->status_file
-                                ? asset('storage/' . $history->status_file)
-                                : null,
-                            'action_taken_at' => $history->action_taken_at,
-                            'action_taken_by' => $history->action_taken_by,
+                    ->get()
+                    ->map(function ($log) {
+                        return [
+                            'application_id'  => $log->application_id,
+                            'service_status'  => $log->service_status,
+                            'application_date' => $log->application_date,
+                            'payment_amount'  => $log->payment_amount,
+                            'payment_status'  => $log->payment_status,
+                            'remarks'         => $log->remarks,
+                            'noc_file'        => $log->file ? asset('storage/' . $log->file) : null,
+                            'updated_at'      => $log->updated_at,
                         ];
-                    }
+                    });
+
+                if ($third_party_logs->isNotEmpty()) {
+                    $history_data = $third_party_logs;
                 }
             }
+
+            $payment_details = PaymentOrder::whereJsonContains('application_id', $application->id)
+                ->get()
+                ->map(function ($p) {
+                    return [
+                        'id'               => $p->id,
+                        'payment_amount'   => $p->payment_amount,
+                        'payment_status'   => $p->payment_status,
+                        'gateway'          => $p->gateway,
+                        'gateway_order_id' => $p->gateway_order_id,
+                        'transaction_id'   => $p->transaction_id,
+                        'GRN_number'       => $p->GRN_number,
+                        'payment_datetime' => $p->payment_datetime,
+                        'created_at'       => $p->created_at,
+                    ];
+                });
 
             return response()->json([
                 'status'            => 1,
@@ -1121,6 +1139,7 @@ class UserServiceApplicationController extends Controller
                 'history_data'    => $history_data,
                 'service_name'    => $application->service->service_title_or_description,
                 'renewal_details' => $renewal_details,
+                'payment_details'  => $payment_details,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -1595,18 +1614,186 @@ class UserServiceApplicationController extends Controller
         }
     }
 
+    // public function get_all_applications_list(Request $request)
+    // {
+
+    //     try {
+
+
+    //         if (!Auth::check()) {
+    //             return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+    //         }
+
+    //         $perPage = $request->per_page ?? 10;
+    //         $applications = UserServiceApplication::orderBy('id', 'DESC')->paginate($perPage);
+
+    //         if ($applications->isEmpty()) {
+    //             return response()->json([
+    //                 'status' => 0,
+    //                 'message' => 'No applications found.',
+    //             ], 404);
+    //         }
+
+    //         $amount = 0;
+
+    //         $response_data = [];
+
+    //         foreach ($applications as $app) {
+
+    //             if (!empty($app->effective_fee)) {
+    //                 $amount = $app->effective_fee;
+    //             } else {
+    //                 $amount = $app->total_fee ?? 0;
+    //             }
+
+    //             $response_data[] = [
+    //                 'id' => $app->id,
+    //                 'application_number' => $app->applicationId,
+    //                 'business' => $app->user->name_of_enterprise ?? null,
+    //                 'email_id' => $app->user->email_id ?? null,
+    //                 'mobile_no' => $app->user->mobile_no ?? null,
+    //                 'amount' => $amount,
+    //                 'payment_time' => $app->payment_time ?? null,
+    //                 'expiry_date' => $app->NOC_expiry_date ?? null,
+    //                 'status' => $app->payment_status,
+    //                 'method' => null,
+    //                 'comments' => $app->comments,
+    //             ];
+    //         }
+
+    //         if ($request->has('export') && $request->export == 'excel') {
+
+    //             $all = UserServiceApplication::orderBy('id', 'DESC')->get();
+
+    //             $export_data = [];
+
+    //             foreach ($all as $app) {
+    //                 $amount = !empty($app->effective_fee)
+    //                     ? $app->effective_fee
+    //                     : ($app->total_fee ?? 0);
+
+    //                 $export_data[] = [
+    //                     'id' => $app->id,
+    //                     'application_number' => $app->applicationId,
+    //                     'business' => $app->user->name_of_enterprise ?? null,
+    //                     'email_id' => $app->user->email_id ?? null,
+    //                     'mobile_no' => $app->user->mobile_no ?? null,
+    //                     'amount' => $amount,
+    //                     'payment_time' => $app->payment_time ?? null,
+    //                     'expiry_date' => $app->NOC_expiry_date ?? null,
+    //                     'status' => $app->payment_status,
+    //                     'method' => null,
+    //                     'comments' => $app->comments,
+    //                 ];
+    //             }
+
+    //             return Excel::download(new ApplicationsExport($export_data), 'applications.xlsx');
+    //         }
+
+    //         return response()->json([
+    //             'status' => 1,
+    //             'message' => 'Applications fetched successfully.',
+    //             'data' => $response_data,
+    //             'pagination' => [
+    //                 'current_page' => $applications->currentPage(),
+    //                 'last_page' => $applications->lastPage(),
+    //                 'per_page' => $applications->perPage(),
+    //                 'total' => $applications->total(),
+    //             ]
+    //         ]);
+    //     } catch (\Exception $e) {
+
+    //         return response()->json([
+    //             'status' => 0,
+    //             'message' => 'Something went wrong.',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
     public function get_all_applications_list(Request $request)
     {
 
-        try {
 
+        try {
 
             if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
             $perPage = $request->per_page ?? 10;
-            $applications = UserServiceApplication::orderBy('id', 'DESC')->paginate($perPage);
+            $query = UserServiceApplication::with('user')->orderBy('id', 'DESC');
+
+            if ($request->search) {
+                $search = $request->search;
+
+                $query->whereHas('user', function ($q) use ($search) {
+                    $q->where('name_of_enterprise', 'LIKE', "%{$search}%")
+                        ->orWhere('email_id', 'LIKE', "%{$search}%");
+                });
+            }
+
+            if ($request->GRN_number) {
+                $query->where('applicationId', 'LIKE', "%{$request->GRN_number}%");
+            }
+
+            if ($request->mobile_no) {
+                $query->whereHas('user', function ($q) use ($request) {
+                    $q->where('mobile_no', 'LIKE', "%{$request->mobile_no}%");
+                });
+            }
+
+            if ($request->status) {
+                $query->where('payment_status', $request->status);
+            }
+
+            if ($request->min_amount) {
+                $query->whereRaw("COALESCE(effective_fee, total_fee) >= ?", [$request->min_amount]);
+            }
+
+            if ($request->max_amount) {
+                $query->whereRaw("COALESCE(effective_fee, total_fee) <= ?", [$request->max_amount]);
+            }
+
+            if ($request->from_date) {
+                $query->whereDate('payment_time', '>=', $request->from_date);
+            }
+
+            if ($request->to_date) {
+                $query->whereDate('payment_time', '<=', $request->to_date);
+            }
+
+            if ($request->export && $request->export === 'excel') {
+
+                $exportApps = $query->get();
+
+                $exportData = [];
+
+                foreach ($exportApps as $app) {
+                    $amount = !empty($app->effective_fee)
+                        ? $app->effective_fee
+                        : ($app->total_fee ?? 0);
+
+                    $exportData[] = [
+                        'id'                 => $app->id,
+                        'application_number' => $app->applicationId,
+                        'business'           => $app->user->name_of_enterprise ?? null,
+                        'email_id'           => $app->user->email_id ?? null,
+                        'mobile_no'          => $app->user->mobile_no ?? null,
+                        'amount'             => $amount,
+                        'payment_time'       => $app->payment_time ?? null,
+                        'expiry_date'        => $app->NOC_expiry_date ?? null,
+                        'status'             => $app->payment_status,
+                        'GRN_number'         => $app->GRN_number,
+                        'method'             => null,
+                        'comments'           => $app->comments,
+                    ];
+                }
+
+                return Excel::download(new ApplicationsExport($exportData), 'applications.xlsx');
+            }
+
+            $applications = $query->paginate($perPage);
 
             if ($applications->isEmpty()) {
                 return response()->json([
@@ -1615,60 +1802,27 @@ class UserServiceApplicationController extends Controller
                 ], 404);
             }
 
-            $amount = 0;
-
             $response_data = [];
 
             foreach ($applications as $app) {
-
-                if (!empty($app->effective_fee)) {
-                    $amount = $app->effective_fee;
-                } else {
-                    $amount = $app->total_fee ?? 0;
-                }
+                $amount = !empty($app->effective_fee)
+                    ? $app->effective_fee
+                    : ($app->total_fee ?? 0);
 
                 $response_data[] = [
-                    'id' => $app->id,
+                    'id'                 => $app->id,
                     'application_number' => $app->applicationId,
-                    'business' => $app->user->name_of_enterprise ?? null,
-                    'email_id' => $app->user->email_id ?? null,
-                    'mobile_no' => $app->user->mobile_no ?? null,
-                    'amount' => $amount,
-                    'payment_time' => $app->payment_time ?? null,
-                    'expiry_date' => $app->NOC_expiry_date ?? null,
-                    'status' => $app->payment_status,
-                    'method' => null,
-                    'comments' => $app->comments,
+                    'business'           => $app->user->name_of_enterprise ?? null,
+                    'email_id'           => $app->user->email_id ?? null,
+                    'mobile_no'          => $app->user->mobile_no ?? null,
+                    'amount'             => $amount,
+                    'payment_time'       => $app->payment_time ?? null,
+                    'expiry_date'        => $app->NOC_expiry_date ?? null,
+                    'status'             => $app->payment_status,
+                    'GRN_number'         => $app->GRN_number,
+                    'method'             => null,
+                    'comments'           => $app->comments,
                 ];
-            }
-
-            if ($request->has('export') && $request->export == 'excel') {
-
-                $all = UserServiceApplication::orderBy('id', 'DESC')->get();
-
-                $export_data = [];
-
-                foreach ($all as $app) {
-                    $amount = !empty($app->effective_fee)
-                        ? $app->effective_fee
-                        : ($app->total_fee ?? 0);
-
-                    $export_data[] = [
-                        'id' => $app->id,
-                        'application_number' => $app->applicationId,
-                        'business' => $app->user->name_of_enterprise ?? null,
-                        'email_id' => $app->user->email_id ?? null,
-                        'mobile_no' => $app->user->mobile_no ?? null,
-                        'amount' => $amount,
-                        'payment_time' => $app->payment_time ?? null,
-                        'expiry_date' => $app->NOC_expiry_date ?? null,
-                        'status' => $app->payment_status,
-                        'method' => null,
-                        'comments' => $app->comments,
-                    ];
-                }
-
-                return Excel::download(new ApplicationsExport($export_data), 'applications.xlsx');
             }
 
             return response()->json([
@@ -1677,9 +1831,9 @@ class UserServiceApplicationController extends Controller
                 'data' => $response_data,
                 'pagination' => [
                     'current_page' => $applications->currentPage(),
-                    'last_page' => $applications->lastPage(),
-                    'per_page' => $applications->perPage(),
-                    'total' => $applications->total(),
+                    'last_page'    => $applications->lastPage(),
+                    'per_page'     => $applications->count(),
+                    'total'        => $applications->total(),
                 ]
             ]);
         } catch (\Exception $e) {
@@ -1691,6 +1845,79 @@ class UserServiceApplicationController extends Controller
             ], 500);
         }
     }
+
+
+    public function export_filtered_applications(Request $request)
+    {
+
+
+        try {
+
+            $query = UserServiceApplication::query()->with('user');
+
+            if ($request->search) {
+                $search = $request->search;
+
+                $query->whereHas('user', function ($q) use ($search) {
+                    $q->where('name_of_enterprise', 'LIKE', "%$search%")
+                        ->orWhere('email_id', 'LIKE', "%$search%");
+                });
+            }
+
+            if ($request->grn_number) {
+                $query->where('applicationId', 'LIKE', "%{$request->grn_number}%");
+            }
+
+            if ($request->mobile_no) {
+                $query->whereHas('user', function ($q) use ($request) {
+                    $q->where('mobile_no', 'LIKE', "%{$request->mobile_no}%");
+                });
+            }
+
+            if ($request->status) {
+                $query->where('payment_status', $request->status);
+            }
+
+            if ($request->min_amount) {
+                $query->whereRaw("COALESCE(effective_fee, total_fee) >= ?", [$request->min_amount]);
+            }
+
+            if ($request->max_amount) {
+                $query->whereRaw("COALESCE(effective_fee, total_fee) <= ?", [$request->max_amount]);
+            }
+
+            if ($request->from_date) {
+                $query->whereDate('payment_time', '>=', $request->from_date);
+            }
+
+            if ($request->to_date) {
+                $query->whereDate('payment_time', '<=', $request->to_date);
+            }
+
+            $applications = $query->orderBy('id', 'DESC')->get();
+
+            return Excel::download(new ApplicationsExport($applications), 'filtered_applications.xlsx');
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Export failed.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+    public function export_all_applications()
+    {
+        $applications = UserServiceApplication::with('user')
+            ->orderBy('id', 'DESC')
+            ->get();
+
+        return Excel::download(new ApplicationsExport($applications), 'all_applications.xlsx');
+    }
+
 
     public function mark_application_paid(Request $request)
     {

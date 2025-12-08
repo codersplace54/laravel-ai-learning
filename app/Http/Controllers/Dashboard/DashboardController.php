@@ -47,22 +47,26 @@ class DashboardController extends Controller
             $user_id         = $user->id;
             $department_id   = $request->department_id;
 
-            $total_services_per_department = ServiceMaster::where('department_id', $department_id)->count();
+            $total_application = UserServiceApplication::count();
 
-            $total_applications_for_this_department = ApplicationWorkflowAssignment::select('application_id')
-                ->where('department_id', $department_id)
-                ->groupBy('application_id')
-                ->count();
+            $total_applications_for_this_department = ApplicationWorkflowAssignment::where('department_id', $department_id)
+                ->whereHas('application', function ($query) {
+                    $query->where('status', '!=', 'expired');
+                })
+                ->distinct('application_id')
+                ->count('application_id');
 
 
-            $percentage_total_application = 100;
+            $percentage_total_application = $total_applications_for_this_department > 0
+                ? min(100, round(($total_applications_for_this_department / $total_application) * 100, 2))
+                : 0;
 
             $department_app_ids = ApplicationWorkflowAssignment::where('department_id', $department_id)
                 ->pluck('application_id')
                 ->unique();
 
             $total_count_pending_application_in_department = UserServiceApplication::whereIn('id', $department_app_ids)
-                ->where('status', ['pending', 'under_review','re_submitted', 'saved', 'submitted'])
+                ->whereIn('status', ['pending', 'under_review', 're_submitted', 'saved', 'submitted'])
                 ->count();
 
             $total_count_approved_application_in_department = UserServiceApplication::whereIn('id', $department_app_ids)
@@ -143,8 +147,11 @@ class DashboardController extends Controller
                 ->where('status', 'send_back')
                 ->with([
                     'application' => function ($q) {
-                        $q->select('id', 'applicationId', 'service_id', 'application_date', 'remarks')
-                            ->with('service:id,service_title_or_description');
+                        $q->select('id', 'applicationId', 'service_id', 'user_id', 'application_date', 'remarks')
+                            ->with([
+                                'service:id,service_title_or_description',
+                                'user:id,authorized_person_name'
+                            ]);
                     },
                 ])
                 ->get(['id', 'application_id', 'status', 'status_file'])
@@ -162,21 +169,24 @@ class DashboardController extends Controller
 
                     $application = $item->application;
                     $service     = $application ? $application->service : null;
+                    $applicant_name  = $application?->user?->authorized_person_name;
                     return [
-                        'application_id'     => $item->application_id,
-                        'applicationId'      => $item->application->applicationId ?? null,
+                        'application_id'     => $item->application_id, // application_id saved in history table
+                        'applicationId'      => $item->application->applicationId ?? null,   // applicationId is the application number saved in user service applications table
                         'status_file'        =>  $item->status_file ? url($item->status_file) : null,
                         'service_name'              => $service->service_title_or_description ?? null,
                         'remark'                    => $item->remarks ?? null,
                         'application_date'          => $application->application_date ?? null,
                         'clarification_raised_date' => $send_back_date ?? null,
+                        'applicant_name'            => $applicant_name ?? null,
                     ];
                 });
 
             $services_with_license_count = ServiceMaster::where('department_id', $department_id)
                 ->withCount([
                     'applications as licenses_issued_count' => function ($q) {
-                        $q->where('status', 'approved');
+                        $q->whereNotNull('NOC_certificate')
+                            ->where('status', 'approved');
                     }
                 ])->get(['id', 'service_title_or_description']);
 
@@ -231,6 +241,25 @@ class DashboardController extends Controller
                 })
                 ->values();
 
+            $latest_assignments = ApplicationWorkflowAssignment::select('application_id')
+                ->where('hierarchy_level', $hierarchy_level)
+                ->where('status', 'pending')
+                ->orderByDesc('id')
+                ->get()
+                ->groupBy('application_id');
+
+            $total_pending_for_me = $latest_assignments->filter(function ($assignments) {
+                $latest = $assignments->first();
+                return $latest && $latest->status === 'pending';
+            })->count();
+
+            $total_approved_by_me = ApplicationWorkflowAssignment::where('hierarchy_level', $hierarchy_level)
+                ->where('status', 'approved')
+                ->orderByDesc('id')
+                ->get()
+                ->groupBy('application_id')
+                ->count();
+
 
 
             return response()->json([
@@ -250,7 +279,9 @@ class DashboardController extends Controller
                 'district_wise_application_per_service' => $district_wise_application_per_service,
                 'clarification_required' => $clarification_required,
                 'license_issued_per_service'     => $license_issued_per_service,
-                'avg_approval_time_per_service'  => $avg_approval_time_per_service
+                'avg_approval_time_per_service'  => $avg_approval_time_per_service,
+                'total_pending_for_me'          => $total_pending_for_me,
+                'total_approved_by_me'          => $total_approved_by_me
             ], 200);
         } catch (\Exception $e) {
 
@@ -293,14 +324,16 @@ class DashboardController extends Controller
 
             $total_services_per_user = ServiceMaster::count();
 
-            $total_applications_for_this_user = User::find($user_id)->applications()->count();
+            $total_application = UserServiceApplication::count();
+
+            $total_applications_for_this_user = User::find($user_id)->applications()->where('status', '<>', 'expired')->count();
 
             $percentage_total_application = $total_applications_for_this_user > 0
-                ? min(100, round(($total_applications_for_this_user / $total_services_per_user) * 100, 2))
+                ? min(100, round(($total_applications_for_this_user / $total_application) * 100, 2))
                 : 0;
 
             $total_count_pending_application_in_user = UserServiceApplication::where('user_id', $request->user_id)
-                ->whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review'])
+                ->whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review', 'saved'])
                 ->count();
 
             $total_count_approved_application_in_user = UserServiceApplication::where('user_id', $request->user_id)
@@ -316,22 +349,41 @@ class DashboardController extends Controller
                 ? min(100, round(($total_count_approved_application_in_user / $total_applications_for_this_user) * 100, 2))
                 : 0;
 
-            $total_count_rejected_application_in_department = UserServiceApplication::where('status', 'rejected')->count();
+            $total_count_rejected_application_in_user = UserServiceApplication::where('user_id', $request->user_id)
+                ->where('status', 'rejected')
+                ->count();
 
             $percentage_rejected_application = $total_applications_for_this_user > 0
-                ? min(100, round(($total_count_rejected_application_in_department / $total_applications_for_this_user) * 100, 2))
+                ? min(100, round(($total_count_rejected_application_in_user / $total_applications_for_this_user) * 100, 2))
                 : 0;
 
-            $services = ServiceMaster::withCount('applications')
-                ->get(['id', 'service_title_or_description']);
+            $services = ServiceMaster::withCount(['applications as user_application_count' => function ($q) use ($user_id) {
+                $q->where('user_id', $user_id);
+            }])->get(['id', 'service_title_or_description']);
 
             $application_count_per_service = $services->map(function ($service) {
                 return [
                     'service_id' => $service->id,
                     'service_name' => $service->service_title_or_description,
-                    'application_count' => $service->applications_count,
+                    'application_count' => $service->user_application_count,
                 ];
             });
+
+            $services_with_noc_count = ServiceMaster::withCount([
+                'applications as noc_issued_count' => function ($q) {
+                    $q->whereNotNull('NOC_certificate')
+                        ->where('status', 'approved');
+                }
+            ])->get(['id', 'service_title_or_description']);
+
+            $noc_issued_per_service = $services_with_noc_count->map(function ($service) {
+                return [
+                    'service_id'      => $service->id,
+                    'service_name'    => $service->service_title_or_description,
+                    'noc_issued'      => $service->noc_issued_count,
+                ];
+            });
+
 
             $clarification_required = UserServiceApplication::where('user_id', $request->user_id)
                 ->whereHas('workflowHistory', function ($q) {
@@ -342,7 +394,8 @@ class DashboardController extends Controller
                         $q->where('status', 'send_back')
                             ->orderBy('id', 'desc');
                     },
-                    'workflowHistory.department'
+                    'workflowHistory.department',
+                    'service:id,service_title_or_description',
                 ])
                 ->get()
                 ->map(function ($app) {
@@ -351,8 +404,9 @@ class DashboardController extends Controller
 
                     return [
                         'application_id'    => $app->id,
-                        'applicationId'     => $app->applicationId,
+                        'applicationId'     => $app->applicationId, // applicationId is the application number saved in user service applications table
                         'service_id'        => $app->service_id,
+                        'service_name'      => $app->service->service_title_or_description ?? null,
                         'department_name'   => $latest_send_back && $latest_send_back->department
                             ? $latest_send_back->department->name
                             : null,
@@ -360,6 +414,8 @@ class DashboardController extends Controller
                         'status_file'       => $latest_send_back && $latest_send_back->status_file
                             ? url($latest_send_back->status_file)
                             : null,
+                            'comments'        => $app->comments,
+                            'remarks'        => $latest_send_back->remarks,
                     ];
                 });
 
@@ -375,9 +431,10 @@ class DashboardController extends Controller
                 'percentage_approved_application' => $percentage_approved_application,
                 'percentage_rejected_application' => $percentage_rejected_application,
                 'total_count_approved_application_in_user' => $total_count_approved_application_in_user,
-                '$total_count_rejected_application_in_department' => $total_count_rejected_application_in_department,
+                'total_count_rejected_application_in_user' => $total_count_rejected_application_in_user,
                 'application_count_per_service' => $application_count_per_service,
                 'clarification_required'       => $clarification_required,
+                'noc_issued_per_service'        => $noc_issued_per_service
 
             ], 200);
         } catch (\Exception $e) {
@@ -405,11 +462,9 @@ class DashboardController extends Controller
 
             $total_applications = UserServiceApplication::count();
 
-            $percentage_total_application = $total_services > 0
-                ? min(100, round(($total_applications / $total_services) * 100, 2))
-                : 0;
+            $percentage_total_application = 100;
 
-            $total_count_pending_application = UserServiceApplication::whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review'])
+            $total_count_pending_application = UserServiceApplication::whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review', 'saved'])
                 ->count();
 
             $total_count_approved_application = UserServiceApplication::where('status', 'approved')
@@ -453,7 +508,7 @@ class DashboardController extends Controller
                 'percentage_approved_application' => $percentage_approved_application,
                 'percentage_rejected_application' => $percentage_rejected_application,
                 'total_count_approved_application' => $total_count_approved_application,
-                '$total_count_rejected_application' => $total_count_rejected_application,
+                'total_count_rejected_application' => $total_count_rejected_application,
                 'application_count_per_service' => $application_count_per_service,
 
             ], 200);

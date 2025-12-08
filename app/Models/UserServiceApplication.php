@@ -14,7 +14,7 @@ class UserServiceApplication extends Model
         'previous_application_id',
         'renewal',
         'renewalYear',
-        'applicationId',
+        'applicationId',   //  applicationId is the application number  auto generated while storing the application
         'application_date',
         'status',
         'application_data',
@@ -104,5 +104,10 @@ class UserServiceApplication extends Model
     public function workflowHistory()
     {
         return $this->hasMany(ApplicationWorkflowHistory::class, 'application_id', 'id');
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(PaymentOrder::class, 'application_id', 'id');
     }
 }

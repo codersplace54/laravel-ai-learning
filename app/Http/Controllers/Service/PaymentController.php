@@ -64,7 +64,7 @@ class PaymentController extends Controller
             }
 
             $scheme_count = count($scheme_names);
-            $total_amount = array_sum($fee_amounts); 
+            $total_amount = array_sum($fee_amounts);
 
             $payment_order = PaymentOrder::create([
                 'user_id'            => $user_id,
@@ -83,7 +83,7 @@ class PaymentController extends Controller
             $dto_code   = '99';
             $ddo_code   = '99001';
             $sto_code   = '99';
-            $egrasUserId = 'finswgt'; 
+            $egrasUserId = 'finswgt';
             $valid_upto = Carbon::today()->format('d/m/Y');
 
             $return_url = request()->getSchemeAndHttpHost() . '/api/user/payment-callback';
@@ -98,7 +98,7 @@ class PaymentController extends Controller
                 $order_id,
                 $user->authorized_person_name,
                 $user->mobile_no,
-                $total_amount,      
+                $total_amount,
                 $scheme_count,
             ];
 
@@ -141,17 +141,15 @@ class PaymentController extends Controller
             $form_html .= '<tr><td>Scheme Count</td><td><input type="text" name="SCHEMECOUNT" value="1"/></td></tr>';
             
             for ($i = 0; $i < $scheme_count; $i++) {
-                $idx = $i + 1;
+                $idx        = $i + 1;
                 $schemeName = htmlspecialchars($scheme_names[$i], ENT_QUOTES, 'UTF-8');
 
-                $form_html .= '<tr><td>Scheme Name ' . $idx . '</td><td><input type="text" name="SCHEMENAME' . $idx . '" value="' . $schemeName . '"/></td></tr>';
-                $form_html .= '<tr><td>Fee Amount ' . $idx . '</td><td><input type="text" name="FEEAMOUNT' . $idx . '" value="' . $fee_amounts[$i] . '"/></td></tr>';
+                $form_html .= '<input type="hidden" name="SCHEMENAME' . $idx . '" value="' . $schemeName . '"/>';
+                $form_html .= '<input type="hidden" name="FEEAMOUNT' . $idx . '" value="' . $fee_amounts[$i] . '"/>';
             }
 
-            $form_html .= '</table>';
-
-            $form_html .= '<button type="submit">Send to e-GRAS</button>';
             $form_html .= '</form>';
+            $form_html .= '<script>document.getElementById("egrasForm").submit();</script>';
             $form_html .= '</body></html>';
 
             return $form_html;
