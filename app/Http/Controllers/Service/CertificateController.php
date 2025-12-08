@@ -511,8 +511,7 @@ class CertificateController extends Controller
 
         $license_id = $request?->input('license_id')
             ?? $application->license_id
-            ?? app(UserServiceApplicationController::class)
-            ->generate_application_number($application->service_id, $application->id);
+            ?? $this->generate_application_number($application->service_id, $application->id);
 
         $issue_date = $request?->input('issue_date')
             ?? (
@@ -677,5 +676,63 @@ class CertificateController extends Controller
             $canvas->close_object();
             $canvas->add_object($wm_obj, 'all');
         }
+    }
+
+    public function download_application_pdf(Request $request)
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+        }
+
+        try {
+            $request->validate([
+                'application_id'   => 'required|integer|exists:user_service_applications,id',
+            ]);
+
+            $application = UserServiceApplication::where('id', $request->application_id)->first();
+
+            $path = $application->NOC_certificate;
+
+            if (!$path || !Storage::disk('public')->exists($path)) {
+                return response()->json(['status' => 0, 'message' => 'PDF file not found for this application.'], 404);
+            }
+            return response()->json([
+                'status' => 1,
+                'message' => 'PDF file is available.',
+                'download_url' => Storage::url($path)
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching pdf.',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    private function generate_application_number($service_id, $application_id)
+    {
+
+        $service = ServiceMaster::find($service_id);
+
+        if (!$service) {
+            return null;
+        }
+
+        $format = $service->generated_id_format;
+
+        $current_year = date('Y');
+
+        $application_number = strtoupper($service->noc_name);
+        if (!empty($format)) {
+
+            $application_number = str_replace(['{YEAR}', '{year}'], $current_year, $format);
+            $application_number = str_replace('{SEQ}', $application_id, $application_number);
+        }
+
+        return $application_number;
     }
 }
