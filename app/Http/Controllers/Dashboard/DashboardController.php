@@ -171,9 +171,9 @@ class DashboardController extends Controller
                     $service     = $application ? $application->service : null;
                     $applicant_name  = $application?->user?->authorized_person_name;
                     return [
-                        'application_id'            => $item->application_id,
-                        'applicationId'             => $item->application->applicationId ?? null,
-                        'status_file'               =>  $item->status_file ? url($item->status_file) : null,
+                        'application_id'     => $item->application_id, // application_id saved in history table
+                        'applicationId'      => $item->application->applicationId ?? null,   // applicationId is the application number saved in user service applications table
+                        'status_file'        =>  $item->status_file ? url($item->status_file) : null,
                         'service_name'              => $service->service_title_or_description ?? null,
                         'remark'                    => $item->remarks ?? null,
                         'application_date'          => $application->application_date ?? null,
@@ -404,7 +404,7 @@ class DashboardController extends Controller
 
                     return [
                         'application_id'    => $app->id,
-                        'applicationId'     => $app->applicationId,
+                        'applicationId'     => $app->applicationId, // applicationId is the application number saved in user service applications table
                         'service_id'        => $app->service_id,
                         'service_name'      => $app->service->service_title_or_description ?? null,
                         'department_name'   => $latest_send_back && $latest_send_back->department
