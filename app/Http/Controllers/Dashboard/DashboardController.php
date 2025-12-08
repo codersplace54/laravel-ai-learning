@@ -167,8 +167,8 @@ class DashboardController extends Controller
                     $application = $item->application;
                     $service     = $application ? $application->service : null;
                     return [
-                        'application_id'     => $item->application_id,
-                        'applicationId'      => $item->application->applicationId ?? null,
+                        'application_id'     => $item->application_id, // application_id saved in history table
+                        'applicationId'      => $item->application->applicationId ?? null,   // applicationId is the application number saved in user service applications table
                         'status_file'        =>  $item->status_file ? url($item->status_file) : null,
                         'service_name'              => $service->service_title_or_description ?? null,
                         'remark'                    => $item->remarks ?? null,
@@ -398,7 +398,7 @@ class DashboardController extends Controller
 
                     return [
                         'application_id'    => $app->id,
-                        'applicationId'     => $app->applicationId,
+                        'applicationId'     => $app->applicationId, // applicationId is the application number saved in user service applications table
                         'service_id'        => $app->service_id,
                         'department_name'   => $latest_send_back && $latest_send_back->department
                             ? $latest_send_back->department->name

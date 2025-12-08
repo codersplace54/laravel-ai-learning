@@ -14,7 +14,7 @@ class UserServiceApplication extends Model
         'previous_application_id',
         'renewal',
         'renewalYear',
-        'applicationId',
+        'applicationId',   //  applicationId is the application number  auto generated while storing the application
         'application_date',
         'status',
         'application_data',
