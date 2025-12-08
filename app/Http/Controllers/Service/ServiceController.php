@@ -985,7 +985,7 @@ class ServiceController extends Controller
             ])
                 ->where('status', 'pending')
                 ->where('hierarchy_level', $hierarchy_level)
-                ->paginate($per_page);
+                ->paginate($per_age);
 
             $applications->getCollection()->transform(function ($assignment) {
                 return [
@@ -997,7 +997,6 @@ class ServiceController extends Controller
                     'department'       => $assignment->department?->name ?? null,
                     'status'           => $assignment->application->status ?? null,
                     'current_step'     => $assignment->application->current_step_number ?? null,
-                    'step_type'         => $assignment->step_type ?? null,
                     'hierarchy_level'    => $assignment->hierarchy_level ?? null,
                 ];
             });
@@ -1008,7 +1007,7 @@ class ServiceController extends Controller
                 'pagination' => [
                     'current_page' => $applications->currentPage(),
                     'last_page'    => $applications->lastPage(),
-                    'per_page'     => $applications->count(),
+                    'per_page'     => $applications->per_age(),
                     'total'        => $applications->total(),
                     'next_page_url' => $applications->nextPageUrl(),
                     'prev_page_url' => $applications->previousPageUrl(),
@@ -1209,7 +1208,7 @@ class ServiceController extends Controller
                 'list_of_NOC_issued_by_department' => $list_of_NOC_issued_by_department->items(),
                 'pagination' => [
                     'current_page' => $list_of_NOC_issued_by_department->currentPage(),
-                    'row_count'    => $list_of_NOC_issued_by_department->per_page(),
+                    'row_count'    => $list_of_NOC_issued_by_department->per_age(),
                     'total'        => $list_of_NOC_issued_by_department->total(),
                     'start_row'    => $list_of_NOC_issued_by_department->firstItem(),
                     'end_row'      => $list_of_NOC_issued_by_department->lastItem(),
