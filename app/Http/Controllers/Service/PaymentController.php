@@ -112,34 +112,34 @@ class PaymentController extends Controller
             $hash        = base64_encode(hash_hmac('sha256', implode('|', $hash_parts), $secret_key, true));
 
             $form_html  = '<html><body>';
-            $form_html .= '<p>Review and edit values before sending to e-GRAS.</p>';
-            $form_html .= '<form id="egrasForm" name="process_payment" method="POST" action="https://swaagatbackend.tripura.gov.in/test_payment.php">';
-            $form_html .= '<table>';
+            $form_html .= '<p>Redirecting to e-GRAS. Please wait...</p>';
 
-            $form_html .= '<tr><td>DTO Code</td><td><input type="text" name="DTO" value="' . $dto_code . '"/></td></tr>';
-            $form_html .= '<tr><td>STO Code</td><td><input type="text" name="STO" value="' . $sto_code . '"/></td></tr>';
-            $form_html .= '<tr><td>DDO Code</td><td><input type="text" name="DDO" value="' . $ddo_code . '"/></td></tr>';
-            $form_html .= '<tr><td>Department Code</td><td><input type="text" name="Deptcode" value="' . $dept_code . '"/></td></tr>';
-            $form_html .= '<tr><td>User ID</td><td><input type="text" name="UserID" value="' . $egrasUserId . '"/></td></tr>';
-            $form_html .= '<tr><td>Order id</td><td><input type="text" name="Applicationnumber" value="' . $order_id . '"/></td></tr>';
-            $form_html .= '<tr><td>Full Name</td><td><input type="text" name="Fullname" value="' . $user->authorized_person_name . '"/></td></tr>';
-            $form_html .= '<tr><td>City</td><td><input type="text" name="Cityname" value="' . $user->registered_enterprise_city . '"/></td></tr>';
-            $form_html .= '<tr><td>Address</td><td><input type="text" name="Address" value="' . $user->registered_enterprise_address . '"/></td></tr>';
-            $form_html .= '<tr><td>Office Name</td><td><input type="text" name="Officename" value="' . $user->name_of_enterprise . '"/></td></tr>';
-            $form_html .= '<tr><td>Challan Year</td><td><input type="text" name="ChallanYear" value="2526"/></td></tr>';
-            $form_html .= '<tr><td>PIN Code</td><td><input type="text" name="PINCODE" value="799001"/></td></tr>';
-            $form_html .= '<tr><td>Bank Code</td><td><input type="text" name="Bank" value="0001509"/></td></tr>';
-            $form_html .= '<tr><td>Remarks</td><td><input type="text" name="Remarks" value="Swaagat Payment"/></td></tr>';
-            $form_html .= '<tr><td>Email</td><td><input type="text" name="Securityemail" value="' . $user->email_id . '"/></td></tr>';
-            $form_html .= '<tr><td>Phone</td><td><input type="text" name="Securityphone" value="' . $user->mobile_no . '"/></td></tr>';
-            $form_html .= '<tr><td>Valid Upto</td><td><input type="text" name="VALID_UPTO" value="' . $valid_upto . '"/></td></tr>';
-            $form_html .= '<tr><td>Payment Type</td><td><input type="text" name="ptype" value="N"/></td></tr>';
-            $form_html .= '<tr><td>Payment Mode</td><td><input type="text" name="paymentmode" value=""/></td></tr>';
-            $form_html .= '<tr><td>Total Amount</td><td><input type="text" name="TotalAmount" value="' . $total_amount . '"/></td></tr>';
-            $form_html .= '<tr><td>Hash</td><td><input type="text" name="hash" value="' . $hash . '"/></td></tr>';
-            $form_html .= '<tr><td>Return URL</td><td><input type="text" name="UURL" value="' . $return_url . '"/></td></tr>';
-            $form_html .= '<tr><td>Scheme Count</td><td><input type="text" name="SCHEMECOUNT" value="1"/></td></tr>';
-            
+            $form_html .= '<form id="egrasForm" name="process_payment" method="POST" action="https://swaagatbackend.tripura.gov.in/test_payment.php">';
+
+            $form_html .= '<input type="hidden" name="DTO" value="' . $dto_code . '"/>';
+            $form_html .= '<input type="hidden" name="STO" value="' . $sto_code . '"/>';
+            $form_html .= '<input type="hidden" name="DDO" value="' . $ddo_code . '"/>';
+            $form_html .= '<input type="hidden" name="Deptcode" value="' . $dept_code . '"/>';
+            $form_html .= '<input type="hidden" name="UserID" value="' . $egrasUserId . '"/>';
+            $form_html .= '<input type="hidden" name="Applicationnumber" value="' . $order_id . '"/>';
+            $form_html .= '<input type="hidden" name="Fullname" value="' . $user->authorized_person_name . '"/>';
+            $form_html .= '<input type="hidden" name="Cityname" value="' . $user->registered_enterprise_city . '"/>';
+            $form_html .= '<input type="hidden" name="Address" value="' . $user->registered_enterprise_address . '"/>';
+            $form_html .= '<input type="hidden" name="Officename" value="' . $user->name_of_enterprise . '"/>';
+            $form_html .= '<input type="hidden" name="ChallanYear" value="2526"/>';
+            $form_html .= '<input type="hidden" name="PINCODE" value="799001"/>';
+            $form_html .= '<input type="hidden" name="Bank" value="0001509"/>';
+            $form_html .= '<input type="hidden" name="Remarks" value="Swaagat Payment"/>';
+            $form_html .= '<input type="hidden" name="Securityemail" value="' . $user->email_id . '"/>';
+            $form_html .= '<input type="hidden" name="Securityphone" value="' . $user->mobile_no . '"/>';
+            $form_html .= '<input type="hidden" name="VALID_UPTO" value="' . $valid_upto . '"/>';
+            $form_html .= '<input type="hidden" name="ptype" value="N"/>';
+            $form_html .= '<input type="hidden" name="paymentmode" value=""/>';
+            $form_html .= '<input type="hidden" name="TotalAmount" value="' . $total_amount . '"/>';
+            $form_html .= '<input type="hidden" name="hash" value="' . $hash . '"/>';
+            $form_html .= '<input type="hidden" name="UURL" value="' . $return_url . '"/>';
+            $form_html .= '<input type="hidden" name="SCHEMECOUNT" value="' . $scheme_count . '"/>';
+
             for ($i = 0; $i < $scheme_count; $i++) {
                 $idx        = $i + 1;
                 $schemeName = htmlspecialchars($scheme_names[$i], ENT_QUOTES, 'UTF-8');

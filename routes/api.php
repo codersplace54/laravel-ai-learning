@@ -129,7 +129,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-template-show', [CertificateController::class, 'service_template_show']);
         Route::post('service-template-store',  [CertificateController::class, 'service_template_store']);
 
-        Route::post('download-application-pdf',  [ServiceController::class, 'download_application_pdf']);
+        Route::post('download-application-pdf',  [CertificateController::class, 'download_application_pdf']);
 
         Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);
         Route::post('service-master-update', [ServiceMasterController::class, 'service_master_update']);
@@ -195,7 +195,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-application-delete', [UserServiceApplicationController::class, 'user_service_application_delete']);
         Route::post('get-all-user-service-applications', [UserServiceApplicationController::class, 'get_all_user_service_applications']);
         Route::post('get-details-user-service-applications', [UserServiceApplicationController::class, 'get_details_user_service_applications']);
-        Route::post('download-user-application-pdf',  [ServiceController::class, 'download_user_application_pdf']);
+        Route::post('download-user-application-pdf',  [CertificateController::class, 'download_application_pdf']);
         Route::post('get-user-applications-per-service', [UserServiceApplicationController::class, 'get_user_applications_per_service']);
         Route::post('/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
         Route::post('calculate-fee', [UserServiceApplicationController::class, 'calculate_fee']);

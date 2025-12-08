@@ -415,7 +415,7 @@ class ServiceController extends Controller
                 'date_to'         => 'nullable|date|after_or_equal:date_from',
             ]);
 
-            $data = UserServiceApplication::with(['service', 'user', 'latestWorkflow'])
+            $data = UserServiceApplication::with(['service', 'user'])
                 ->whereHas('service', function ($service) use ($request) {
                     $service->where('department_id', $request->department_id);
                 });
@@ -467,7 +467,7 @@ class ServiceController extends Controller
                     'ulb_name' => $application->user->ulb->ulb_name ?? null,
                     'ward_code'   => $application->user->ward->gp_vc_ward_lgd_code ?? null,
                     'ward_name' => $application->user->ward->name_of_gp_vc_or_ward ?? null,
-                    'hierarchy_level'     => $application->latestWorkflow->hierarchy_level ?? null
+                    'hierarchy'   => $application->user->department_user->hierarchy_level ?? null,
                 ];
             });
 
@@ -517,7 +517,7 @@ class ServiceController extends Controller
 
             $is_just_before_final_step = false;
 
-            if ($current_step && $current_step->step_number == $max_step) {
+            if ($current_step->step_number == $max_step) {
                 $is_just_before_final_step = true;
             }
 
@@ -577,7 +577,7 @@ class ServiceController extends Controller
                     return [
                         'step_number'     => $flow->step_number,
                         'step_type'       => $flow->step_type,
-                        'department'      => $flow->department?->name,
+                        'department'      => $flow->department->name,
                         'status'          => $flow->status,
                         'action_taken_by' => $flow->actionTaker?->authorized_person_name ? $flow->actionTaker->authorized_person_name . ' (' . $flow->actionTaker->email_id . ')' : null,
                         'action_taken_at' => $flow->action_taken_at,
@@ -585,7 +585,7 @@ class ServiceController extends Controller
                         'remarks'         => $flow->remarks,
                     ];
                 }),
-                'just_before_final_step'  => $is_just_before_final_step,
+                'just_before_final_step'  => true,
                 'history_data'    => $history_data,
             ];
 
@@ -604,74 +604,6 @@ class ServiceController extends Controller
         }
     }
 
-    public function download_application_pdf(Request $request)
-    {
-        $user = Auth::user();
-
-        if (!$user) {
-            return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
-        }
-
-        try {
-            $request->validate([
-                'application_id'   => 'required|integer|exists:user_service_applications,id',
-            ]);
-
-            $application = UserServiceApplication::where('id', $request->application_id)->first();
-
-            $path = $application->NOC_certificate;
-
-            if (!$path || !Storage::disk('public')->exists($path)) {
-                return response()->json(['status' => 0, 'message' => 'PDF file not found for this application.'], 404);
-            }
-            return response()->json([
-                'status' => 1,
-                'message' => 'PDF file is available.',
-                'download_url' => Storage::url($path)
-            ]);
-        } catch (\Exception $e) {
-
-            return response()->json([
-                'status' => 0,
-                'message' => 'Something went wrong while fetching pdf.',
-                'error'   => $e->getMessage()
-            ], 500);
-        }
-    }
-    public function download_user_application_pdf(Request $request)
-    {
-        $user = Auth::user();
-
-        if (!$user) {
-            return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
-        }
-
-        try {
-            $request->validate([
-                'application_id'   => 'required|integer|exists:user_service_applications,id',
-            ]);
-
-            $application = UserServiceApplication::where('id', $request->application_id)->first();
-
-            $path = $application->NOC_certificate;
-
-            if (!$path || !Storage::disk('public')->exists($path)) {
-                return response()->json(['status' => 0, 'message' => 'PDF file not found for this application.'], 404);
-            }
-            return response()->json([
-                'status' => 1,
-                'message' => 'PDF file is available.',
-                'download_url' => Storage::url($path)
-            ]);
-        } catch (\Exception $e) {
-
-            return response()->json([
-                'status' => 0,
-                'message' => 'Something went wrong while fetching pdf.',
-                'error'   => $e->getMessage()
-            ], 500);
-        }
-    }
 
     public function update_application_status(Request $request, $id)
     {
@@ -758,10 +690,6 @@ class ServiceController extends Controller
                         'status'       => 'approved',
                         'updated_at' => now(),
                     ]);
-
-                    // if ($application->service->form_template) {
-                    //     $this->generate_dynamic_pdf($application, $user);
-                    // }
 
                     return response()->json([
                         'status' => 1,
@@ -854,7 +782,7 @@ class ServiceController extends Controller
                     $application->update([
                         'current_step_number' => $first_step_flow->step_number,
                         'payment_status'      => 'pending',
-                        // 'total_fee'           =>  $total_fee,
+                       // 'total_fee'           =>  $total_fee,
                         'extra_payment'       => $request->extra_payment,
                         'remarks'             => $request->remarks,
                         'status'              => 'extra_payment',
@@ -1028,7 +956,7 @@ class ServiceController extends Controller
         }
     }
 
-    public function get_department_user_assigned_applications(Request $request, $user_id)
+    public function get_department_user_assigned_applications($user_id)
     {
 
         try {
@@ -1039,6 +967,7 @@ class ServiceController extends Controller
             $user = User::where('id', $user_id)
                 ->where('user_type', 'department')
                 ->first();
+
 
             if (!$user) {
                 return response()->json([
@@ -1317,157 +1246,4 @@ class ServiceController extends Controller
     }
 
 
-    public function preview_certificate($application_id)
-    {
-
-        try {
-
-
-            $application = UserServiceApplication::with('service')->findOrFail($application_id);
-
-            if (!$application->service || !$application->service->form_template) {
-                return response()->json([
-                    'status' => 0,
-                    'message' => 'Certificate template not found.'
-                ]);
-            }
-
-            $user = Auth::user();
-
-            $template = (string) data_get($application, 'service.form_template', '');
-            $template = html_entity_decode($template, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            $template = str_replace("\xC2\xA0", ' ', $template);
-
-            $name = $application->user->authorized_person_name ?? $user->name ?? '—';
-            $verifyUrl = 'https://swaagat.tripura.gov.in/verify';
-
-            $qrPayload = "Name: {$name}\nApplication Id: {$application->id}\n{$verifyUrl}";
-            $qrSvg = QrCode::format('svg')->size(220)->margin(0)->generate($qrPayload);
-            $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
-
-            $data = [
-                'form_title'        => 'FORM VI',
-                'rules_ref'         => '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
-                'government'        => 'Government of Tripura',
-                'issuing_office'    => 'Office of the Licensing Officer',
-                'verify_portal_url' => 'https://swaagat.tripura.gov.in',
-
-                'license_id'          => $application->id ?? '—',
-                'issue_date'          => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
-                'principal_employer'  => $application->user->authorized_person_name ?? '—',
-                'guardian_name'       => $application->user->management_details->owner_details_father_name ?? '—',
-                'address'             => $application->user->management_details->owner_details_residential_details ?? '—',
-                'work_location'       => $application->work_location ?? 'Tripura',
-                'registration_no'     => $application->id ?? '—',
-                'registration_date'   => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
-                'valid_upto'          => $application->NOC_expiry_date ? Carbon::parse($application->NOC_expiry_date)->format('d-m-Y') : '—',
-                'max_contract_labour' => (string) ($application->max_contract_labour ?? 0),
-                'fee_paid'            => (string) ($application->final_fee ?? 0),
-                'security_deposit'    => (string) ($application->security_deposit ?? ''),
-                'designation'         => $application->service->department->department_user->designation ?? '',
-                'signature_note'      => 'Not Required',
-                'user_name'           => $user->authorized_person_name ?? '',
-                'user_id'             => (string) $user->id,
-                'qr_code'             => $qrDataUri,
-            ];
-
-            $filled = preg_replace_callback('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', function ($m) use ($data) {
-                $key = $m[1];
-                return e($data[$key] ?? '');
-            }, $template);
-
-            if (stripos($filled, '<html') === false) {
-                $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
-            }
-
-            $pdf = Pdf::loadHTML($filled)->setPaper('a4', 'portrait');
-
-            $temp_file_name = 'preview_' . uniqid() . '.pdf';
-            $temp_path = storage_path('app/public/temp/' . $temp_file_name);
-            Storage::disk('public')->put('temp/' . $temp_file_name, $pdf->output());
-
-            $previewUrl = asset('storage/temp/' . $temp_file_name);
-
-            return response()->json([
-                'status' => 1,
-                'message' => 'Preview generated successfully.',
-                'pdf_url' => $previewUrl,
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => 0,
-                'message' => 'Something went wrong while generating preview.',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
-    private function generate_dynamic_pdf(UserServiceApplication $application, User $user): void
-    {
-
-        $template = (string) data_get($application, 'service.form_template', '');
-        if ($template === '') abort(422, 'No form template configured for this service.');
-
-        $template = html_entity_decode($template, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $template = str_replace("\xC2\xA0", ' ', $template);
-
-        $name     = $application->user->authorized_person_name ?? $user->name ?? '—';
-        $verifyUrl = trim('https://swaagat.tripura.gov.in/verify');
-
-        $qrPayload = "Name: {$name}\nApplication Id: {$application->id}\n{$verifyUrl}";
-        $qrSvg     = QrCode::format('svg')->size(220)->margin(0)->generate($qrPayload);
-        $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
-
-        $data = [
-            'form_title'        => 'FORM VI',
-            'rules_ref'         => '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
-            'government'        => 'Government of Tripura',
-            'issuing_office'    => 'Office of the Licensing Officer',
-            'verify_portal_url' => 'https://swaagat.tripura.gov.in',
-
-            'license_id'          => $application->id ?? '—',
-            'issue_date'          => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
-            'principal_employer'  => $application->user->authorized_person_name ?? '—',
-            'guardian_name'       => $application->user->management_details->owner_details_father_name ?? '—',
-            'address'             => $application->user->management_details->owner_details_residential_details ?? '—',
-            'work_location'       => $application->work_location ?? 'Tripura',
-            'registration_no'     => $application->id ?? '—',
-            'registration_date'   => $application->application_date ? Carbon::parse($application->application_date)->format('d-m-Y') : '—',
-            'valid_upto'          => $application->NOC_expiry_date ? Carbon::parse($application->NOC_expiry_date)->format('d-m-Y') : '—',
-            'max_contract_labour' => (string) ($application->max_contract_labour ?? 0),
-            'fee_paid'            => (string) ($application->final_fee ?? 0),
-            'security_deposit'    => (string) ($application->security_deposit ?? ''),
-            'designation'         => $application->service->department->department_user->designation ?? '',
-            'signature_note'      => 'Not Required',
-            'user_name'           => $user->authorized_person_name ?? '',
-            'user_id'             => (string) $user->id,
-            'qr_code'            => $qrDataUri,
-        ];
-
-        $filled = preg_replace_callback('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', function ($m) use ($data) {
-            $key = $m[1];
-            $val = $data[$key] ?? '';
-            return e(is_scalar($val) ? (string) $val : '');
-        }, $template);
-
-        if (stripos($filled, '<html') === false) {
-            $filled = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $filled . '</body></html>';
-        }
-
-        $pdf = Pdf::loadHTML($filled)
-            ->setPaper('a4', 'portrait')
-            ->setOptions([
-                'isHtml5ParserEnabled' => true,
-                'isRemoteEnabled'      => true,
-                'defaultFont'          => 'DejaVu Sans',
-                'dpi'                  => 110,
-            ]);
-
-
-        $filename = uniqid('license_') . '.pdf';
-        $path     = "uploads/{$user->id}/application/{$filename}";
-
-        Storage::disk('public')->put($path, $pdf->output());
-        $application->update(['NOC_certificate' => $path]);
-    }
 }

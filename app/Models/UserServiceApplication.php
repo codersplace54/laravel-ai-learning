@@ -58,6 +58,7 @@ class UserServiceApplication extends Model
         'external_valid_till',
         'external_remarks',
         'is_third_party',
+        'license_id',
     ];
 
     protected $casts = [
