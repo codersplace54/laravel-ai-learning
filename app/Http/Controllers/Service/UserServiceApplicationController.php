@@ -1078,45 +1078,40 @@ class UserServiceApplicationController extends Controller
             }
 
             $history_data = ApplicationWorkflowHistory::where('application_id', $application->id)
-                ->orderByDesc('id')
-                ->first();
+                ->orderBy('id', 'desc')
+                ->get()
+                ->map(function ($history) {
+                    return [
+                        'id'              => $history->id,
+                        'step_number'     => $history->step_number,
+                        'status'          => $history->status,
+                        'remarks'         => $history->remarks,
+                        'status_file'     => $history->status_file ? asset('storage/' . $history->status_file) : null,
+                        'action_taken_at' => $history->action_taken_at,
+                        'action_taken_by' => $history->action_taken_by,
+                    ];
+                });
 
             if ($application->service && $application->service->service_mode === 'third_party') {
 
                 $third_party_logs = ThirdPartyStatusLog::where('application_id', $application->id)
                     ->orderByDesc('id')
-                    ->first();
-                if ($third_party_logs) {
-                    $history_data =  [
-                        'application_id'         => $third_party_logs->application_id,
-                        'service_status'     => $third_party_logs->service_status,
-                        'application_date'     => $third_party_logs->application_date,
-                        'payment_amount'     => $third_party_logs->payment_amount,
-                        'payment_status'     => $third_party_logs->payment_status,
-                        'remarks'    => $third_party_logs->remarks,
-                        'noc_file'       => !empty($third_party_logs->file)
-                            ? asset('storage/' . $third_party_logs->file)
-                            : null,
-                        'updated_at' => $third_party_logs->updated_at,
-                    ];
-                } else {
-                    $history = ApplicationWorkflowHistory::where('application_id', $application->id)
-                        ->orderByDesc('id')
-                        ->first();
-
-                    if ($history) {
-                        $history_data = [
-                            'id'              => $history->id,
-                            'step_number'     => $history->step_number,
-                            'status'          => $history->status,
-                            'remarks'         => $history->remarks,
-                            'status_file'     => $history->status_file
-                                ? asset('storage/' . $history->status_file)
-                                : null,
-                            'action_taken_at' => $history->action_taken_at,
-                            'action_taken_by' => $history->action_taken_by,
+                    ->get()
+                    ->map(function ($log) {
+                        return [
+                            'application_id'  => $log->application_id,
+                            'service_status'  => $log->service_status,
+                            'application_date' => $log->application_date,
+                            'payment_amount'  => $log->payment_amount,
+                            'payment_status'  => $log->payment_status,
+                            'remarks'         => $log->remarks,
+                            'noc_file'        => $log->file ? asset('storage/' . $log->file) : null,
+                            'updated_at'      => $log->updated_at,
                         ];
-                    }
+                    });
+
+                if ($third_party_logs->isNotEmpty()) {
+                    $history_data = $third_party_logs;
                 }
             }
 
@@ -1837,7 +1832,7 @@ class UserServiceApplicationController extends Controller
                 'pagination' => [
                     'current_page' => $applications->currentPage(),
                     'last_page'    => $applications->lastPage(),
-                    'per_page'     => $applications->perPage(),
+                    'per_page'     => $applications->count(),
                     'total'        => $applications->total(),
                 ]
             ]);

@@ -1033,7 +1033,7 @@ class ServiceController extends Controller
 
         try {
 
-            $per_age = $request->per_page ?? 10;
+            $per_page = $request->per_page ?? 10;
 
 
             $user = User::where('id', $user_id)
@@ -1056,7 +1056,7 @@ class ServiceController extends Controller
             ])
                 ->where('status', 'pending')
                 ->where('hierarchy_level', $hierarchy_level)
-                ->paginate($per_age);
+                ->paginate($per_page);
 
             $applications->getCollection()->transform(function ($assignment) {
                 return [
@@ -1068,6 +1068,7 @@ class ServiceController extends Controller
                     'department'       => $assignment->department?->name ?? null,
                     'status'           => $assignment->application->status ?? null,
                     'current_step'     => $assignment->application->current_step_number ?? null,
+                    'step_type'         => $assignment->step_type ?? null,
                     'hierarchy_level'    => $assignment->hierarchy_level ?? null,
                 ];
             });
@@ -1078,7 +1079,7 @@ class ServiceController extends Controller
                 'pagination' => [
                     'current_page' => $applications->currentPage(),
                     'last_page'    => $applications->lastPage(),
-                    'per_page'     => $applications->per_age(),
+                    'per_page'     => $applications->count(),
                     'total'        => $applications->total(),
                     'next_page_url' => $applications->nextPageUrl(),
                     'prev_page_url' => $applications->previousPageUrl(),
@@ -1279,7 +1280,7 @@ class ServiceController extends Controller
                 'list_of_NOC_issued_by_department' => $list_of_NOC_issued_by_department->items(),
                 'pagination' => [
                     'current_page' => $list_of_NOC_issued_by_department->currentPage(),
-                    'row_count'    => $list_of_NOC_issued_by_department->per_age(),
+                    'row_count'    => $list_of_NOC_issued_by_department->per_page(),
                     'total'        => $list_of_NOC_issued_by_department->total(),
                     'start_row'    => $list_of_NOC_issued_by_department->firstItem(),
                     'end_row'      => $list_of_NOC_issued_by_department->lastItem(),
