@@ -759,9 +759,9 @@ class ServiceController extends Controller
                         'updated_at' => now(),
                     ]);
 
-                    if ($application->service->form_template) {
-                        $this->generate_dynamic_pdf($application, $user);
-                    }
+                    // if ($application->service->form_template) {
+                    //     $this->generate_dynamic_pdf($application, $user);
+                    // }
 
                     return response()->json([
                         'status' => 1,
