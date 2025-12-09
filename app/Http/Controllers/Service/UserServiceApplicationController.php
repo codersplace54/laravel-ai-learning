@@ -36,55 +36,66 @@ class UserServiceApplicationController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $request->validate([
-                'service_id'            => 'required|integer|exists:service_masters,id',
-                'renewal_cycle_id'      => 'nullable|integer|exists:renewal_cycles,id',
-                'previous_application_id' => 'nullable|integer',
-                'renewal'               => 'nullable|in:yes,no',
-                'renewalYear'           => 'nullable|integer|min:1|max:10',
-                'applicationId'         => 'nullable|string|max:255',
-                'application_date'      => 'nullable|date',
-                'status'                => 'nullable|in:submitted,under_review,approved,rejected,re_submitted,send_back,saved, expired',
-                'application_data'      => 'nullable|array',
-                'applied_fee'           => 'nullable|numeric',
-                'approved_fee'          => 'nullable|numeric',
-                'payment_status'        => 'nullable|string',
-                'remarks'               => 'nullable|string',
-                'NOC_application_date'  => 'nullable|date',
-                'NOC_expiry_date'       => 'nullable|date',
-                'PreviousNOCexpiryDate' => 'nullable|date',
-                'payment_transId'       => 'nullable|string|max:255',
-                'GRN_number'            => 'nullable|string|max:255',
-                'payment_time'          => 'nullable|date',
-                'extra_payment'         => 'nullable|numeric',
-                'comments'              => 'nullable|string',
-                'NOC_certificate'       => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
-                'NOC_rejection_certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
-                'NOC_generationDate'    => 'nullable|date',
-                'NOC_penalty_amount'    => 'nullable|numeric',
-                'NOC_letter_number'     => 'nullable|string|max:255',
-                'NOC_letter_date'       => 'nullable|date',
-                'NSW_Application_Save_ID' => 'nullable|string|max:255',
-                'NSW_license_status'    => 'nullable|in:pending,approved,rejected,expired',
-                'NSW_Push_Document_ID'  => 'nullable|string|max:255',
-                'final_fee'             => 'nullable|string',
-                'total_fee'             => 'nullable|string',
-                'current_step_number'   => 'nullable|date',
-                'max_processing_date'   => 'nullable|string',
+            if ($request->save_data != 1) {
+                $request->validate([
+                    'service_id'            => 'required|integer|exists:service_masters,id',
+                    'renewal_cycle_id'      => 'nullable|integer|exists:renewal_cycles,id',
+                    'previous_application_id' => 'nullable|integer',
+                    'renewal'               => 'nullable|in:yes,no',
+                    'renewalYear'           => 'nullable|integer|min:1|max:10',
+                    'applicationId'         => 'nullable|string|max:255',
+                    'application_date'      => 'nullable|date',
+                    'status'                => 'nullable|in:draft,submitted,under_review,approved,rejected,re_submitted,send_back,saved, expired',
+                    'application_data'      => 'nullable|array',
+                    'applied_fee'           => 'nullable|numeric',
+                    'approved_fee'          => 'nullable|numeric',
+                    'payment_status'        => 'nullable|string',
+                    'remarks'               => 'nullable|string',
+                    'NOC_application_date'  => 'nullable|date',
+                    'NOC_expiry_date'       => 'nullable|date',
+                    'PreviousNOCexpiryDate' => 'nullable|date',
+                    'payment_transId'       => 'nullable|string|max:255',
+                    'GRN_number'            => 'nullable|string|max:255',
+                    'payment_time'          => 'nullable|date',
+                    'extra_payment'         => 'nullable|numeric',
+                    'comments'              => 'nullable|string',
+                    'NOC_certificate'       => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+                    'NOC_rejection_certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+                    'NOC_generationDate'    => 'nullable|date',
+                    'NOC_penalty_amount'    => 'nullable|numeric',
+                    'NOC_letter_number'     => 'nullable|string|max:255',
+                    'NOC_letter_date'       => 'nullable|date',
+                    'NSW_Application_Save_ID' => 'nullable|string|max:255',
+                    'NSW_license_status'    => 'nullable|in:pending,approved,rejected,expired',
+                    'NSW_Push_Document_ID'  => 'nullable|string|max:255',
+                    'final_fee'             => 'nullable|string',
+                    'total_fee'             => 'nullable|string',
+                    'current_step_number'   => 'nullable|date',
+                    'max_processing_date'   => 'nullable|string',
 
-                'external_application_id'   => 'nullable|string',
-                'external_status'   => 'nullable|string',
-                'external_payment_status'   => 'nullable|string|in:pending,paid,failed',
-                'external_max_processing_date'   => 'nullable|string',
-                'external_noc_number'   => 'nullable|string',
-                'external_valid_till'   => 'nullable|date',
-                'external_remarks'   => 'nullable|string',
-                'is_third_party'   => 'nullable|integer|in:0,1',
-                'removed_question_ids'   => 'nullable|array',
-            ]);
+                    'external_application_id'   => 'nullable|string',
+                    'external_status'   => 'nullable|string',
+                    'external_payment_status'   => 'nullable|string|in:pending,paid,failed',
+                    'external_max_processing_date'   => 'nullable|string',
+                    'external_noc_number'   => 'nullable|string',
+                    'external_valid_till'   => 'nullable|date',
+                    'external_remarks'   => 'nullable|string',
+                    'is_third_party'   => 'nullable|integer|in:0,1',
+                    'removed_question_ids'   => 'nullable|array',
+                ]);
 
-            $this->validate_questionnaire_file_inputs($request);
+                $this->validate_questionnaire_file_inputs($request);
+            } else {
 
+                $request->validate([
+                    'service_id' => 'required|integer|exists:service_masters,id',
+                ]);
+                
+                $request->merge([
+                    'status' => 'draft',
+                ]);
+            }
+            
             DB::beginTransaction();
 
             $noc_certificate = null;
