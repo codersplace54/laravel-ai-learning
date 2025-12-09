@@ -80,7 +80,7 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasOne(ManagementDetails::class, 'user_id');
     }
-    
+
     public function department_user()
     {
         return $this->hasOne(DepartmentUser::class, 'user_id');
@@ -109,5 +109,10 @@ class User extends Authenticatable implements JWTSubject
     public function applications()
     {
         return $this->hasMany(UserServiceApplication::class, 'user_id', 'id');
+    }
+
+    public function department_user_location()
+    {
+        return $this->hasMany(DepartmentUser::class, 'user_id');
     }
 }

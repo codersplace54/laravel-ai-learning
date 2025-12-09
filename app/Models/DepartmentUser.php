@@ -37,4 +37,19 @@ class DepartmentUser extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+
+    public function district()
+    {
+        return $this->belongsTo(TripuraMasterData::class, 'district_id', 'district_code');
+    }
+
+    public function subdivision()
+    {
+        return $this->belongsTo(TripuraMasterData::class, 'subdivision_id', 'sub_lgd_code');
+    }
+
+    public function ulb()
+    {
+        return $this->belongsTo(TripuraMasterData::class, 'block_id', 'ulb_lgd_code');
+    }
 }
