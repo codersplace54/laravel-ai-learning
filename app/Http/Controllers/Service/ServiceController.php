@@ -1035,7 +1035,7 @@ class ServiceController extends Controller
                 'pagination' => [
                     'current_page' => $applications->currentPage(),
                     'last_page'    => $applications->lastPage(),
-                    'per_page'     => $applications->count(),
+                    'per_page'     => $applications->per_age(),
                     'total'        => $applications->total(),
                     'next_page_url' => $applications->nextPageUrl(),
                     'prev_page_url' => $applications->previousPageUrl(),

@@ -64,8 +64,8 @@ class UserServiceApplication extends Model
     protected $casts = [
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
-        'NOC_application_date' => 'datetime:Y-m-d H:i:s',
-        'NOC_generationDate' => 'datetime:Y-m-d H:i:s',
+        // 'NOC_application_date' => 'datetime:Y-m-d H:i:s',
+        // 'NOC_generationDate' => 'datetime:Y-m-d H:i:s',
         'PreviousNOCexpiryDate' => 'datetime:Y-m-d H:i:s',
         'application_date' => 'datetime:Y-m-d H:i:s',
     ];
