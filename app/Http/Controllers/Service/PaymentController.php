@@ -59,7 +59,7 @@ class PaymentController extends Controller
                     $amount = $application->effective_fee ?? $application->total_fee ?? 0;
                 }
 
-                $scheme_names[] = $application->service->service_code ?? 'NA';
+                $scheme_names[] = $application->service->egras_scheme_code ?? 'NA';
                 $fee_amounts[]  = $amount;
             }
 
@@ -109,7 +109,7 @@ class PaymentController extends Controller
 
             $hash_parts[] = $return_url;
 
-            $hash        = base64_encode(hash_hmac('sha256', implode('|', $hash_parts), $secret_key, true));
+            $hash       = base64_encode(hash_hmac('sha256', implode('|', $hash_parts), $secret_key, true));
 
             $form_html  = '<html><body>';
             $form_html .= '<p>Redirecting to e-GRAS. Please wait...</p>';
@@ -144,15 +144,16 @@ class PaymentController extends Controller
                 $idx        = $i + 1;
                 $schemeName = htmlspecialchars($scheme_names[$i], ENT_QUOTES, 'UTF-8');
 
-                $form_html .= '<input type="hidden" name="SCHEMENAME' . $idx . '" value="' . $schemeName . '"/>';
-                $form_html .= '<input type="hidden" name="FEEAMOUNT' . $idx . '" value="' . $fee_amounts[$i] . '"/>';
+                $form_html .= '<input type="text" name="SCHEMENAME' . $idx . '" value="' . $schemeName . '"/>';
+                $form_html .= '<input type="text" name="FEEAMOUNT' . $idx . '" value="' . $fee_amounts[$i] . '"/>';
             }
 
+            $form_html .= '<input type="submit" value="Submit"/>';
             $form_html .= '</form>';
-            $form_html .= '<script>document.getElementById("egrasForm").submit();</script>';
+            // $form_html .= '<script>document.getElementById("egrasForm").submit();</script>';
             $form_html .= '</body></html>';
-
             return $form_html;
+
         } catch (\Exception $e) {
 
             DB::rollBack();
@@ -253,7 +254,7 @@ class PaymentController extends Controller
                     if ($application->extra_payment != null && $application->payment_status == "pending") {
                         $amount = $application->extra_payment;
                         $status = 're_submitted';
-                    } else { 
+                    } else {
                         $amount = $application->effective_fee ?? $application->total_fee ?? 0;
                         $status = 'submitted';
                     }
