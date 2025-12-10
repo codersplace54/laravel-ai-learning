@@ -253,7 +253,7 @@ class UserServiceApplicationController extends Controller
                         ]);
 
 
-                    if (!$request->status == 'draft') {
+                    if ($request->status != 'draft') {
                         ApplicationWorkflowAssignment::create([
                             'application_id'     => $user_service_application->id,
                             'service_id'         => $request->service_id,
@@ -336,7 +336,7 @@ class UserServiceApplicationController extends Controller
                         'applicationId' => $application_number
                     ]);
 
-                    if (!$request->status == 'draft') {
+                    if ($request->status != 'draft') {
                         ApplicationWorkflowAssignment::create([
                             'application_id'     => $user_service_application->id,
                             'service_id'         => $request->service_id,

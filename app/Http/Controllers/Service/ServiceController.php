@@ -585,7 +585,7 @@ class ServiceController extends Controller
                         'remarks'         => $flow->remarks,
                     ];
                 }),
-                'just_before_final_step'  => true,
+                'just_before_final_step'  => $is_just_before_final_step,
                 'history_data'    => $history_data,
             ];
 
