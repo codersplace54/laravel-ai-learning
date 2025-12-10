@@ -8,7 +8,9 @@ Route::get('/', function () {
 });
 
 Route::prefix('admin')->name('admin.')->group(function () {
-    Route::get('import-users', [ImportController::class, 'import_users_form'])->name('import.users.form');
+    Route::get('import-service-applications', [ImportController::class, 'import_service_application_form'])->name('import.applications.form');
+    Route::post('import-service-applications', [ImportController::class, 'import_service_applications'])->name('import.service_applications');
 
+    Route::get('import-users', [ImportController::class, 'import_users_form'])->name('import.users.form');
     Route::post('import-users', [ImportController::class, 'import_users'])->name('import.users');
 });

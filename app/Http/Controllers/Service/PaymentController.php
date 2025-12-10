@@ -144,8 +144,8 @@ class PaymentController extends Controller
                 $idx        = $i + 1;
                 $schemeName = htmlspecialchars($scheme_names[$i], ENT_QUOTES, 'UTF-8');
 
-                $form_html .= '<input type="text" name="SCHEMENAME' . $idx . '" value="' . $schemeName . '"/>';
-                $form_html .= '<input type="text" name="FEEAMOUNT' . $idx . '" value="' . $fee_amounts[$i] . '"/>';
+                $form_html .= '<input type="hidden" name="SCHEMENAME' . $idx . '" value="' . $schemeName . '"/>';
+                $form_html .= '<input type="hidden" name="FEEAMOUNT' . $idx . '" value="' . $fee_amounts[$i] . '"/>';
             }
 
             $form_html .= '<input type="submit" value="Submit"/>';
