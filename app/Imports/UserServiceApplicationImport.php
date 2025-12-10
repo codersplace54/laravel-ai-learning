@@ -25,6 +25,7 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
 
     public function collection(Collection $rows)
     {
+        // dd($rows);
         DB::disableQueryLog();
 
         $batch      = [];
@@ -59,8 +60,8 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
         $old_user_id         = $row['old_user_id'] ?? null;
         $application_id      = $row['applicationid'] ?? null;
         $final_fee           = $row['final_fee'] ?? null;
-        $payment_status_raw  = strtolower($row['paymentstatus'] ?? $row['payment_status'] ?? '');
-        $application_status_raw = $row['application_status'] ?? $row['applicationstatus'] ?? '';
+        $payment_status_raw  = strtolower($row['paymentstatus'] ?? '');
+        $application_status_raw = $row['application_status'] ?? '';
         $noc_type_raw        = $row['noc_type'] ?? null;
         $noc_cert_url_raw    = $row['noc_certificate'] ?? null;
         $noc_cert_number     = $row['noc_certificate_number'] ?? null;
@@ -69,7 +70,8 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
         $noc_gen_date_raw    = $row['noc_generation_date'] ?? null;
         $app_date_raw        = $row['application_date'] ?? null;
 
-        if (empty($noc_master_id) || empty($application_id)) {
+        if (empty($noc_master_id)) {
+            
             $this->skipped_rows[] = [
                 'row'         => $excel_row_number,
                 'noc_id'      => $noc_details_id,
@@ -81,7 +83,9 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
 
         $service_id = $this->service_id_map[$noc_master_id] ?? null;
         if ($service_id === null) {
+            
             $this->skipped_rows[] = [
+                'noc_master_id' => $noc_master_id,
                 'row'         => $excel_row_number,
                 'noc_id'      => $noc_details_id,
                 'old_user_id' => $old_user_id,
@@ -112,9 +116,9 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
 
         $status_key = strtolower(str_replace(' ', '_', $application_status_raw));
         $status_map = [
-            'draft'                        => 'saved',
-            'noc_issued'                   => 'approved',
-            'submitted'                    => 'submitted',
+            'draft'                        => 'draft',
+            'noc_issued'                   => 'noc_issued',
+            'submitted'                    => 'saved',
             'acknowledged'                 => 'under_review',
             'approved'                     => 'approved',
             'approved_beyond_timeline'     => 'approved',
@@ -122,7 +126,7 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
             'extra_payment_paid'           => 're_submitted',
             'extra_payment_raised'         => 'extra_payment',
             'forward_to_approval_authority' => 'under_review',
-            'pneding_beyond_timeline'      => 'pending',
+            'pending_beyond_timeline'      => 'pending',
             're_submitted'                 => 're_submitted',
             'rejected'                     => 'rejected',
         ];

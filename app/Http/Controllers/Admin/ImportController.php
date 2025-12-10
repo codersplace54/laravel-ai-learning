@@ -7,11 +7,15 @@ use Illuminate\Http\Request;
 use App\Imports\UserServiceApplicationImport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\UserImport;
+use App\Models\User;
+use App\Models\UserServiceApplication;
+use Illuminate\Container\Attributes\DB;
+
 class ImportController extends Controller
 {
-    public function import_noc_form()
+    public function import_service_application_form()
     {
-        return view('admin.import.noc_applications');
+        return view('admin.import.service_applications');
     }
 
     public function import_service_applications(Request $request)
@@ -19,7 +23,7 @@ class ImportController extends Controller
         $request->validate([
             'excel_file' => 'required|file|mimes:xlsx,xls,csv',
         ]);
-
+        // UserServiceApplication::truncate();
         $file = $request->file('excel_file');
 
         $import = new UserServiceApplicationImport();
@@ -45,6 +49,7 @@ class ImportController extends Controller
                 'json_file' => 'nullable|file|mimes:json,txt',
                 'json_text' => 'nullable|string',
             ]);
+            // User::truncate();
 
             if (!$request->hasFile('json_file') && empty($request->json_text)) {
                 return back()

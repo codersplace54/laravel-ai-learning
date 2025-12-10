@@ -90,12 +90,12 @@ class UserServiceApplicationController extends Controller
                 $request->validate([
                     'service_id' => 'required|integer|exists:service_masters,id',
                 ]);
-                
+
                 $request->merge([
                     'status' => 'draft',
                 ]);
             }
-            
+
             DB::beginTransaction();
 
             $noc_certificate = null;
@@ -114,7 +114,7 @@ class UserServiceApplicationController extends Controller
 
             $service_data = ServiceMaster::where('id', $request->service_id)
                 ->first(['noc_name', 'service_mode',  'target_days', 'allow_repeat_application']);
-
+            
             if ($service_data->service_mode === "native") {
 
                 $approval_flow = ServiceApprovalFlow::where('service_id', $request->service_id)
@@ -137,7 +137,7 @@ class UserServiceApplicationController extends Controller
                     ->where('service_id', $request->service_id)
                     ->latest()
                     ->first();
-
+                
                 $application_id =  $user_service_application->id ?? null;
                 $fee_data = $this->calculate_final_fee($request->service_id, $request->application_data, $application_id);
                 $final_fee = $fee_data['final_fee'];
@@ -145,7 +145,7 @@ class UserServiceApplicationController extends Controller
                 $previous_paid = $fee_data['previous_paid'];
                 $total_fee =  $final_fee;
                 $effective_fee = 0;
-                if ($user_service_application && $service_data->allow_repeat_application === 'no') {
+                if (($user_service_application && $service_data->allow_repeat_application === 'no') || ($user_service_application && $request->status == 'draft')) {
 
                     $total_fee =  $final_fee;
                     $previous_paid = $user_service_application->paid_amount ?? 0;
@@ -153,7 +153,7 @@ class UserServiceApplicationController extends Controller
                         $effective_fee = $total_fee - $previous_paid;
                     }
 
-                    if (!in_array($user_service_application->status, ['submitted', 're_submitted', 'send_back', 'extra_payment', 'saved'])) {
+                    if (!in_array($user_service_application->status, ['draft', 'submitted', 're_submitted', 'send_back', 'extra_payment', 'saved'])) {
                         return response()->json([
                             'status' => 0,
                             'message' => "You can't update the application. It's under " . $user_service_application->status . "."
@@ -253,20 +253,21 @@ class UserServiceApplicationController extends Controller
                         ]);
 
 
-
-                    ApplicationWorkflowAssignment::create([
-                        'application_id'     => $user_service_application->id,
-                        'service_id'         => $request->service_id,
-                        'step_number'        => $approval_flow->step_number,
-                        'step_type'          => $approval_flow->step_type,
-                        'department_id'      => $approval_flow->department_id,
-                        'hierarchy_level'    => $approval_flow->hierarchy_level,
-                        'assigned_to_group'  => true,
-                        'status'             => 'pending',
-                        'action_taken_by'    => null,
-                        'action_taken_at'    => null,
-                        'remarks'            => null,
-                    ]);
+                    if (!$request->status == 'draft') {
+                        ApplicationWorkflowAssignment::create([
+                            'application_id'     => $user_service_application->id,
+                            'service_id'         => $request->service_id,
+                            'step_number'        => $approval_flow->step_number,
+                            'step_type'          => $approval_flow->step_type,
+                            'department_id'      => $approval_flow->department_id,
+                            'hierarchy_level'    => $approval_flow->hierarchy_level,
+                            'assigned_to_group'  => true,
+                            'status'             => 'pending',
+                            'action_taken_by'    => null,
+                            'action_taken_at'    => null,
+                            'remarks'            => null,
+                        ]);
+                    }
 
                     $user_service_application->application_data = json_decode($user_service_application->application_data);
                     DB::commit();
@@ -335,20 +336,21 @@ class UserServiceApplicationController extends Controller
                         'applicationId' => $application_number
                     ]);
 
-                    ApplicationWorkflowAssignment::create([
-                        'application_id'     => $user_service_application->id,
-                        'service_id'         => $request->service_id,
-                        'step_number'        => $approval_flow->step_number,
-                        'step_type'          => $approval_flow->step_type,
-                        'department_id'      => $approval_flow->department_id,
-                        'hierarchy_level'    => $approval_flow->hierarchy_level,
-                        'assigned_to_group'  => true,
-                        'status'             => 'pending',
-                        'action_taken_by'    => null,
-                        'action_taken_at'    => null,
-                        'remarks'            => null,
-                    ]);
-
+                    if (!$request->status == 'draft') {
+                        ApplicationWorkflowAssignment::create([
+                            'application_id'     => $user_service_application->id,
+                            'service_id'         => $request->service_id,
+                            'step_number'        => $approval_flow->step_number,
+                            'step_type'          => $approval_flow->step_type,
+                            'department_id'      => $approval_flow->department_id,
+                            'hierarchy_level'    => $approval_flow->hierarchy_level,
+                            'assigned_to_group'  => true,
+                            'status'             => 'pending',
+                            'action_taken_by'    => null,
+                            'action_taken_at'    => null,
+                            'remarks'            => null,
+                        ]);
+                    }
                     DB::commit();
 
                     return response()->json([
@@ -393,6 +395,7 @@ class UserServiceApplicationController extends Controller
                 'status'  => 0,
                 'message' => 'Something went wrong.',
                 'error'   => $e->getMessage(),
+                'line'  => $e->getLine(),
             ], 500);
         }
     }
