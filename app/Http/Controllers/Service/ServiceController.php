@@ -415,7 +415,7 @@ class ServiceController extends Controller
                 'date_to'         => 'nullable|date|after_or_equal:date_from',
             ]);
 
-            $data = UserServiceApplication::with(['service', 'user'])
+            $data = UserServiceApplication::with(['service', 'user', 'latestWorkflow'])
                 ->whereHas('service', function ($service) use ($request) {
                     $service->where('department_id', $request->department_id);
                 });
@@ -467,7 +467,7 @@ class ServiceController extends Controller
                     'ulb_name' => $application->user->ulb->ulb_name ?? null,
                     'ward_code'   => $application->user->ward->gp_vc_ward_lgd_code ?? null,
                     'ward_name' => $application->user->ward->name_of_gp_vc_or_ward ?? null,
-                    'hierarchy'   => $application->user->department_user->hierarchy_level ?? null,
+                    'hierarchy_level'     => $application->latestWorkflow->hierarchy_level ?? null
                 ];
             });
 
@@ -517,7 +517,7 @@ class ServiceController extends Controller
 
             $is_just_before_final_step = false;
 
-            if ($current_step->step_number == $max_step) {
+            if ($current_step && $current_step->step_number == $max_step) {
                 $is_just_before_final_step = true;
             }
 
@@ -577,7 +577,7 @@ class ServiceController extends Controller
                     return [
                         'step_number'     => $flow->step_number,
                         'step_type'       => $flow->step_type,
-                        'department'      => $flow->department->name,
+                        'department'      => $flow->department?->name,
                         'status'          => $flow->status,
                         'action_taken_by' => $flow->actionTaker?->authorized_person_name ? $flow->actionTaker->authorized_person_name . ' (' . $flow->actionTaker->email_id . ')' : null,
                         'action_taken_at' => $flow->action_taken_at,
@@ -782,7 +782,7 @@ class ServiceController extends Controller
                     $application->update([
                         'current_step_number' => $first_step_flow->step_number,
                         'payment_status'      => 'pending',
-                       // 'total_fee'           =>  $total_fee,
+                        // 'total_fee'           =>  $total_fee,
                         'extra_payment'       => $request->extra_payment,
                         'remarks'             => $request->remarks,
                         'status'              => 'extra_payment',
@@ -956,7 +956,7 @@ class ServiceController extends Controller
         }
     }
 
-    public function get_department_user_assigned_applications($user_id)
+    public function get_department_user_assigned_applications(Request $request, $user_id)
     {
 
         try {
@@ -976,16 +976,44 @@ class ServiceController extends Controller
                 ], 404);
             }
 
+            $dept_user = $user->department_user_location;
             $hierarchy_level = $user->department_user->hierarchy_level;
 
-            $applications = ApplicationWorkflowAssignment::with([
+            $latest_assignments = ApplicationWorkflowAssignment::selectRaw("MAX(id) as id")
+                ->groupBy('application_id')
+                ->pluck('id');
+
+            $query = ApplicationWorkflowAssignment::with([
                 'application.service:id,service_title_or_description',
-                'application.user:id,authorized_person_name,email_id,mobile_no',
-                'department:id,name'
+                'application.user:id,authorized_person_name,email_id,mobile_no,district_id,subdivision_id,ulb_id'
             ])
+                ->whereIn('id', $latest_assignments)
                 ->where('status', 'pending')
-                ->where('hierarchy_level', $hierarchy_level)
-                ->paginate($per_age);
+                ->where('hierarchy_level', $hierarchy_level);
+
+
+            $query->whereHas('application.user', function ($q) use ($hierarchy_level, $dept_user) {
+
+                $q->where(function ($loc) use ($hierarchy_level, $dept_user) {
+
+                    foreach ($dept_user as $d) {
+
+                        if (str_contains($hierarchy_level, 'block')) {
+                            $loc->orWhere('ulb_id', $d->ulb_id);
+                        }
+
+                        if (str_contains($hierarchy_level, 'subdivision')) {
+                            $loc->orWhere('subdivision_id', $d->subdivision_id);
+                        }
+
+                        if (str_contains($hierarchy_level, 'district')) {
+                            $loc->orWhere('district_id', $d->district_id);
+                        }
+                    }
+                });
+            });
+
+            $applications = $query->paginate($per_page);
 
             $applications->getCollection()->transform(function ($assignment) {
                 return [
@@ -1024,140 +1052,140 @@ class ServiceController extends Controller
         }
     }
 
-    public function get_total_applications_by_department(Request $request)
-    {
+    // public function get_total_applications_by_department(Request $request)
+    // {
 
-        try {
+    //     try {
 
-            $user = Auth::user();
-            if (!$user) {
-                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
-            }
+    //         $user = Auth::user();
+    //         if (!$user) {
+    //             return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+    //         }
 
-            $user = User::where('id', $user->id)
-                ->where('user_type', 'department')
-                ->first();
+    //         $user = User::where('id', $user->id)
+    //             ->where('user_type', 'department')
+    //             ->first();
 
-            if (!$user) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid or non-departmental user.'
-                ], 404);
-            }
+    //         if (!$user) {
+    //             return response()->json([
+    //                 'success' => false,
+    //                 'message' => 'Invalid or non-departmental user.'
+    //             ], 404);
+    //         }
 
-            $request->validate([
-                'department_id' => 'required|integer|exists:departments,id',
-            ]);
+    //         $request->validate([
+    //             'department_id' => 'required|integer|exists:departments,id',
+    //         ]);
 
-            $hierarchy_level = $user->department_user->hierarchy_level;
-            $user_id         = $user->id;
-            $department_id   = $request->department_id;
+    //         $hierarchy_level = $user->department_user->hierarchy_level;
+    //         $user_id         = $user->id;
+    //         $department_id   = $request->department_id;
 
-            $total_applications_for_this_department = Department::find($department_id)->applications()->count();
+    //         $total_applications_for_this_department = Department::find($department_id)->applications()->count();
 
-            $total_count_pending_application_in_department = ApplicationWorkflowAssignment::where('status', 'pending')
-                ->where('hierarchy_level', $hierarchy_level)
-                ->where('department_id', $request->department_id)
-                ->distinct('application_id')
-                ->count('application_id');
-
-
-            $total_count_approved_application_in_department = ApplicationWorkflowAssignment::where('status', 'approved');
-
-            $percentage_pending_application = ($total_count_pending_application_in_department / $total_applications_for_this_department) * 100;
-
-            $total_count_approved_application_in_department = ApplicationWorkflowAssignment::query()
-
-                ->where('hierarchy_level', $hierarchy_level)
-                ->where('department_id', $request->department_id)
-                ->distinct('application_id')
-                ->count('application_id');
+    //         $total_count_pending_application_in_department = ApplicationWorkflowAssignment::where('status', 'pending')
+    //             ->where('hierarchy_level', $hierarchy_level)
+    //             ->where('department_id', $request->department_id)
+    //             ->distinct('application_id')
+    //             ->count('application_id');
 
 
-            $percentage_approved_application = ($total_count_approved_application_in_department / $total_applications_for_this_department) * 100;
+    //         $total_count_approved_application_in_department = ApplicationWorkflowAssignment::where('status', 'approved');
 
-            $total_count_rejected_application_in_department = UserServiceApplication::where('status', 'rejected')->count();
+    //         $percentage_pending_application = ($total_count_pending_application_in_department / $total_applications_for_this_department) * 100;
 
-            $percentage_rejected_application = ($total_count_rejected_application_in_department / $total_applications_for_this_department) * 100;
+    //         $total_count_approved_application_in_department = ApplicationWorkflowAssignment::query()
 
-
-            $number_of_NOC_issued_by_department = UserServiceApplication::where('status', 'approved')
-                ->whereHas('latestWorkflow', function ($q) use ($department_id) {
-                    $q->where('department_id', $department_id);
-                })
-                ->count();
-
-            $services = ServiceMaster::withCount('applications')
-                ->where('department_id', $department_id)
-                ->get(['id', 'service_title_or_description']);
-
-            $application_count_per_service = $services->map(function ($service) {
-                return [
-                    'service_id' => $service->id,
-                    'service_name' => $service->service_title_or_description,
-                    'application_count' => $service->applications_count,
-                ];
-            });
-
-            $district_wise_application_in_department = UserServiceApplication::with(['service', 'user.district'])
-                ->whereHas('service', function ($q) use ($department_id) {
-                    $q->where('department_id', $department_id);
-                })
-                ->select('user_id')
-                ->with('user.district')
-                ->get()
-                ->groupBy(fn($app) => $app->user?->district?->district_name)
-                ->map(fn($group, $district_name) => [
-                    'district_name' => $district_name,
-                    'count' => $group->count(),
-                ])
-                ->values();
-
-            $district_wise_application_per_service = UserServiceApplication::with(['service', 'user.district'])
-                ->whereHas('service', function ($q) use ($department_id) {
-                    $q->where('department_id', $department_id);
-                })
-                ->get()
-                ->groupBy(fn($app) => $app->service?->service_title_or_description)
-                ->map(function ($appsPerService, $serviceName) {
-                    return [
-                        'service_name' => $serviceName,
-                        'districts' => $appsPerService
-                            ->groupBy(fn($app) => $app->user?->district?->district_name)
-                            ->map(fn($apps_per_district, $district_name) => [
-                                'district_name' => $district_name,
-                                'count' => $apps_per_district->count(),
-                            ])
-                            ->values(),
-                    ];
-                })
-                ->values();
-
-            return response()->json([
-                'status'            => 1,
-                'message'           => 'Total count applications under this department fetched successfully',
-                'total_applications_for_this_department' => $total_applications_for_this_department,
-                'total_count_pending_application_in_department' => $total_count_pending_application_in_department,
-                'percentage_pending_application' => $percentage_pending_application,
-                'percentage_approved_application' => $percentage_approved_application,
-                'percentage_rejected_application' => $percentage_rejected_application,
-                'total_count_approved_application_in_department' => $total_count_approved_application_in_department,
-                'number_of_NOC_issued_by_department' => $number_of_NOC_issued_by_department,
-                'application_count_per_service' => $application_count_per_service,
-                'district_wise_application_in_department' => $district_wise_application_in_department,
-                'district_wise_application_per_service' => $district_wise_application_per_service,
-
-            ], 200);
-        } catch (\Exception $e) {
+    //             ->where('hierarchy_level', $hierarchy_level)
+    //             ->where('department_id', $request->department_id)
+    //             ->distinct('application_id')
+    //             ->count('application_id');
 
 
-            return response()->json([
-                'status' => 0,
-                'message' => 'Something went wrong while fetching the application count',
-                'error'   => $e->getMessage()
-            ], 500);
-        }
-    }
+    //         $percentage_approved_application = ($total_count_approved_application_in_department / $total_applications_for_this_department) * 100;
+
+    //         $total_count_rejected_application_in_department = UserServiceApplication::where('status', 'rejected')->count();
+
+    //         $percentage_rejected_application = ($total_count_rejected_application_in_department / $total_applications_for_this_department) * 100;
+
+
+    //         $number_of_NOC_issued_by_department = UserServiceApplication::where('status', 'approved')
+    //             ->whereHas('latestWorkflow', function ($q) use ($department_id) {
+    //                 $q->where('department_id', $department_id);
+    //             })
+    //             ->count();
+
+    //         $services = ServiceMaster::withCount('applications')
+    //             ->where('department_id', $department_id)
+    //             ->get(['id', 'service_title_or_description']);
+
+    //         $application_count_per_service = $services->map(function ($service) {
+    //             return [
+    //                 'service_id' => $service->id,
+    //                 'service_name' => $service->service_title_or_description,
+    //                 'application_count' => $service->applications_count,
+    //             ];
+    //         });
+
+    //         $district_wise_application_in_department = UserServiceApplication::with(['service', 'user.district'])
+    //             ->whereHas('service', function ($q) use ($department_id) {
+    //                 $q->where('department_id', $department_id);
+    //             })
+    //             ->select('user_id')
+    //             ->with('user.district')
+    //             ->get()
+    //             ->groupBy(fn($app) => $app->user?->district?->district_name)
+    //             ->map(fn($group, $district_name) => [
+    //                 'district_name' => $district_name,
+    //                 'count' => $group->count(),
+    //             ])
+    //             ->values();
+
+    //         $district_wise_application_per_service = UserServiceApplication::with(['service', 'user.district'])
+    //             ->whereHas('service', function ($q) use ($department_id) {
+    //                 $q->where('department_id', $department_id);
+    //             })
+    //             ->get()
+    //             ->groupBy(fn($app) => $app->service?->service_title_or_description)
+    //             ->map(function ($appsPerService, $serviceName) {
+    //                 return [
+    //                     'service_name' => $serviceName,
+    //                     'districts' => $appsPerService
+    //                         ->groupBy(fn($app) => $app->user?->district?->district_name)
+    //                         ->map(fn($apps_per_district, $district_name) => [
+    //                             'district_name' => $district_name,
+    //                             'count' => $apps_per_district->count(),
+    //                         ])
+    //                         ->values(),
+    //                 ];
+    //             })
+    //             ->values();
+
+    //         return response()->json([
+    //             'status'            => 1,
+    //             'message'           => 'Total count applications under this department fetched successfully',
+    //             'total_applications_for_this_department' => $total_applications_for_this_department,
+    //             'total_count_pending_application_in_department' => $total_count_pending_application_in_department,
+    //             'percentage_pending_application' => $percentage_pending_application,
+    //             'percentage_approved_application' => $percentage_approved_application,
+    //             'percentage_rejected_application' => $percentage_rejected_application,
+    //             'total_count_approved_application_in_department' => $total_count_approved_application_in_department,
+    //             'number_of_NOC_issued_by_department' => $number_of_NOC_issued_by_department,
+    //             'application_count_per_service' => $application_count_per_service,
+    //             'district_wise_application_in_department' => $district_wise_application_in_department,
+    //             'district_wise_application_per_service' => $district_wise_application_per_service,
+
+    //         ], 200);
+    //     } catch (\Exception $e) {
+
+
+    //         return response()->json([
+    //             'status' => 0,
+    //             'message' => 'Something went wrong while fetching the application count',
+    //             'error'   => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
 
     public function get_list_of_NOC_issued_by_department(Request $request)
     {
@@ -1208,7 +1236,7 @@ class ServiceController extends Controller
                 'list_of_NOC_issued_by_department' => $list_of_NOC_issued_by_department->items(),
                 'pagination' => [
                     'current_page' => $list_of_NOC_issued_by_department->currentPage(),
-                    'row_count'    => $list_of_NOC_issued_by_department->per_age(),
+                    'row_count'    => $list_of_NOC_issued_by_department->count(),
                     'total'        => $list_of_NOC_issued_by_department->total(),
                     'start_row'    => $list_of_NOC_issued_by_department->firstItem(),
                     'end_row'      => $list_of_NOC_issued_by_department->lastItem(),
@@ -1243,6 +1271,4 @@ class ServiceController extends Controller
             ], 500);
         }
     }
-
-
 }

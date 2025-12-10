@@ -309,6 +309,8 @@ Route::post('/tripura/get-all-districts', [TripuraMasterDataController::class, '
 Route::post('/tripura/get-sub-subdivisions', [TripuraMasterDataController::class, 'get_subdivisions']);
 Route::post('/tripura/get-block-names', [TripuraMasterDataController::class, 'get_ulbs']);
 Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'get_wards']);
+Route::post('/tripura/get-multiple-subdivisions', [TripuraMasterDataController::class, 'get__multiple_subdivisions']);
+Route::post('/tripura/get-multiple-block', [TripuraMasterDataController::class, 'get_multiple_ulbs']);
 
 Route::prefix('report')->group(function () {
     Route::post('online-single-windows', [ReportController::class, 'online_single_windows']);

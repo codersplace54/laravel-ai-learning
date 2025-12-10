@@ -14,7 +14,7 @@ class TripuraMasterDataController extends Controller
 
         try {
 
-            $districts = TripuraMasterData::select('district_code','district_name')
+            $districts = TripuraMasterData::select('district_code', 'district_name')
                 ->distinct()
                 ->orderBy('district_name')
                 ->get();
@@ -47,7 +47,7 @@ class TripuraMasterDataController extends Controller
 
             $subdivisions = TripuraMasterData::where('district_name', $request->district)
                 ->orWhere('district_code', $request->district)
-                ->select('sub_lgd_code','sub_division')
+                ->select('sub_lgd_code', 'sub_division')
                 ->distinct()
                 ->get();
 
@@ -79,7 +79,7 @@ class TripuraMasterDataController extends Controller
 
             $ulbs = TripuraMasterData::where('sub_division', $request->subdivision)
                 ->orWhere('sub_lgd_code', $request->subdivision)
-                ->select('ulb_lgd_code','ulb_name')
+                ->select('ulb_lgd_code', 'ulb_name')
                 ->distinct()
                 ->get();
 
@@ -111,7 +111,7 @@ class TripuraMasterDataController extends Controller
 
             $wards = TripuraMasterData::where('ulb_name', $request->ulb)
                 ->orWhere('ulb_lgd_code', $request->ulb)
-                ->select('gp_vc_ward_lgd_code','name_of_gp_vc_or_ward')
+                ->select('gp_vc_ward_lgd_code', 'name_of_gp_vc_or_ward')
                 ->distinct()
                 ->get();
 
@@ -127,6 +127,68 @@ class TripuraMasterDataController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong while fetching Wards list',
                 'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function get__multiple_subdivisions(Request $request)
+    {
+
+
+        try {
+
+            $request->validate([
+                'districts' => 'required|array|min:1',
+                'districts.*' => 'integer|exists:tripura_master_data,district_code'
+            ]);
+
+            $subdivisions = TripuraMasterData::whereIn('district_code', $request->districts)
+                ->select('sub_lgd_code AS sub_division_code', 'sub_division AS sub_division_name', 'district_code' , 'district_name')
+                ->distinct()
+                ->get();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Subdivisions list fetched successfully.',
+                'subdivisions' => $subdivisions
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to fetch subdivisions.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function get_multiple_ulbs(Request $request)
+    {
+
+
+        try {
+
+            $request->validate([
+                'subdivisions' => 'required|array|min:1',
+                'subdivisions.*' => 'integer|exists:tripura_master_data,sub_lgd_code'
+            ]);
+
+            $ulbs = TripuraMasterData::whereIn('sub_lgd_code', $request->subdivisions)
+                ->select('ulb_lgd_code AS block_code', 'ulb_name AS block_name', 'sub_lgd_code as subdivision_code','sub_division as sub_division_name', 'district_code', 'district_name')
+                ->distinct()
+                ->get();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'ULB list fetched successfully.',
+                'ulbs' => $ulbs
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to fetch ULB list.',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

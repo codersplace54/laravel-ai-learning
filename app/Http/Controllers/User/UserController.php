@@ -27,7 +27,7 @@ class UserController extends Controller
 
             $request->validate(
                 [
-                    'name_of_enterprise' => 'required|string|max:255',
+                    'name_of_enterprise' => 'nullable|string|max:255',
                     'authorized_person_name' => 'required|string|max:255',
                     'email_id' => 'required|email|unique:users,email_id',
                     'mobile_no' => 'required|string|max:15',
@@ -46,7 +46,13 @@ class UserController extends Controller
                     'hierarchy_level' => 'required_if:user_type,department|in:block,subdivision1,subdivision2,subdivision3,district1,district2,district3,state1,state2,state3',
                     'designation'      => 'nullable|string',
                     'is_active'      => 'nullable|integer',
-                    'inspector'      => 'nullable|string|in:yes,no'
+                    'inspector'      => 'nullable|string|in:yes,no',
+
+                    'locations' => 'required_if:user_type,department|array|min:1',
+
+                    'locations.*.district_id' => 'required|integer|exists:tripura_master_data,district_code',
+                    'locations.*.subdivision_id' => 'required|integer|exists:tripura_master_data,sub_lgd_code',
+                    'locations.*.block_id' => 'nullable|integer',
                 ],
                 [
                     'name_of_enterprise.required' => 'Enterprise name is required.',
@@ -111,10 +117,10 @@ class UserController extends Controller
                 'email_id' => $request->email_id,
                 'mobile_no' => $request->mobile_no,
                 'user_name' => $request->user_name,
-                'district_id' => $request->district_id,
-                'subdivision_id' => $request->subdivision_id,
-                'ulb_id' => $request->ulb_id,
-                'ward_id' => $request->ward_id,
+                'district_id' => $request->user_type === 'individual' ? $request->district_id : null,
+                'subdivision_id' => $request->user_type === 'individual' ? $request->subdivision_id : null,
+                'ulb_id' => $request->user_type === 'individual' ? $request->ulb_id : null,
+                'ward_id' => $request->user_type === 'individual' ? $request->ward_id : null,
                 'registered_enterprise_address' => $request->registered_enterprise_address,
                 'registered_enterprise_city' => $request->registered_enterprise_city,
                 'user_type' => $request->user_type,
@@ -126,28 +132,33 @@ class UserController extends Controller
 
             if ($user->user_type == "department") {
 
-                $department_user = DepartmentUser::create([
-                    'user_id' => $user->id,
-                    'department_id' => $request->department_id,
-                    'designation' => $request->designation,
-                    'block_id' => $request->ulb_id,
-                    'subdivision_id' => $request->subdivision_id,
-                    'district_id' => $request->district_id,
-                    'hierarchy_level' => $request->hierarchy_level,
-                    'is_active' => 1,
-                    'inspector' => $request->inspector ?? 'no',
-                    'created_by' => $admin->email_id,
-                    'updated_by' => null
-                ]);
+                foreach ($request->locations as $location) {
+
+                    $department_user = DepartmentUser::create([
+                        'user_id' => $user->id,
+                        'department_id' => $request->department_id,
+                        'designation' => $request->designation,
+                        'block_id' => $location['block_id'] ?? null,
+                        'subdivision_id' => $location['subdivision_id'] ?? null,
+                        'district_id' => $location['district_id'] ?? null,
+                        'hierarchy_level' => $request->hierarchy_level,
+                        'is_active' => 1,
+                        'inspector' => $request->inspector ?? 'no',
+                        'created_by' => $admin->email_id,
+                        'updated_by' => null
+                    ]);
+                }
             }
 
             $now = Carbon::now();
             $date = $now->format('y');
             $month = $now->format('m');
             $userIdPadded = str_pad($user->id, 7, '0', STR_PAD_LEFT);
-            $bin = "TR{$date}{$month}{$userIdPadded}";
-
-            $user->bin = $bin;
+            $bin = "";
+            if ($request->user_type == "individual") {
+                $bin = "TR{$date}{$month}{$userIdPadded}";
+                $user->bin = $bin;
+            }
             $user->save();
 
             AclRule::create([
@@ -208,7 +219,7 @@ class UserController extends Controller
             ];
 
             if ($request->name_of_enterprise !== null) {
-                $rules['name_of_enterprise'] = 'required|string|max:255';
+                $rules['name_of_enterprise'] = 'nullable|string|max:255';
             }
             if ($request->authorized_person_name !== null) {
                 $rules['authorized_person_name'] = 'required|string|max:255';
@@ -258,6 +269,15 @@ class UserController extends Controller
             if ($request->inspector !== null) {
                 $rules['inspector'] = 'nullable|string|in:yes,no';
             }
+
+            if ($request->locations !== null) {
+                $rules['locations'] = 'array|min:1';
+
+                $rules['locations.*.district_id'] = 'required|integer|exists:tripura_master_data,district_code';
+                $rules['locations.*.subdivision_id'] = 'required|integer|exists:tripura_master_data,sub_lgd_code';
+                $rules['locations.*.block_id'] = 'nullable|integer';
+            }
+
 
             $request->validate($rules, [
                 'id.required' => 'User ID is required.',
@@ -339,37 +359,38 @@ class UserController extends Controller
             $user->update($update_data);
 
             if ($user->user_type == "department") {
-                $admin = Auth::user();
-                $department_user = DepartmentUser::where('user_id', $user->id)->first();
-                if ($department_user) {
-                    $department_user->update([
-                        'department_id' => $request->department_id,
-                        'hierarchy_level' => $request->hierarchy_level,
-                        'district_id' => $request->district_id,
-                        'subdivision_id' => $request->subdivision_id,
-                        'designation' => $request->designation,
-                        'block_id' => $request->ulb_id,
-                        'updated_by' =>  $admin->email_id,
-                        'inspector' =>  $request->inspector,
-                    ]);
-                    $user->department_id   = $department_user->department_id;
-                    $user->hierarchy_level = $department_user->hierarchy_level;
-                } else {
 
-                    $department_user = DepartmentUser::create([
-                        'user_id' => $user->id,
-                        'department_id' => $request->department_id,
-                        'designation' => $request->designation,
-                        'block_id' => $request->ulb_id,
-                        'subdivision_id' => $request->subdivision_id,
-                        'district_id' => $request->district_id,
-                        'hierarchy_level' => $request->hierarchy_level,
-                        'is_active' => 1,
-                        'created_by' =>  $admin->email_id,
-                        'inspector' =>  $request->inspector ?? "no"
-                    ]);
+                $admin = Auth::user();
+                DepartmentUser::where('user_id', $user->id)->delete();
+
+                if ($request->locations && is_array($request->locations)) {
+                    foreach ($request->locations as $location) {
+                        $department_user = DepartmentUser::create([
+                            'user_id' => $user->id,
+                            'department_id' => $request->department_id,
+                            'designation' => $request->designation,
+                            'block_id' => $location['block_id'] ?? null,
+                            'subdivision_id' => $location['subdivision_id'],
+                            'district_id' => $location['district_id'],
+                            'hierarchy_level' => $request->hierarchy_level,
+                            'is_active' => 1,
+                            'created_by' =>  $admin->email_id,
+                            'inspector' =>  $request->inspector ?? "no"
+                        ]);
+                    }
                 }
             }
+
+            $locations = $user->department_user_location->map(function ($loc) {
+                return [
+                    'district_id'    => $loc->district_id,
+                    'district_name'    => $loc->district->district_name ?? null,
+                    'subdivision_id' => $loc->subdivision_id,
+                    'subdivision_name' => $loc->subdivision->sub_division ?? null,
+                    'block_id'       => $loc->block_id,
+                    'block_name'       => $loc->ulb->ulb_name ?? null,
+                ];
+            });
 
             $user = [
                 'name_of_enterprise' => $user->name_of_enterprise,
@@ -404,8 +425,9 @@ class UserController extends Controller
 
             return response()->json([
                 'status' => 1,
-                'data' => $user,
                 'message' => 'User updated successfully',
+                'data' => $user,
+                'locations' => $locations,
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -513,6 +535,17 @@ class UserController extends Controller
                 ], 401);
             }
 
+            $locations = $user->department_user_location->map(function ($loc) {
+                return [
+                    'district_id'    => $loc->district_id,
+                    'district_name'    => $loc->district->district_name ?? null,
+                    'subdivision_id' => $loc->subdivision_id,
+                    'subdivision_name' => $loc->subdivision->sub_division ?? null,
+                    'block_id'       => $loc->block_id,
+                    'block_name'       => $loc->ulb->ulb_name ?? null,
+                ];
+            });
+
             $data = [
                 'name_of_enterprise' => $user->name_of_enterprise,
                 'authorized_person_name' => $user->authorized_person_name,
@@ -542,7 +575,8 @@ class UserController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $data,
+                'locations' => $locations
             ], 200);
         } catch (\Exception $e) {
 
@@ -579,7 +613,13 @@ class UserController extends Controller
             $logged_department_id = $department->department_user->department_id;
 
             $query = User::where('user_type', 'department')
-                ->with(['district', 'subdivision', 'ulb', 'ward', 'department_user.department'])
+                ->with([
+                    'department_user.department',
+                    'department_user_location.district',
+                    'department_user_location.subdivision',
+                    'department_user_location.ulb',
+                    'department_user.department'
+                ])
                 ->whereHas('department_user', function ($q) use ($logged_department_id) {
                     $q->where('department_id', $logged_department_id);
                 });
@@ -614,23 +654,28 @@ class UserController extends Controller
 
             $department_users = $query->paginate($per_page)
                 ->through(function ($user) {
+
+                    $locations = $user->department_user_location->map(function ($loc) {
+                        return [
+                            'district_name'    => $loc->district->district_name ?? null,
+                            'subdivision_name' => $loc->subdivision->sub_division ?? null,
+                            'block_name'       => $loc->ulb->ulb_name ?? null,
+                        ];
+                    });
+
+                    $districts_name = $locations->pluck('district_name')->filter()->unique()->implode(', ');
+                    $subdivisions_name = $locations->pluck('subdivision_name')->filter()->unique()->implode(', ');
+                    $blocks_name = $locations->pluck('block_name')->filter()->unique()->implode(', ');
                     return [
                         'id' => $user->id,
                         'name_of_enterprise' => $user->name_of_enterprise,
                         'authorized_person_name' => $user->authorized_person_name,
                         'email_id' => $user->email_id,
                         'mobile_no'  => $user->mobile_no,
-                        'pan'  => $user->pan,
                         'user_name'  => $user->user_name,
-                        'bin'   => $user->bin,
-                        'district_code'   => $user->district->district_code ?? null,
-                        'district_name' => $user->district->district_name ?? null,
-                        'subdivision_code'   => $user->subdivision->sub_lgd_code ?? null,
-                        'subdivision_name' =>  $user->subdivision->sub_division ?? null,
-                        'ulb_code'   => $user->ulb->ulb_lgd_code ?? null,
-                        'ulb_name' => $user->ulb->ulb_name ?? null,
-                        'ward_code'   => $user->ward->gp_vc_ward_lgd_code ?? null,
-                        'ward_name' => $user->ward->name_of_gp_vc_or_ward ?? null,
+                        'districts_name'    => $districts_name,
+                        'subdivisions_name' => $subdivisions_name,
+                        'blocks_name'       => $blocks_name,
                         'department_name' => $user->department_user->department->name ?? null,
                         'department_id' => $user->department_user->department_id ?? null,
                         'registered_enterprise_address' => $user->registered_enterprise_address,
@@ -692,6 +737,17 @@ class UserController extends Controller
 
             $department_user = User::where('id', $request->id)->first();
 
+            $locations = $user->department_user_location->map(function ($loc) {
+                return [
+                    'district_id'    => $loc->district_id,
+                    'district_name'    => $loc->district->district_name ?? null,
+                    'subdivision_id' => $loc->subdivision_id,
+                    'subdivision_name' => $loc->subdivision->sub_division ?? null,
+                    'block_id'       => $loc->block_id,
+                    'block_name'       => $loc->ulb->ulb_name ?? null,
+                ];
+            });
+
             $data = [
                 'name_of_enterprise' => $department_user->name_of_enterprise,
                 'authorized_person_name' => $department_user->authorized_person_name,
@@ -722,7 +778,8 @@ class UserController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $data,
+                'locations' =>  $locations
             ], 200);
         } catch (\Exception $e) {
 

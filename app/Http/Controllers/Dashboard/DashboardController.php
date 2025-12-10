@@ -241,16 +241,19 @@ class DashboardController extends Controller
                 })
                 ->values();
 
-            $latest_assignments = ApplicationWorkflowAssignment::select('application_id')
+            $latest_assignments = ApplicationWorkflowAssignment::select('id', 'application_id', 'status')
                 ->where('hierarchy_level', $hierarchy_level)
                 ->where('status', 'pending')
                 ->orderByDesc('id')
                 ->get()
-                ->groupBy('application_id');
+                ->groupBy('application_id')
+                ->map(function ($group) {
+                    return $group->sortByDesc('id');
+                });
 
             $total_pending_for_me = $latest_assignments->filter(function ($assignments) {
                 $latest = $assignments->first();
-                return $latest && $latest->status === 'pending';
+                return $latest && $latest->status == 'pending';
             })->count();
 
             $total_approved_by_me = ApplicationWorkflowAssignment::where('hierarchy_level', $hierarchy_level)
@@ -414,8 +417,8 @@ class DashboardController extends Controller
                         'status_file'       => $latest_send_back && $latest_send_back->status_file
                             ? url($latest_send_back->status_file)
                             : null,
-                            'comments'        => $app->comments,
-                            'remarks'        => $latest_send_back->remarks,
+                        'comments'        => $app->comments,
+                        'remarks'        => $latest_send_back->remarks,
                     ];
                 });
 
