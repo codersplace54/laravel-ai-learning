@@ -22,6 +22,7 @@ use App\Models\RenewalCycle;
 use App\Models\PaymentOrder;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ApplicationsExport;
+use Illuminate\Http\UploadedFile;
 
 
 class UserServiceApplicationController extends Controller
@@ -114,7 +115,7 @@ class UserServiceApplicationController extends Controller
 
             $service_data = ServiceMaster::where('id', $request->service_id)
                 ->first(['noc_name', 'service_mode',  'target_days', 'allow_repeat_application']);
-            
+
             if ($service_data->service_mode === "native") {
 
                 $approval_flow = ServiceApprovalFlow::where('service_id', $request->service_id)
@@ -137,7 +138,7 @@ class UserServiceApplicationController extends Controller
                     ->where('service_id', $request->service_id)
                     ->latest()
                     ->first();
-                
+
                 $application_id =  $user_service_application->id ?? null;
                 $fee_data = $this->calculate_final_fee($request->service_id, $request->application_data, $application_id);
                 $final_fee = $fee_data['final_fee'];
@@ -169,13 +170,8 @@ class UserServiceApplicationController extends Controller
                         }
                     }
 
-                    $application_data = [];
-                    if (!empty($user_service_application->application_data)) {
-                        $decoded = json_decode($user_service_application->application_data, true);
-                        if (is_array($decoded)) {
-                            $application_data = $decoded;
-                        }
-                    }
+                    $application_data = json_decode($user_service_application->application_data ?? '[]', true) ?: [];
+
                     $new_data = $request->input('application_data', []);
 
                     foreach ($new_data as $key => $value) {
@@ -185,27 +181,82 @@ class UserServiceApplicationController extends Controller
                         $application_data[$key] = $value;
                     }
 
-                    $removed_question_ids = json_decode((string)($request->input('remove_file_question_ids') ?? '[]'), true) ?? [];
+                    $removed_question_ids = json_decode((string)($request->input('remove_file_question_ids') ?? '[]'), true) ?: [];
+
+                    $delete_recursive = function ($value) use (&$delete_recursive) {
+                        if (is_string($value) && $value !== '' && ! str_starts_with($value, 'http')) {
+                            Storage::disk('public')->delete($value);
+                            return;
+                        }
+                        if (is_array($value)) {
+                            foreach ($value as $v) {
+                                $delete_recursive($v);
+                            }
+                        }
+                    };
+
                     foreach ($removed_question_ids as $question_id) {
                         $old_file_path = $application_data[$question_id] ?? null;
-                        if ($old_file_path && !str_starts_with($old_file_path, 'http')) {        //change
-                            Storage::disk('public')->delete($old_file_path);
+                        if ($old_file_path !== null) {
+                            $delete_recursive($old_file_path);
                         }
                         unset($application_data[$question_id]);
                     }
 
-                    foreach ($request->file('application_data', []) as $question_id => $uploaded_file) {
-                        if (!$uploaded_file) continue;
-                        $old_file_path = $application_data[$question_id] ?? null;
-                        if ($old_file_path && !str_starts_with($old_file_path, 'http')) {
-                            Storage::disk('public')->delete($old_file_path);
+
+                    $files = $request->file('application_data', []);
+
+                    foreach ($files as $key => $value) {
+                        if (is_numeric($key)) {
+                            if ($value instanceof UploadedFile) {
+                                $old = $application_data[$key] ?? null;
+                                if ($old && !str_starts_with($old, 'http')) {
+                                    Storage::disk('public')->delete($old);
+                                }
+
+                                $filename = uniqid() . '.' . $value->getClientOriginalExtension();
+                                $path = $value->storeAs("uploads/{$user->id}/applications", $filename, 'public');
+
+                                $application_data[$key] = $path;
+                            }
+                            continue;
                         }
-                        $filename = uniqid() . '.' . $uploaded_file->getClientOriginalExtension();
-                        $path = $uploaded_file->storeAs("uploads/$user->id/applications", $filename, 'public');
-                        $new_data[$question_id] = $path;
+
+                        if (is_array($value)) {
+                            if (!isset($application_data[$key]) || !is_array($application_data[$key])) {
+                                $application_data[$key] = [];
+                            }
+
+                            foreach ($value as $row_index => $row_files) {
+                                if (!is_array($row_files)) {
+                                    continue;
+                                }
+
+                                if (!isset($application_data[$key][$row_index]) || !is_array($application_data[$key][$row_index])) {
+                                    $application_data[$key][$row_index] = [];
+                                }
+
+                                foreach ($row_files as $question_id => $file) {
+                                    if (!$file instanceof UploadedFile) {
+                                        continue;
+                                    }
+
+                                    $old = $application_data[$key][$row_index][$question_id] ?? null;
+                                    if ($old && !str_starts_with($old, 'http')) {
+                                        Storage::disk('public')->delete($old);
+                                    }
+
+                                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                                    $path = $file->storeAs("uploads/{$user->id}/applications", $filename, 'public');
+
+                                    $application_data[$key][$row_index][$question_id] = $path;
+                                }
+                            }
+                        }
                     }
 
                     $user_service_application->application_data = json_encode($application_data);
+
 
                     $user_service_application->update([
                         'renewal_cycle_id'      => $request->renewal_cycle_id,
@@ -280,19 +331,48 @@ class UserServiceApplicationController extends Controller
                 } else {
 
                     $application_data = (array) $request->input('application_data', []);
+                    $files = $request->file('application_data', []);
 
-                    foreach ($request->file('application_data', []) as $question_id => $uploaded_file) {
+                    foreach ($files as $key => $value) {
+                        if (is_numeric($key)) {
+                            if ($value instanceof UploadedFile) {
+                                $filename = uniqid() . '.' . $value->getClientOriginalExtension();
+                                $path = $value->storeAs("uploads/{$user->id}/applications", $filename, 'public');
 
-                        if (!$uploaded_file) {
+                                $application_data[$key] = $path;
+                            }
                             continue;
                         }
 
-                        $filename = uniqid() . '.' . $uploaded_file->getClientOriginalExtension();
-                        $path = $uploaded_file->storeAs("uploads/$user->id/applications", $filename, 'public');
-                        $application_data[$question_id] = $path;
-                    }
-                    $request->merge(['application_data' => $application_data]);
+                        if (is_array($value)) {
+                            if (!isset($application_data[$key]) || !is_array($application_data[$key])) {
+                                $application_data[$key] = [];
+                            }
 
+                            foreach ($value as $row_index => $row_files) {
+                                if (!is_array($row_files)) {
+                                    continue;
+                                }
+
+                                if (!isset($application_data[$key][$row_index]) || !is_array($application_data[$key][$row_index])) {
+                                    $application_data[$key][$row_index] = [];
+                                }
+
+                                foreach ($row_files as $question_id => $file) {
+                                    if (!$file instanceof UploadedFile) {
+                                        continue;
+                                    }
+
+                                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                                    $path = $file->storeAs("uploads/{$user->id}/applications", $filename, 'public');
+
+                                    $application_data[$key][$row_index][$question_id] = $path;
+                                }
+                            }
+                        }
+                    }
+
+                    $request->merge(['application_data' => $application_data]);
 
                     $user_service_application = UserServiceApplication::create([
                         'user_id'               => $user->id,
@@ -1070,24 +1150,81 @@ class UserServiceApplicationController extends Controller
             $formatted_data   = [];
 
             if (!empty($application_data)) {
-                $question_ids = array_keys($application_data);
+                $question_ids = [];
 
-                $questions = ServiceQuestionnaire::whereIn('id', $question_ids)
-                    ->get(['id', 'question_label', 'question_type'])
-                    ->keyBy('id');
-
-                foreach ($application_data as $question_id => $answer) {
-                    $question = $questions->get($question_id);
-
-                    if ($question && $question->question_type === 'file' && $answer) {
-                        $answer = asset('storage/' . $answer);
+                foreach ($application_data as $key => $value) {
+                    if (is_numeric($key)) {
+                        $question_ids[] = (int) $key;
                     }
 
-                    $formatted_data[] = [
-                        'id'       => $question_id,
-                        'question' => $question->question_label ?? 'Question not found',
-                        'answer'   => $answer ?? null,
-                    ];
+                    if (is_string($key) && is_array($value)) {
+                        foreach ($value as $row) {
+                            if (!is_array($row)) {
+                                continue;
+                            }
+
+                            foreach ($row as $inner_key => $inner_value) {
+                                if (is_numeric($inner_key)) {
+                                    $question_ids[] = (int) $inner_key;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                $question_ids = array_values(array_unique($question_ids));
+
+                if (!empty($question_ids)) {
+                    $questions = ServiceQuestionnaire::whereIn('id', $question_ids)
+                        ->get(['id', 'question_label', 'question_type'])
+                        ->keyBy('id');
+                } else {
+                    $questions = collect();
+                }
+
+                foreach ($application_data as $key => $value) {
+                    if (is_numeric($key)) {
+                        $question = $questions->get((int) $key);
+
+                        if ($question && $question->question_type === 'file' && $value) {
+                            $value = asset('storage/' . $value);
+                        }
+
+                        $formatted_data[] = [
+                            'id'       => (int) $key,
+                            'question' => $question->question_label ?? 'Question not found',
+                            'answer'   => $value ?? null,
+                        ];
+                    } else {
+                        $section_name   = $key;
+                        $section_answer = $value;
+
+                        if (is_array($section_answer)) {
+                            foreach ($section_answer as $row_index => $row_answers) {
+                                if (!is_array($row_answers)) {
+                                    continue;
+                                }
+
+                                foreach ($row_answers as $inner_key => $inner_value) {
+                                    if (!is_numeric($inner_key)) {
+                                        continue;
+                                    }
+
+                                    $inner_question = $questions->get((int) $inner_key);
+
+                                    if ($inner_question && $inner_question->question_type === 'file' && $inner_value) {
+                                        $section_answer[$row_index][$inner_key] = asset('storage/' . $inner_value);
+                                    }
+                                }
+                            }
+                        }
+
+                        $formatted_data[] = [
+                            'id'       => $section_name,
+                            'question' => $section_name,
+                            'answer'   => $section_answer,
+                        ];
+                    }
                 }
             }
 
