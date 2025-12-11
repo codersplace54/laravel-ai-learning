@@ -408,15 +408,19 @@ class PaymentController extends Controller
 
             $user_id = Auth::id();
 
-            $service_user_applications = UserServiceApplication::where('user_id', $user_id)->where('payment_status', $request->payment_status)->orderByDesc('created_at')->paginate(10);
+            $service_user_applications = UserServiceApplication::where('user_id', $user_id)
+            ->where('payment_status', $request->payment_status)
+            ->orderByDesc('created_at')
+            ->paginate($request->per_page);
 
-            if ($service_user_applications->isEmpty()) {
+            if ($service_user_applications->total() == 0){
                 return response()->json([
                     'status' => 0,
                     'message' => 'No applications found for the given status.',
                 ], 404);
             }
 
+            $response_data = [];
             foreach ($service_user_applications as $application) {
                 $amount = null;
                 $payment_type = null;
@@ -429,7 +433,7 @@ class PaymentController extends Controller
                     $payment_type = 'Application Fee Payment';
                 }
 
-                $response_data[] = [
+                $response_data[] = [ 
                     'user_service_application_id' => $application->id,
                     'application_id' => $application->applicationId,
                     'service_title_or_description' => $application->service->service_title_or_description ?? null,

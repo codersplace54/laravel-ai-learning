@@ -23,6 +23,7 @@ use App\Models\PaymentOrder;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ApplicationsExport;
 use Illuminate\Http\UploadedFile;
+use App\Services\ApplicationDataFormatter;
 
 
 class UserServiceApplicationController extends Controller
@@ -172,6 +173,12 @@ class UserServiceApplicationController extends Controller
 
                     $application_data = json_decode($user_service_application->application_data ?? '[]', true) ?: [];
 
+                    $removed_question_ids = json_decode((string)($request->input('remove_file_question_ids') ?? '[]'), true) ?: [];
+
+                    if (!empty($removed_question_ids)) {
+                        $application_data = $this->remove_questions_from_application_data($application_data, $removed_question_ids);
+                    }
+
                     $new_data = $request->input('application_data', []);
 
                     foreach ($new_data as $key => $value) {
@@ -181,78 +188,10 @@ class UserServiceApplicationController extends Controller
                         $application_data[$key] = $value;
                     }
 
-                    $removed_question_ids = json_decode((string)($request->input('remove_file_question_ids') ?? '[]'), true) ?: [];
-
-                    $delete_recursive = function ($value) use (&$delete_recursive) {
-                        if (is_string($value) && $value !== '' && ! str_starts_with($value, 'http')) {
-                            Storage::disk('public')->delete($value);
-                            return;
-                        }
-                        if (is_array($value)) {
-                            foreach ($value as $v) {
-                                $delete_recursive($v);
-                            }
-                        }
-                    };
-
-                    foreach ($removed_question_ids as $question_id) {
-                        $old_file_path = $application_data[$question_id] ?? null;
-                        if ($old_file_path !== null) {
-                            $delete_recursive($old_file_path);
-                        }
-                        unset($application_data[$question_id]);
-                    }
-
-
                     $files = $request->file('application_data', []);
 
-                    foreach ($files as $key => $value) {
-                        if (is_numeric($key)) {
-                            if ($value instanceof UploadedFile) {
-                                $old = $application_data[$key] ?? null;
-                                if ($old && !str_starts_with($old, 'http')) {
-                                    Storage::disk('public')->delete($old);
-                                }
-
-                                $filename = uniqid() . '.' . $value->getClientOriginalExtension();
-                                $path = $value->storeAs("uploads/{$user->id}/applications", $filename, 'public');
-
-                                $application_data[$key] = $path;
-                            }
-                            continue;
-                        }
-
-                        if (is_array($value)) {
-                            if (!isset($application_data[$key]) || !is_array($application_data[$key])) {
-                                $application_data[$key] = [];
-                            }
-
-                            foreach ($value as $row_index => $row_files) {
-                                if (!is_array($row_files)) {
-                                    continue;
-                                }
-
-                                if (!isset($application_data[$key][$row_index]) || !is_array($application_data[$key][$row_index])) {
-                                    $application_data[$key][$row_index] = [];
-                                }
-
-                                foreach ($row_files as $question_id => $file) {
-                                    if (!$file instanceof UploadedFile) {
-                                        continue;
-                                    }
-
-                                    $old = $application_data[$key][$row_index][$question_id] ?? null;
-                                    if ($old && !str_starts_with($old, 'http')) {
-                                        Storage::disk('public')->delete($old);
-                                    }
-
-                                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
-                                    $path = $file->storeAs("uploads/{$user->id}/applications", $filename, 'public');
-
-                                    $application_data[$key][$row_index][$question_id] = $path;
-                                }
-                            }
-                        }
+                    if (!empty($files)) {
+                        $application_data = $this->merge_application_files($application_data, $files, $user->id);
                     }
 
                     $user_service_application->application_data = json_encode($application_data);
@@ -333,43 +272,8 @@ class UserServiceApplicationController extends Controller
                     $application_data = (array) $request->input('application_data', []);
                     $files = $request->file('application_data', []);
 
-                    foreach ($files as $key => $value) {
-                        if (is_numeric($key)) {
-                            if ($value instanceof UploadedFile) {
-                                $filename = uniqid() . '.' . $value->getClientOriginalExtension();
-                                $path = $value->storeAs("uploads/{$user->id}/applications", $filename, 'public');
-
-                                $application_data[$key] = $path;
-                            }
-                            continue;
-                        }
-
-                        if (is_array($value)) {
-                            if (!isset($application_data[$key]) || !is_array($application_data[$key])) {
-                                $application_data[$key] = [];
-                            }
-
-                            foreach ($value as $row_index => $row_files) {
-                                if (!is_array($row_files)) {
-                                    continue;
-                                }
-
-                                if (!isset($application_data[$key][$row_index]) || !is_array($application_data[$key][$row_index])) {
-                                    $application_data[$key][$row_index] = [];
-                                }
-
-                                foreach ($row_files as $question_id => $file) {
-                                    if (!$file instanceof UploadedFile) {
-                                        continue;
-                                    }
-
-                                    $filename = uniqid() . '.' . $file->getClientOriginalExtension();
-                                    $path = $file->storeAs("uploads/{$user->id}/applications", $filename, 'public');
-
-                                    $application_data[$key][$row_index][$question_id] = $path;
-                                }
-                            }
-                        }
+                    if (!empty($files)) {
+                        $application_data = $this->merge_application_files($application_data, $files, $user->id);
                     }
 
                     $request->merge(['application_data' => $application_data]);
@@ -603,9 +507,33 @@ class UserServiceApplicationController extends Controller
 
             $user_service_application->fill($request->except(['id', 'NOC_certificate', 'NOC_rejection_certificate']));
 
-            if ($request->has('application_data')) {
-                $user_service_application->application_data = json_encode($request->application_data);
+            $existing_data = json_decode($user_service_application->application_data ?? '[]', true) ?: [];
+
+            $removed_question_ids = json_decode((string)($request->input('remove_file_question_ids') ?? '[]'), true) ?: [];
+
+            if (!empty($removed_question_ids)) {
+                $existing_data = $this->remove_questions_from_application_data($existing_data, $removed_question_ids);
             }
+
+            $new_data = $request->input('application_data', []);
+
+            foreach ($new_data as $key => $value) {
+                if (is_numeric($key)) {
+                    $key = (string) $key;
+                }
+                $existing_data[$key] = $value;
+            }
+
+            $files = $request->file('application_data', []);
+
+            if (!empty($files)) {
+                $existing_data = $this->merge_application_files($existing_data, $files, $user->id);
+            }
+
+            $encoded_application_data = json_encode($existing_data ?: null);
+            $user_service_application->application_data = $encoded_application_data;
+
+
 
             $application_id =  $user_service_application->id;
             $fee_data = $this->calculate_final_fee($request->service_id, $request->application_data, $application_id);
@@ -645,7 +573,7 @@ class UserServiceApplicationController extends Controller
                 // 'applicationId'         => $request->applicationId,
                 'application_date'      => $request->application_date ?? now(),
                 'status'                => $request->status ?? 'saved',
-                'application_data'      => json_encode($request->application_data ?? null),
+                'application_data'      => $encoded_application_data,
                 'applied_fee'           => $request->applied_fee,
                 'approved_fee'          => $request->approved_fee,
                 'payment_status'        => $request->payment_status ?? 'pending',
@@ -1052,7 +980,7 @@ class UserServiceApplicationController extends Controller
     {
 
         try {
-
+            // dd("sdaf");
 
             if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
@@ -1062,7 +990,7 @@ class UserServiceApplicationController extends Controller
                 'user_id' => 'required|integer|exists:users,id',
             ]);
 
-            $service_user_application = UserServiceApplication::where('user_id', $request->user_id)->get();
+            $service_user_application = UserServiceApplication::where('user_id', $request->user_id)->with('my_feedback')->get();
 
             if ($service_user_application->isEmpty()) {
                 return response()->json([
@@ -1093,6 +1021,9 @@ class UserServiceApplicationController extends Controller
                     'allow_repeat_application' => $service->allow_repeat_application ?? null,
                     'latest_workflow_status' => $latest_workflow?->status ?? null,
                     'service_mode' => $service->service->service_mode ?? null,
+                    'already_rated' => $service->my_feedback ? true : false,
+                    'rating' => $service->my_feedback->satisfaction ?? null,
+                    'is_certificate' => $service->NOC_application_date
                 ];
             }
 
@@ -1132,6 +1063,7 @@ class UserServiceApplicationController extends Controller
                 : [$request->application_id];
 
             $application = UserServiceApplication::where('service_id', $request->service_id)
+                ->with('my_feedback')
                 ->whereIn('id', $application_ids)
                 ->first();
 
@@ -1147,86 +1079,86 @@ class UserServiceApplicationController extends Controller
             $application->application_data = json_decode($application->application_data, true) ?: [];
 
             $application_data = $application->application_data;
-            $formatted_data   = [];
+            // $formatted_data   = [];
 
-            if (!empty($application_data)) {
-                $question_ids = [];
+            // if (!empty($application_data)) {
+            //     $question_ids = [];
 
-                foreach ($application_data as $key => $value) {
-                    if (is_numeric($key)) {
-                        $question_ids[] = (int) $key;
-                    }
+            //     foreach ($application_data as $key => $value) {
+            //         if (is_numeric($key)) {
+            //             $question_ids[] = (int) $key;
+            //         }
 
-                    if (is_string($key) && is_array($value)) {
-                        foreach ($value as $row) {
-                            if (!is_array($row)) {
-                                continue;
-                            }
+            //         if (is_string($key) && is_array($value)) {
+            //             foreach ($value as $row) {
+            //                 if (!is_array($row)) {
+            //                     continue;
+            //                 }
 
-                            foreach ($row as $inner_key => $inner_value) {
-                                if (is_numeric($inner_key)) {
-                                    $question_ids[] = (int) $inner_key;
-                                }
-                            }
-                        }
-                    }
-                }
+            //                 foreach ($row as $inner_key => $inner_value) {
+            //                     if (is_numeric($inner_key)) {
+            //                         $question_ids[] = (int) $inner_key;
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //     }
 
-                $question_ids = array_values(array_unique($question_ids));
+            //     $question_ids = array_values(array_unique($question_ids));
 
-                if (!empty($question_ids)) {
-                    $questions = ServiceQuestionnaire::whereIn('id', $question_ids)
-                        ->get(['id', 'question_label', 'question_type'])
-                        ->keyBy('id');
-                } else {
-                    $questions = collect();
-                }
+            //     if (!empty($question_ids)) {
+            //         $questions = ServiceQuestionnaire::whereIn('id', $question_ids)
+            //             ->get(['id', 'question_label', 'question_type'])
+            //             ->keyBy('id');
+            //     } else {
+            //         $questions = collect();
+            //     }
 
-                foreach ($application_data as $key => $value) {
-                    if (is_numeric($key)) {
-                        $question = $questions->get((int) $key);
+            //     foreach ($application_data as $key => $value) {
+            //         if (is_numeric($key)) {
+            //             $question = $questions->get((int) $key);
 
-                        if ($question && $question->question_type === 'file' && $value) {
-                            $value = asset('storage/' . $value);
-                        }
+            //             if ($question && $question->question_type === 'file' && $value) {
+            //                 $value = asset('storage/' . $value);
+            //             }
 
-                        $formatted_data[] = [
-                            'id'       => (int) $key,
-                            'question' => $question->question_label ?? 'Question not found',
-                            'answer'   => $value ?? null,
-                        ];
-                    } else {
-                        $section_name   = $key;
-                        $section_answer = $value;
+            //             $formatted_data[] = [
+            //                 'id'       => (int) $key,
+            //                 'question' => $question->question_label ?? 'Question not found',
+            //                 'answer'   => $value ?? null,
+            //             ];
+            //         } else {
+            //             $section_name   = $key;
+            //             $section_answer = $value;
 
-                        if (is_array($section_answer)) {
-                            foreach ($section_answer as $row_index => $row_answers) {
-                                if (!is_array($row_answers)) {
-                                    continue;
-                                }
+            //             if (is_array($section_answer)) {
+            //                 foreach ($section_answer as $row_index => $row_answers) {
+            //                     if (!is_array($row_answers)) {
+            //                         continue;
+            //                     }
 
-                                foreach ($row_answers as $inner_key => $inner_value) {
-                                    if (!is_numeric($inner_key)) {
-                                        continue;
-                                    }
+            //                     foreach ($row_answers as $inner_key => $inner_value) {
+            //                         if (!is_numeric($inner_key)) {
+            //                             continue;
+            //                         }
 
-                                    $inner_question = $questions->get((int) $inner_key);
+            //                         $inner_question = $questions->get((int) $inner_key);
 
-                                    if ($inner_question && $inner_question->question_type === 'file' && $inner_value) {
-                                        $section_answer[$row_index][$inner_key] = asset('storage/' . $inner_value);
-                                    }
-                                }
-                            }
-                        }
+            //                         if ($inner_question && $inner_question->question_type === 'file' && $inner_value) {
+            //                             $section_answer[$row_index][$inner_key] = asset('storage/' . $inner_value);
+            //                         }
+            //                     }
+            //                 }
+            //             }
 
-                        $formatted_data[] = [
-                            'id'       => $section_name,
-                            'question' => $section_name,
-                            'answer'   => $section_answer,
-                        ];
-                    }
-                }
-            }
+            //             $formatted_data[] = [
+            //                 'id'       => $section_name,
+            //                 'question' => $section_name,
+            //                 'answer'   => $section_answer,
+            //             ];
+            //         }
+            //     }
+            // }
 
             $history_data = ApplicationWorkflowHistory::where('application_id', $application->id)
                 ->orderBy('id', 'desc')
@@ -1282,15 +1214,29 @@ class UserServiceApplicationController extends Controller
                     ];
                 });
 
+            $feedback = $application->my_feedback;
+
+            $feedback_details = $feedback ? [
+                'id'          => $feedback->id,
+                'satisfaction' => $feedback->satisfaction,
+                'feedback'    => $feedback->feedback,
+                'suggestions' => $feedback->suggestions,
+                'created_at'  => $feedback->created_at,
+            ] : null;
+
+            $formatter = new ApplicationDataFormatter();
+            $formatted_application_data = $formatter->build_application_view_data($application);
+
             return response()->json([
                 'status'            => 1,
                 'message'           => 'Service user application fetched successfully.',
                 'data'              => $application,
-                'application_data'  => $formatted_data,
+                'application_data'  => $formatted_application_data,
                 'history_data'    => $history_data,
                 'service_name'    => $application->service->service_title_or_description,
                 'renewal_details' => $renewal_details,
-                'payment_details'  => $payment_details,
+                'payment_details' => $payment_details,
+                'feedback_details' => $feedback_details,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -2774,5 +2720,67 @@ class UserServiceApplicationController extends Controller
             'service_name' => $service->service_name,
             'cycles' => $cycles
         ]);
+    }
+
+    protected function remove_questions_from_application_data(array $data, array $question_ids): array
+    {
+        $question_ids = array_map('strval', $question_ids);
+
+        foreach ($data as $key => $value) {
+
+            if (is_numeric($key) && in_array((string) $key, $question_ids, true)) {
+                $this->delete_application_files_recursive($value);
+                unset($data[$key]);
+                continue;
+            }
+
+            if (is_array($value)) {
+                $data[$key] = $this->remove_questions_from_application_data($value, $question_ids);
+            }
+        }
+
+        return $data;
+    }
+
+    protected function delete_application_files_recursive($value): void
+    {
+        if (is_string($value) && $value !== '' && ! str_starts_with($value, 'http')) {
+            Storage::disk('public')->delete($value);
+            return;
+        }
+
+        if (is_array($value)) {
+            foreach ($value as $item) {
+                $this->delete_application_files_recursive($item);
+            }
+        }
+    }
+
+    protected function merge_application_files(array $application_data, array $files, int $user_id): array
+    {
+        foreach ($files as $key => $file_value) {
+
+            $existing = $application_data[$key] ?? null;
+
+            if ($file_value instanceof UploadedFile) {
+
+                if ($existing !== null) {
+                    $this->delete_application_files_recursive($existing);
+                }
+
+                $filename = uniqid() . '.' . $file_value->getClientOriginalExtension();
+                $path = $file_value->storeAs("uploads/{$user_id}/applications", $filename, 'public');
+
+                $application_data[$key] = $path;
+                continue;
+            }
+
+            if (is_array($file_value)) {
+                $existing_array = is_array($existing) ? $existing : [];
+                $application_data[$key] = $this->merge_application_files($existing_array, $file_value, $user_id);
+            }
+        }
+
+        return $application_data;
     }
 }

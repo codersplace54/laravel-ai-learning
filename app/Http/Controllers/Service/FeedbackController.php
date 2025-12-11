@@ -118,6 +118,7 @@ class FeedbackController extends Controller
                 'feedback'     => $feedback->feedback,
                 'suggestions'  => $feedback->suggestions,
                 'submitted_on' => $feedback->created_at,
+                'already_rated'=> !empty($feedback->satisfaction),
             ];
         });
 
