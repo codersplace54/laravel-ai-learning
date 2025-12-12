@@ -70,6 +70,12 @@ class UserServiceApplication extends Model
         'application_date' => 'datetime:Y-m-d H:i:s',
     ];
 
+    public function my_feedback()
+    {
+        return $this->hasOne(UserFeedback::class, 'service_id', 'service_id')
+            ->where('user_id', auth()->id());
+    }
+
     public function service()
     {
         return $this->belongsTo(ServiceMaster::class, 'service_id');

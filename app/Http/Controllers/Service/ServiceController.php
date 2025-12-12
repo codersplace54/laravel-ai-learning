@@ -14,13 +14,10 @@ use App\Models\ServiceApprovalFlow;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\ServiceQuestionnaire;
-use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ServiceApplicationExport;
+use App\Services\ApplicationDataFormatter;
 
 class ServiceController extends Controller
 {
@@ -523,20 +520,22 @@ class ServiceController extends Controller
                 $is_just_before_final_step = true;
             }
 
-            $formatted_data = [];
-            $application_data = json_decode($application->application_data, true);
-            if (!empty($application_data)) {
-                $questions = ServiceQuestionnaire::whereIn('id', array_keys($application_data))
-                    ->pluck('question_label', 'id');
-                foreach ($application_data as $question_id => $answer) {
-                    $formatted_data[] = [
-                        'id' => $question_id,
-                        'question' => $questions[$question_id] ?? 'Question not found',
-                        'answer'   => $answer,
-                    ];
-                }
-            }
-
+            // $formatted_data = [];
+            // $application_data = json_decode($application->application_data, true);
+            // if (!empty($application_data)) {
+            //     $questions = ServiceQuestionnaire::whereIn('id', array_keys($application_data))
+            //         ->pluck('question_label', 'id');
+            //     foreach ($application_data as $question_id => $answer) {
+            //         $formatted_data[] = [
+            //             'id' => $question_id,
+            //             'question' => $questions[$question_id] ?? 'Question not found',
+            //             'answer'   => $answer,
+            //         ];
+            //     }
+            // }
+            
+            $formatter = new ApplicationDataFormatter();
+            $formatted_application_data = $formatter->build_application_view_data($application);
 
             $history_data = ApplicationWorkflowHistory::where('application_id', $application->id)
                 ->orderByDesc('id')
@@ -567,7 +566,7 @@ class ServiceController extends Controller
                     'phone' => $application->user->mobile_no,
                     'email' => $application->user->email_id,
                 ],
-                'application_data' => $formatted_data ?? [],
+                'application_data' => $formatted_application_data,
                 'status'           => $application->status,
                 'applied_fee'      => $application->applied_fee,
                 'approved_fee'     => $application->approved_fee,
