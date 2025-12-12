@@ -407,12 +407,13 @@ class ServiceController extends Controller
 
             $request->validate([
                 'department_id'   => 'required|integer|exists:departments,id',
-                'status'          => 'nullable|in:submitted,under_review,approved,rejected',
+                'status'          => 'nullable|in:submitted,under_review,approved,rejected,saved,extra_payment,re_submitted,send_back',
                 'service_id'      => 'nullable|integer|exists:service_masters,id',
                 'applicant_name'  => 'nullable|string',
                 'applicant_phone' => 'nullable|string',
                 'date_from'       => 'nullable|date',
                 'date_to'         => 'nullable|date|after_or_equal:date_from',
+                'hierarchy_level' => 'nullable|string',
             ]);
 
             $data = UserServiceApplication::with(['service', 'user', 'latestWorkflow'])
@@ -423,6 +424,7 @@ class ServiceController extends Controller
             if ($request->status) {
                 $data->where('status', $request->status);
             }
+
             if ($request->service_id) {
                 $data->where('service_id', $request->service_id);
             }
@@ -989,7 +991,10 @@ class ServiceController extends Controller
             ])
                 ->whereIn('id', $latest_assignments)
                 ->where('status', 'pending')
-                ->where('hierarchy_level', $hierarchy_level);
+                ->where('hierarchy_level', $hierarchy_level)
+                ->whereHas('application', function ($q) {
+                    $q->where('payment_status', 'paid');
+                });
 
 
             $query->whereHas('application.user', function ($q) use ($hierarchy_level, $dept_user) {
@@ -1015,9 +1020,12 @@ class ServiceController extends Controller
 
             $applications = $query->paginate($per_page);
 
-            $applications->getCollection()->transform(function ($assignment) {
+            $applications->getCollection()->transform(function ($assignment) use ($hierarchy_level) {
                 return [
                     'application_id'   => $assignment->application->id ?? null,
+                    'application_number' => $assignment->application->applicationId ?? null,
+                    'max_processing_date' => $assignment->application->max_processing_date ?? null,
+                    'application_date' => $assignment->application->application_date ?? null,
                     'service_name'     => $assignment->application->service->service_title_or_description ?? null,
                     'applicant_name'   => $assignment->application->user->authorized_person_name ?? null,
                     'applicant_email'  => $assignment->application->user->email_id ?? null,
@@ -1025,7 +1033,7 @@ class ServiceController extends Controller
                     'department'       => $assignment->department?->name ?? null,
                     'status'           => $assignment->application->status ?? null,
                     'current_step'     => $assignment->application->current_step_number ?? null,
-                    'hierarchy_level'    => $assignment->hierarchy_level ?? null,
+                    'hierarchy_level'  => $hierarchy_level
                 ];
             });
 
@@ -1035,7 +1043,7 @@ class ServiceController extends Controller
                 'pagination' => [
                     'current_page' => $applications->currentPage(),
                     'last_page'    => $applications->lastPage(),
-                    'per_page'     => $applications->per_age(),
+                    'per_page'     => $applications->count(),
                     'total'        => $applications->total(),
                     'next_page_url' => $applications->nextPageUrl(),
                     'prev_page_url' => $applications->previousPageUrl(),
