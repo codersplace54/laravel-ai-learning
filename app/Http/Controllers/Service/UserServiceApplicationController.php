@@ -315,7 +315,6 @@ class UserServiceApplicationController extends Controller
                     ]);
 
                     $application_number = $this->generate_application_number($request->service_id, $user_service_application->id);
-
                     $user_service_application->update([
                         'applicationId' => $application_number
                     ]);
@@ -2564,16 +2563,9 @@ class UserServiceApplicationController extends Controller
             return null;
         }
 
-        $format = $service->generated_id_format;
-
-        $current_year = date('Y');
-
-        $application_number = strtoupper($service->noc_name);
-        if (!empty($format)) {
-
-            $application_number = str_replace('{year}', $current_year, $format);
-            $application_number = str_replace('{SEQ}', $application_id, $application_number);
-        }
+        $short_name = strtoupper($service->noc_short_name);
+        $padded_id = str_pad($application_id, 4, '0', STR_PAD_LEFT);
+        $application_number =  $short_name . $padded_id;
 
         return $application_number;
     }

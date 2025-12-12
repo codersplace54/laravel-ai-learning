@@ -48,10 +48,10 @@ class UserController extends Controller
                     'is_active'      => 'nullable|integer',
                     'inspector'      => 'nullable|string|in:yes,no',
 
-                    'locations' => 'required_if:user_type,department|array|min:1',
+                    'locations' => 'nullable|array|min:1',
 
-                    'locations.*.district_id' => 'required|integer|exists:tripura_master_data,district_code',
-                    'locations.*.subdivision_id' => 'required|integer|exists:tripura_master_data,sub_lgd_code',
+                    'locations.*.district_id' => 'nullable|integer|exists:tripura_master_data,district_code',
+                    'locations.*.subdivision_id' => 'nullable|integer|exists:tripura_master_data,sub_lgd_code',
                     'locations.*.block_id' => 'nullable|integer',
                 ],
                 [
@@ -106,7 +106,7 @@ class UserController extends Controller
 
             if ($request->user_type == "department") {
                 $admin = Auth::user();
-                if (!$admin) {
+                if (!$admin || $admin->user_type !== 'admin') {
                     return response()->json(['status' => 0, 'message' => 'Only a logged-in admin can register a departmental user.'], 401);
                 }
             }
@@ -132,9 +132,10 @@ class UserController extends Controller
 
             if ($user->user_type == "department") {
 
-                foreach ($request->locations as $location) {
+                $locations = $request->locations ?? [null];
+                foreach ($locations as $location) {
 
-                    $department_user = DepartmentUser::create([
+                     DepartmentUser::create([
                         'user_id' => $user->id,
                         'department_id' => $request->department_id,
                         'designation' => $request->designation,
@@ -273,8 +274,8 @@ class UserController extends Controller
             if ($request->locations !== null) {
                 $rules['locations'] = 'array|min:1';
 
-                $rules['locations.*.district_id'] = 'required|integer|exists:tripura_master_data,district_code';
-                $rules['locations.*.subdivision_id'] = 'required|integer|exists:tripura_master_data,sub_lgd_code';
+                $rules['locations.*.district_id'] = 'nullable|integer|exists:tripura_master_data,district_code';
+                $rules['locations.*.subdivision_id'] = 'nullable|integer|exists:tripura_master_data,sub_lgd_code';
                 $rules['locations.*.block_id'] = 'nullable|integer';
             }
 
@@ -362,23 +363,22 @@ class UserController extends Controller
 
                 $admin = Auth::user();
                 DepartmentUser::where('user_id', $user->id)->delete();
+                $locations = $request->locations ?? [null];
 
-                if ($request->locations && is_array($request->locations)) {
-                    foreach ($request->locations as $location) {
-                        $department_user = DepartmentUser::create([
+                    foreach ($locations as $location) {
+                         DepartmentUser::create([
                             'user_id' => $user->id,
                             'department_id' => $request->department_id,
                             'designation' => $request->designation,
                             'block_id' => $location['block_id'] ?? null,
-                            'subdivision_id' => $location['subdivision_id'],
-                            'district_id' => $location['district_id'],
+                            'subdivision_id' => $location['subdivision_id'] ?? null,
+                            'district_id' => $location['district_id'] ?? null,
                             'hierarchy_level' => $request->hierarchy_level,
                             'is_active' => 1,
                             'created_by' =>  $admin->email_id,
                             'inspector' =>  $request->inspector ?? "no"
                         ]);
                     }
-                }
             }
 
             $locations = $user->department_user_location->map(function ($loc) {
@@ -737,7 +737,7 @@ class UserController extends Controller
 
             $department_user = User::where('id', $request->id)->first();
 
-            $locations = $user->department_user_location->map(function ($loc) {
+            $locations = $department_user->department_user_location->map(function ($loc) {
                 return [
                     'district_id'    => $loc->district_id,
                     'district_name'    => $loc->district->district_name ?? null,
@@ -753,17 +753,7 @@ class UserController extends Controller
                 'authorized_person_name' => $department_user->authorized_person_name,
                 'email_id' => $department_user->email_id,
                 'mobile_no' => $department_user->mobile_no,
-                'pan' => $department_user->pan,
-                'bin' => $department_user->bin,
                 'user_name' => $department_user->user_name,
-                'district'                     => $department_user->district->district_name ?? null,
-                'district_code'                => $department_user->district->district_code ?? null,
-                'subdivision_name'                 => $department_user->subdivision->sub_division ?? null,
-                'subdivision_code'               => $department_user->subdivision->sub_lgd_code ?? null,
-                'ulb_name'                          => $department_user->ulb->ulb_name ?? null,
-                'ulb_code'                 => $department_user->ulb->ulb_lgd_code ?? null,
-                'ward_name'                         => $department_user->ward->name_of_gp_vc_or_ward ?? null,
-                'ward_code'                      => $department_user->ward->gp_vc_ward_lgd_code ?? null,
                 'user_type' => $department_user->user_type,
                 'registered_enterprise_address' => $department_user->registered_enterprise_address,
                 'registered_enterprise_city' => $department_user->registered_enterprise_city,
