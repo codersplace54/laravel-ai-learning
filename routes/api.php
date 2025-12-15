@@ -37,6 +37,7 @@ use App\Http\Controllers\Inspection\InspectionController;
 use App\Http\Controllers\Service\ExistingLicenseController;
 use App\Http\Controllers\Dashboard\DashboardController;
 use App\Http\Controllers\KyaController;
+use App\Http\Controllers\MigrationPlan\MigrationPlanController;
 use App\Http\Controllers\Service\PaymentController;
 use App\Http\Controllers\Service\FeedbackController;
 
@@ -344,3 +345,4 @@ Route::prefix('kya')->group(function () {
 });
 
 Route::post('user/payment-callback', [PaymentController::class, 'payment_callback']);
+Route::post('migration-notice', [MigrationPlanController::class, 'migration_notice']);
