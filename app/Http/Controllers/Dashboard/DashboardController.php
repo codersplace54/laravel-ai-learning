@@ -13,6 +13,7 @@ use App\Models\ApplicationWorkflowHistory;
 use App\Models\ServiceApprovalFlow;
 use App\Models\Department;
 use App\Models\User;
+use App\Models\DepartmentUser;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
@@ -145,21 +146,26 @@ class DashboardController extends Controller
 
             $clarification_required = ApplicationWorkflowHistory::where('department_id', $department_id)
                 ->where('status', 'send_back')
+                ->where('action_taken_by', Auth::id())
                 ->with([
                     'application' => function ($q) {
                         $q->select('id', 'applicationId', 'service_id', 'user_id', 'application_date', 'remarks')
                             ->with([
                                 'service:id,service_title_or_description',
-                                'user:id,authorized_person_name'
+                                'user:id,authorized_person_name',
+                                'workflow'
                             ]);
                     },
                 ])
                 ->get(['id', 'application_id', 'status', 'status_file'])
                 ->map(function ($item) {
 
+                    $application = $item->application;
+
                     $workflow   = $application->workflow ?? collect();
 
                     $latest_send_back_step = $workflow->where('status', 'send_back')
+                        ->where('action_taken_by', Auth::id())
                         ->sortByDesc('action_taken_at')
                         ->first();
 
@@ -167,7 +173,6 @@ class DashboardController extends Controller
                         ? Carbon::parse($latest_send_back_step->action_taken_at)
                         : null;
 
-                    $application = $item->application;
                     $service     = $application ? $application->service : null;
                     $applicant_name  = $application?->user?->authorized_person_name;
                     return [
@@ -241,26 +246,41 @@ class DashboardController extends Controller
                 })
                 ->values();
 
-            $latest_assignments = ApplicationWorkflowAssignment::select('id', 'application_id', 'status')
-                ->where('hierarchy_level', $hierarchy_level)
-                ->where('status', 'pending')
-                ->orderByDesc('id')
-                ->get()
-                ->groupBy('application_id')
-                ->map(function ($group) {
-                    return $group->sortByDesc('id');
-                });
+            $department_locations = DepartmentUser::where('user_id', $user->id)->get();
 
-            $total_pending_for_me = $latest_assignments->filter(function ($assignments) {
-                $latest = $assignments->first();
-                return $latest && $latest->status == 'pending';
-            })->count();
+            $latest_assignment_ids = ApplicationWorkflowAssignment::selectRaw('MAX(id) as id')
+                ->groupBy('application_id');
+
+            $total_pending_for_me = ApplicationWorkflowAssignment::whereIn(
+                'id',
+                $latest_assignment_ids
+            )
+                ->where('status', 'pending')
+                ->where('hierarchy_level', $hierarchy_level)
+                ->whereHas('application', function ($q) use ($department_id) {
+                    $q->where('payment_status', 'paid')
+                        ->where('department_id', $department_id);
+                })
+
+                ->whereHas('application.user', function ($q) use ($hierarchy_level, $department_locations) {
+                    $q->where(function ($loc) use ($hierarchy_level, $department_locations) {
+                        foreach ($department_locations as $location) {
+                            if ($hierarchy_level === 'block') {
+                                $loc->orWhere('ulb_id', $location->block_id);
+                            } elseif (str_starts_with($hierarchy_level, 'subdivision')) {
+                                $loc->orWhere('subdivision_id', $location->subdivision_id);
+                            } elseif (str_starts_with($hierarchy_level, 'district')) {
+                                $loc->orWhere('district_id', $location->district_id);
+                            }
+                        }
+                    });
+                })
+                ->count();
 
             $total_approved_by_me = ApplicationWorkflowAssignment::where('action_taken_by', $user_id)
                 ->where('status', 'approved')
                 ->distinct('application_id')
                 ->count('application_id');
-
 
 
             return response()->json([
