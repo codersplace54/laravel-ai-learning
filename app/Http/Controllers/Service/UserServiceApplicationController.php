@@ -171,7 +171,10 @@ class UserServiceApplicationController extends Controller
                         }
                     }
 
-                    $application_data = json_decode($user_service_application->application_data ?? '[]', true) ?: [];
+                    $application_data = is_array($user_service_application->application_data)
+                        ? $user_service_application->application_data
+                        : (json_decode($user_service_application->application_data ?? '[]', true) ?: []);
+
 
                     $removed_question_ids = json_decode((string)($request->input('remove_file_question_ids') ?? '[]'), true) ?: [];
 
@@ -259,7 +262,10 @@ class UserServiceApplicationController extends Controller
                         ]);
                     }
 
-                    $user_service_application->application_data = json_decode($user_service_application->application_data);
+                    $user_service_application->application_data = is_array($user_service_application->application_data)
+                        ? $user_service_application->application_data
+                        : json_decode($user_service_application->application_data ?? '[]', true);
+
                     DB::commit();
 
                     return response()->json([
@@ -506,7 +512,12 @@ class UserServiceApplicationController extends Controller
 
             $user_service_application->fill($request->except(['id', 'NOC_certificate', 'NOC_rejection_certificate']));
 
-            $existing_data = json_decode($user_service_application->application_data ?? '[]', true) ?: [];
+            $existing_data = is_array($user_service_application->application_data)
+                ? $user_service_application->application_data
+                : json_decode($user_service_application->application_data ?? '[]', true);
+
+            $existing_data = $existing_data ?: [];
+
 
             $removed_question_ids = json_decode((string)($request->input('remove_file_question_ids') ?? '[]'), true) ?: [];
 

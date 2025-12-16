@@ -189,40 +189,7 @@ class CertificateController extends Controller
             preg_match_all('/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/', $template, $matches);
             $placeholders = array_values(array_unique($matches[1] ?? []));
 
-            $meta = $this->resolve_license_meta($application);
-
-            $base_data = [
-                'add_watermark'     => 'yes',
-                'form_title'        => 'FORM VI',
-                'rules_ref'         => '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
-                'government'        => 'Government of Tripura',
-                'issuing_office'    => 'Office of the Licensing Officer',
-                'verify_portal_url' => 'https://swaagat.tripura.gov.in',
-
-                'license_id'        => $meta['license_id'],
-                'issue_date'        => $meta['issue_date'],
-
-                'principal_employer' => $user->name_of_enterprise ?? null,
-                'guardian_name'      => optional($user->management_details)->owner_details_father_name ?? null,
-                'address'            => optional($user->management_details)->owner_details_residential_details ?? null,
-                'work_location'      => $user->registered_enterprise_city ?? null,
-
-                'registration_no'   => $application->id ?? null,
-                'registration_date' => $meta['registration_date'],
-
-                'valid_upto'        => $meta['valid_upto'],
-
-                'max_contract_labour' => null,
-                'fee_paid'            => $meta['fee_paid'],
-                'security_deposit'    => null,
-                'designation'         => $application->service->department->department_user->designation ?? null,
-                'signature_note'      => 'Not Required',
-                'user_name'           => $user->authorized_person_name ?? null,
-                'user_id'             => $application->user->id,
-                'qr_code'             => $qr_data_uri,
-                'field_1'             => null,
-                'field_2'             => null,
-            ];
+            $base_data = $this->build_certificate_base_data($application, $qr_data_uri, null);
 
             $always_keep = ['add_watermark', 'field_1', 'field_2'];
 
@@ -279,34 +246,7 @@ class CertificateController extends Controller
             $template    = $base['template'];
             $qr_data_uri = $base['qr_data_uri'];
 
-            $data = [
-                'form_title'          => $request->form_title ?? null,
-                'rules_ref'           => $request->rules_ref ?? null,
-                'government'          => $request->government ?? null,
-                'issuing_office'      => $request->issuing_office ?? null,
-                'verify_portal_url'   => $request->verify_portal_url ?? 'https://swaagat.tripura.gov.in',
-
-                'license_id'          => $request->license_id ?? null,
-                'issue_date'          => $request->issue_date ?? null,
-                'principal_employer'  => $request->principal_employer ?? null,
-                'guardian_name'       => $request->guardian_name ?? null,
-                'address'             => $request->address ?? null,
-                'work_location'       => $request->work_location ?? null,
-                'registration_no'     => $request->registration_no ?? null,
-                'registration_date'   => $request->registration_date ?? null,
-                'valid_upto'          => $request->valid_upto ?? null,
-                'max_contract_labour' => $request->max_contract_labour ?? null,
-                'fee_paid'            => $request->fee_paid ?? null,
-                'security_deposit'    => $request->security_deposit ?? null,
-                'designation'         => $request->designation ?? null,
-                'signature_note'      => $request->signature_note ?? 'Not Required',
-                'user_name'           => $request->name ?? $user->authorized_person_name,
-                'user_id'             => $user->id,
-                'business_pan_no'     => $request->business_pan_no ?? null,
-                'qr_code'             => $qr_data_uri,
-                'field_1'             => $request->field_1 ?? null,
-                'filed_2'             => $request->filed_2 ?? null,
-            ];
+            $data = $this->build_certificate_base_data($application, $qr_data_uri, $request);
 
             $application_data_input = $request->input('application_data');
 
@@ -734,5 +674,49 @@ class CertificateController extends Controller
         }
 
         return $application_number;
+    }
+
+    private function build_certificate_base_data(
+        UserServiceApplication $application,
+        string $qr_data_uri,
+        ?Request $request = null
+    ): array {
+        $user = $application->user;
+        $meta = $this->resolve_license_meta($application, $request);
+
+        return [
+            'add_watermark'        => $request?->input('add_watermark', 'yes') ?? 'yes',
+            'form_title'           => $request->form_title ?? 'FORM VI',
+            'rules_ref'            => $request->rules_ref ?? '[ Under rule 19(1) of the Tripura Contract Labour (Regulation and Abolition) Rules, 1978; ]',
+            'government'           => $request->government ?? 'Government of Tripura',
+            'issuing_office'       => $request->issuing_office ?? 'Office of the Licensing Officer',
+            'verify_portal_url'    => $request->verify_portal_url ?? 'https://swaagat.tripura.gov.in',
+
+            'license_id'           => $request->license_id ?? $meta['license_id'],
+            'issue_date'           => $request->issue_date ?? $meta['issue_date'],
+
+            'principal_employer'   => $request->principal_employer ?? ($user->name_of_enterprise ?? null),
+            'guardian_name'        => $request->guardian_name ?? (optional($user->management_details)->owner_details_father_name ?? null),
+            'address'              => $request->address ?? (optional($user->management_details)->owner_details_residential_details ?? null),
+            'work_location'        => $request->work_location ?? ($user->registered_enterprise_city ?? null),
+
+            'registration_no'      => $request->registration_no ?? ($application->id ?? null),
+            'registration_date'    => $request->registration_date ?? $meta['registration_date'],
+            'valid_upto'           => $request->valid_upto ?? $meta['valid_upto'],
+
+            'max_contract_labour'  => $request->max_contract_labour ?? null,
+            'fee_paid'             => $request->fee_paid ?? $meta['fee_paid'],
+            'security_deposit'     => $request->security_deposit ?? null,
+
+            'designation'          => $request->designation ?? ($application->service->department->department_user->designation ?? null),
+            'signature_note'       => $request->signature_note ?? 'Not Required',
+            'user_name'            => $request->name ?? ($user->authorized_person_name ?? null),
+            'user_id'              => $user->id,
+            'business_pan_no'      => $request->business_pan_no ?? optional($user->enterprise_details)->business_pan_no,
+
+            'qr_code'              => $qr_data_uri,
+            'field_1'              => $request->field_1 ?? null,
+            'field_2'              => $request->field_2 ?? null,
+        ];
     }
 }
