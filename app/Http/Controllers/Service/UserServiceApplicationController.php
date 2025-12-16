@@ -1834,14 +1834,17 @@ class UserServiceApplicationController extends Controller
             if ($request->search) {
                 $search = $request->search;
 
-                $query->whereHas('user', function ($q) use ($search) {
-                    $q->where('name_of_enterprise', 'LIKE', "%{$search}%")
-                        ->orWhere('email_id', 'LIKE', "%{$search}%");
+                $query->where(function ($q) use ($search) {
+                    $q->where('applicationId', 'LIKE', "%{$search}%")
+                        ->orWhereHas('user', function ($u) use ($search) {
+                            $u->where('name_of_enterprise', 'LIKE', "%{$search}%")
+                                ->orWhere('email_id', 'LIKE', "%{$search}%");
+                        });
                 });
             }
 
             if ($request->GRN_number) {
-                $query->where('applicationId', 'LIKE', "%{$request->GRN_number}%");
+                $query->where('GRN_number', 'LIKE', "%{$request->GRN_number}%");
             }
 
             if ($request->mobile_no) {
