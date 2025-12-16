@@ -313,7 +313,7 @@ class LineOfActivityDetailsController extends Controller
             $line_of_activity = LineOfActivity::where('user_id', $request->user_id)->first();
 
             if (!$line_of_activity) {
-                return response()->json(['status' => 0, 'message' => 'No LineOfActivity found.'], 404);
+                return response()->json(['status' => 1, 'message' => 'No LineOfActivity found.'], 404);
             }
 
             $raw_material_to_be_used = RawMaterialToBeUsed::where('user_id', $request->user_id)->get();

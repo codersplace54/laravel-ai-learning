@@ -158,7 +158,7 @@ class ActivityController extends Controller
 
             if (!$activities) {
                 return response()->json([
-                    'status' => 0,
+                    'status' => 1,
                     'message' => 'No activities found for this user.'
                 ], 404);
             }
@@ -199,7 +199,7 @@ class ActivityController extends Controller
 
             if (!$activities) {
                 return response()->json([
-                    'status' => 0,
+                    'status' => 1,
                     'message' => 'No activities found for this user.'
                 ], 404);
             }

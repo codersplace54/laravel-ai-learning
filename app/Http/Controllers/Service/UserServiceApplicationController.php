@@ -91,6 +91,7 @@ class UserServiceApplicationController extends Controller
 
                 $request->validate([
                     'service_id' => 'required|integer|exists:service_masters,id',
+                    'application_id' => 'required|integer|exists:user_service_applications,id',
                 ]);
 
                 $request->merge([
@@ -135,11 +136,15 @@ class UserServiceApplicationController extends Controller
 
                 $max_processing_date = $this->add_working_days($application_date, $target_days);
 
-                $user_service_application = UserServiceApplication::where('user_id', $user->id)
+                if($request->status == 'draft'){
+                    $user_service_application = UserServiceApplication::where('id', $request->application_id)->first();
+                }else{
+                    $user_service_application = UserServiceApplication::where('user_id', $user->id)
                     ->where('service_id', $request->service_id)
                     ->latest()
                     ->first();
-
+                }
+                
                 $application_id =  $user_service_application->id ?? null;
                 $fee_data = $this->calculate_final_fee($request->service_id, $request->application_data, $application_id);
                 $final_fee = $fee_data['final_fee'];

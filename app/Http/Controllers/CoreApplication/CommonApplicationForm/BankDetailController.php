@@ -150,7 +150,7 @@ class BankDetailController extends Controller
 
             if (!$bankDetail) {
                 return response()->json([
-                    'status' => 0,
+                    'status' => 1,
                     'message' => 'No bank details found for this user.'
                 ], 404);
             }
