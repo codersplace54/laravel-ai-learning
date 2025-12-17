@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\Activity;
 
+use function PHPUnit\Framework\isEmpty;
+
 class ActivityController extends Controller
 {
 
@@ -197,7 +199,7 @@ class ActivityController extends Controller
 
             $activities = Activity::where('user_id', $request->user_id)->get();
 
-            if (!$activities) {
+            if ($activities->isEmpty()) {
                 return response()->json([
                     'status' => 1,
                     'message' => 'No activities found for this user.'
