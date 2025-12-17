@@ -391,7 +391,7 @@ class GeneralAttachmentsController extends Controller
 
             if (!$general_attachment) {
                 return response()->json([
-                    'status' => 1,
+                    'status' => 0,
                     'message' => 'No general attachment found for this user.'
                 ], 404);
             }

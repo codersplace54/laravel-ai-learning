@@ -428,7 +428,7 @@ class UnitDetailController extends Controller
 
 
                 return response()->json([
-                    'status' => 1,
+                    'status' => 0,
                     'message' => 'Unit details not found.',
                 ], 404);
             }

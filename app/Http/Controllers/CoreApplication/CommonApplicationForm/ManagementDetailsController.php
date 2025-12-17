@@ -557,7 +557,7 @@ class ManagementDetailsController extends Controller
 
             if (! $management_details) {
                 return response()->json([
-                    'status' => 1,
+                    'status' => 0,
                     'message' => 'Management details not found.',
                 ], 404);
             }
