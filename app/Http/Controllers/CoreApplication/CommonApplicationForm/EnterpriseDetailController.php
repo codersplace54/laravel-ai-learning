@@ -286,7 +286,7 @@ class EnterpriseDetailController extends Controller
 
             if (!$enterprise_detail) {
                 return response()->json([
-                    'status' => 1,
+                    'status' => 0,
                     'message' => 'Enterprise details not found for this user.',
                 ], 404);
             }

@@ -13,6 +13,7 @@ use App\Models\ServiceThirdPartyParam;
 use App\Models\ServiceApprovalFlow;
 use App\Models\User;
 use App\Exports\ServiceMasterExport;
+use App\Models\UnitDetail;
 use Maatwebsite\Excel\Facades\Excel;
 
 
@@ -68,7 +69,8 @@ class ServiceMasterController extends Controller
                 'third_party_payment_mode' => 'nullable|in:unified,external',
                 'is_active' => 'nullable|integer',
                 'fixed_expiry_date' => 'nullable|date',
-                'egras_scheme_code' => 'required|string'
+                'egras_scheme_code' => 'required|string',
+                'caf_depends' => 'nullable|in:yes,no',
             ]);
 
             DB::beginTransaction();
@@ -112,7 +114,8 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? 1,
                 'created_by' => $admin->email_id,
-                'egras_scheme_code'=> $request->egras_scheme_code ?? "1475-00-106-21-06",
+                'egras_scheme_code' => $request->egras_scheme_code ?? "1475-00-106-21-06",
+                'caf_depends' => $request->caf_depends,
             ]);
 
             $service_master->depends_on_services = json_decode($service_master->depends_on_services, true);
@@ -187,7 +190,8 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => 'nullable|string',
                 'third_party_payment_mode' => 'nullable|in:unified,external',
                 'is_active' => 'nullable|integer',
-                'egras_scheme_code' => 'required|string'
+                'egras_scheme_code' => 'required|string',
+                'caf_depends' => 'nullable|in:yes,no',
             ]);
 
             DB::beginTransaction();
@@ -238,7 +242,8 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? $service->is_active,
                 'updated_by' => $admin->email_id,
-                'egras_scheme_code'=> $request->egras_scheme_code ?? $service->egras_scheme_code ?? "1475-00-106-21-06",
+                'egras_scheme_code' => $request->egras_scheme_code ?? $service->egras_scheme_code ?? "1475-00-106-21-06",
+                'caf_depends' => $request->caf_depends,
             ]);
 
             DB::commit();
@@ -379,6 +384,11 @@ class ServiceMasterController extends Controller
             $approval_flow_service = ServiceApprovalFlow::with('service_approval_flows')->pluck('service_id')->toArray();
 
             $department_id = $request->department_id ?? null;
+            $is_caf_filled = false;
+
+            if ($user->user_type === 'individual') {
+                $is_caf_filled = UnitDetail::where('user_id', $user->id)->exists();
+            }
 
             $services = ServiceMaster::with([
                 'department:id,name',
@@ -420,7 +430,8 @@ class ServiceMasterController extends Controller
                 ->get();
 
 
-            $services = $services->map(function ($service) use ($user) {
+            $services = $services->map(function ($service) use ($user, $is_caf_filled) {
+
                 $data = [
                     'id' => $service->id,
                     'service_title_or_description' => $service->service_title_or_description,
@@ -438,6 +449,8 @@ class ServiceMasterController extends Controller
                     'status' => $service->status,
                     'is_special' => $service->is_special,
                     'verification_token' => $service->verification_token,
+                    'is_caf_filled' => $is_caf_filled,
+
                 ];
 
                 if ($service->service_mode === 'third_party') {

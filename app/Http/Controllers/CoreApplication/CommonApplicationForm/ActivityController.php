@@ -201,7 +201,7 @@ class ActivityController extends Controller
 
             if ($activities->isEmpty()) {
                 return response()->json([
-                    'status' => 1,
+                    'status' => 0,
                     'message' => 'No activities found for this user.'
                 ], 404);
             }

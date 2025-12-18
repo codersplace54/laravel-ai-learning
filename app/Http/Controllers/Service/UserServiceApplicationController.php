@@ -22,6 +22,7 @@ use App\Models\RenewalCycle;
 use App\Models\PaymentOrder;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ApplicationsExport;
+use App\Models\UnitDetail;
 use Illuminate\Http\UploadedFile;
 use App\Services\ApplicationDataFormatter;
 
@@ -38,6 +39,16 @@ class UserServiceApplicationController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
+            $is_caf_filled = UnitDetail::where('user_id', $user->id)->exists();
+
+            if (!$is_caf_filled) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Please complete your CAF (Common Application Form) details before proceeding.',
+                ], 200);
+            }
+
+            
             if ($request->save_data != 1) {
                 $request->validate([
                     'service_id'            => 'required|integer|exists:service_masters,id',
@@ -87,13 +98,16 @@ class UserServiceApplicationController extends Controller
                 ]);
 
                 $this->validate_questionnaire_file_inputs($request);
+                $request->merge([
+                    'status' => 'saved',
+                ]);
             } else {
 
                 $request->validate([
                     'service_id' => 'required|integer|exists:service_masters,id',
-                    'application_id' => 'required|integer|exists:user_service_applications,id',
+                    'id' => 'nullable|integer|exists:user_service_applications,id',
                 ]);
-
+ 
                 $request->merge([
                     'status' => 'draft',
                 ]);
@@ -136,13 +150,14 @@ class UserServiceApplicationController extends Controller
 
                 $max_processing_date = $this->add_working_days($application_date, $target_days);
 
-                if($request->status == 'draft'){
-                    $user_service_application = UserServiceApplication::where('id', $request->application_id)->first();
+                if($request->id){
+                    $user_service_application = UserServiceApplication::where('id', $request->id)->first();
                 }else{
-                    $user_service_application = UserServiceApplication::where('user_id', $user->id)
-                    ->where('service_id', $request->service_id)
-                    ->latest()
-                    ->first();
+                    $user_service_application = null ;
+                    // $user_service_application = UserServiceApplication::where('user_id', $user->id)
+                    // ->where('service_id', $request->service_id)
+                    // ->latest()
+                    // ->first();
                 }
                 
                 $application_id =  $user_service_application->id ?? null;
@@ -152,7 +167,7 @@ class UserServiceApplicationController extends Controller
                 $previous_paid = $fee_data['previous_paid'];
                 $total_fee =  $final_fee;
                 $effective_fee = 0;
-                if (($user_service_application && $service_data->allow_repeat_application === 'no') || ($user_service_application && $request->status == 'draft')) {
+                if ($user_service_application) {
 
                     $total_fee =  $final_fee;
                     $previous_paid = $user_service_application->paid_amount ?? 0;
