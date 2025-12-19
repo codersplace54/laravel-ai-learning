@@ -24,9 +24,27 @@ class AuthController extends Controller
         try {
 
 
-            $credentials = $request->only('user_name', 'password');
+            $request->validate([
+                'user_name' => 'required|string',
+                'password'  => 'required|string',
+            ]);
 
-            if (!$token = JWTAuth::attempt($credentials)) {
+            $identifier = trim($request->user_name);
+            $password   = $request->password;
+
+            $token = null;
+
+            $token = JWTAuth::attempt(['user_name' => $identifier, 'password' => $password]);
+
+            if (! $token) {
+                $token = JWTAuth::attempt(['pan' => strtoupper($identifier), 'password' => $password]);
+            }
+
+            if (! $token) {
+                $token = JWTAuth::attempt(['bin' => $identifier, 'password' => $password]);
+            }
+
+            if (!$token) {
                 return response()->json([
                     'status' => 0,
                     'message' => 'Invalid credentials'
@@ -246,7 +264,6 @@ class AuthController extends Controller
                     'expires_at'  => $expires_at,
                     'is_verified' => 0,
                 ]);
-
             } else {
 
                 Otp::create([
@@ -254,7 +271,6 @@ class AuthController extends Controller
                     'code'      => $otp_code,
                     'expires_at' => $expires_at,
                 ]);
-
             }
 
             $this->send_sms_otp($mobile_no, $otp_code);
@@ -346,6 +362,270 @@ class AuthController extends Controller
             return response()->json([
                 'status'  => 0,
                 'message' => 'Failed to verify OTP.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function forgot_password_send_otp(Request $request)
+    {
+        try {
+            $request->validate([
+                'pan_no'    => 'required|string|max:15',
+            ]);
+
+            $pan_no    = strtoupper(trim($request->pan_no));
+
+            $user = User::where('pan', $pan_no)->first();
+
+            if (! $user) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'No account is registered with this PAN number.',
+                ], 404);
+            }
+
+            $mobile_no = $user->mobile_no;
+            if ($user->status === "blocked") {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Your account is inactive. Please contact admin.',
+                ], 403);
+            }
+
+            // $otp_code = random_int(100000, 999999);
+            $otp_code   = 123456;
+            $expires_at = Carbon::now()->addMinutes(10);
+
+            DB::beginTransaction();
+
+            $otp_row = Otp::where('mobile_no', $mobile_no)->first();
+
+            if ($otp_row) {
+                $otp_row->update([
+                    'code'        => $otp_code,
+                    'expires_at'  => $expires_at,
+                    'is_verified' => 0,
+                ]);
+            } else {
+                Otp::create([
+                    'mobile_no'   => $mobile_no,
+                    'code'        => $otp_code,
+                    'expires_at'  => $expires_at,
+                    'is_verified' => 0,
+                ]);
+            }
+
+            $this->send_sms_otp($mobile_no, $otp_code);
+
+            DB::commit();
+
+            return response()->json([
+                'status'        => 1,
+                'message'       => 'OTP sent successfully.',
+                'mobile_no'     => $mobile_no,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Failed to send OTP.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+
+    public function forgot_password_verify_otp(Request $request)
+    {
+        try {
+            $request->validate([
+                'pan_no'    => 'required|string|max:15',
+                'otp_code'  => 'required|string|size:6',
+            ]);
+
+            $pan_no    = strtoupper(trim($request->pan_no));
+            $otp_code  = $request->otp_code;
+
+            $user = User::where('pan', $pan_no)->first();
+
+            if (! $user) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'No account is registered with this PAN number.',
+                ], 404);
+            }
+
+            $mobile_no = $user->mobile_no;
+            $now = Carbon::now();
+
+            DB::beginTransaction();
+
+            $otp_row = Otp::where('mobile_no', $mobile_no)
+                ->where('code', $otp_code)
+                ->where('expires_at', '>=', $now)
+                ->first();
+
+            if (! $otp_row) {
+                DB::rollBack();
+
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Invalid or expired OTP.',
+                ], 422);
+            }
+
+            $otp_row->update(['is_verified' => 1]);
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'OTP verified successfully.',
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Failed to verify OTP.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function forgot_password_reset(Request $request)
+    {
+        try {
+            $request->validate([
+                'pan_no'       => 'required|string|max:15',
+                'new_password' => 'required|string|min:6|confirmed',
+            ]);
+
+            $pan_no    = strtoupper(trim($request->pan_no));
+
+            $user = User::where('pan', $pan_no)->first();
+
+            if (! $user) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Invalid PAN or registered mobile number.',
+                ], 404);
+            }
+
+            $mobile_no = $user->mobile_no;
+            $now = Carbon::now();
+
+            DB::beginTransaction();
+
+            $otp_row = Otp::where('mobile_no', $mobile_no)
+                ->where('is_verified', 1)
+                ->where('expires_at', '>=', $now)
+                ->first();
+
+            if (! $otp_row) {
+                DB::rollBack();
+
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'OTP not verified or expired.',
+                ], 422);
+            }
+
+            $user->password = Hash::make($request->new_password);
+            $user->save();
+
+            $otp_row->delete();
+
+            $old_tokens = JWTToken::where('user_id', $user->id)->get();
+            foreach ($old_tokens as $row) {
+                try {
+                    JWTAuth::setToken($row->token)->invalidate();
+                } catch (\Exception $e) {
+                }
+            }
+            JWTToken::where('user_id', $user->id)->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Password reset successful. Please login again.',
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Failed to reset password.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function check_pan_registered(Request $request)
+    {
+        try {
+            $request->validate([
+                'pan_no' => 'required|string|max:15',
+            ]);
+
+            $pan_no = strtoupper(trim($request->pan_no));
+
+            $user = User::where('pan', $pan_no)->first();
+
+            if (! $user) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'No account is registered with this PAN number.',
+                    'is_registered'    => false,
+                ], 404);
+            }
+
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Account already exist with this PAN number.',
+                'is_registered' => true
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong.',
                 'error'   => $e->getMessage(),
             ], 500);
         }

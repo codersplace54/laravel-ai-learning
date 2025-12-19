@@ -10,12 +10,14 @@ use App\Models\UserServiceApplication;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 
 class UserServiceApplicationImport implements ToCollection, WithHeadingRow
 {
     public array $skipped_rows = [];
+    public array $assignment_skipped_rows = [];
 
     protected array $service_id_map = [];
     protected array $user_id_map = [];
@@ -41,71 +43,104 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
 
     public function collection(Collection $rows)
     {
-        UserServiceApplication::truncate();
-        ApplicationWorkflowAssignment::truncate();
-        ApplicationWorkflowHistory::truncate();
-
         DB::disableQueryLog();
 
-        $app_batch              = [];
-        $assignment_batch       = [];
-        $history_batch          = [];
-
-        $app_batch_size         = 500;
-        $assignment_batch_size  = 2000;
-        $history_batch_size     = 2000;
+        $service_application_batch  = [];
+        $service_application_batch_size = 500;
 
         foreach ($rows as $index => $row) {
             $row_number = $row['#'] ?? ($index + 1);
 
-            $mapped_row = $this->map_row_to_db($row, $row_number);
-
+            $mapped_row = $this->map_user_service_application($row, $row_number);
             if ($mapped_row === null) {
                 continue;
             }
 
-            $app_batch[] = $mapped_row;
+            $service_application_batch[] = $mapped_row;
 
-            $assignments = $this->build_assignments_for_application($mapped_row);
-            foreach ($assignments as $a) {
-                $assignment_batch[] = $a;
-            }
-
-            $history_rows = $this->build_history_for_application($mapped_row);
-            foreach ($history_rows as $h) {
-                $history_batch[] = $h;
-            }
-
-            if (count($app_batch) >= $app_batch_size) {
-                DB::table('user_service_applications')->insert($app_batch);
-                $app_batch = [];
-            }
-
-            if (count($assignment_batch) >= $assignment_batch_size) {
-                DB::table('application_workflow_assignments')->insert($assignment_batch);
-                $assignment_batch = [];
-            }
-
-            if (count($history_batch) >= $history_batch_size) {
-                DB::table('application_workflow_history')->insert($history_batch);
-                $history_batch = [];
+            if (count($service_application_batch) >= $service_application_batch_size) {
+                $this->save_applications_and_prepare_assignment_history($service_application_batch);
+                $service_application_batch = [];
             }
         }
 
-        if (!empty($app_batch)) {
-            DB::table('user_service_applications')->insert($app_batch);
-        }
-
-        if (!empty($assignment_batch)) {
-            DB::table('application_workflow_assignments')->insert($assignment_batch);
-        }
-
-        if (!empty($history_batch)) {
-            DB::table('application_workflow_history')->insert($history_batch);
+        if (!empty($service_application_batch)) {
+            $this->save_applications_and_prepare_assignment_history($service_application_batch);
         }
     }
 
-    protected function map_row_to_db($row, int $excel_row_number): ?array
+    protected function save_applications_and_prepare_assignment_history(array $service_applications_batch): void
+    {
+        if (empty($service_applications_batch)) {
+            return;
+        }
+
+        DB::table('user_service_applications')->insert($service_applications_batch);
+
+        // Build old_id => new_id map for only this chunk 
+        $old_ids = [];
+        foreach ($service_applications_batch as $application) {
+            if (!empty($application['old_id'])) {
+                $old_ids[] = (int) $application['old_id'];
+            }
+        }
+
+        if (empty($old_ids)) {
+            return;
+        }
+
+        $application_id_map = DB::table('user_service_applications')
+            ->whereIn('old_id', $old_ids)
+            ->pluck('id', 'old_id')
+            ->toArray();
+
+        // Build assignments + history using new app id
+        $assignment_rows = [];
+        $history_rows    = [];
+
+        foreach ($service_applications_batch as $application) {
+            $old_id = $application['old_id'] ?? null;
+
+            if (!$old_id || !isset($application_id_map[$old_id])) {
+                continue;
+            }
+
+            // inject new id in batch from created applications
+            $application['id'] = $application_id_map[$old_id];
+
+            // skip assignments/history for these statuses
+            $app_status = $application['status'] ?? null;
+            if (in_array($app_status, ['draft', 'noc_issued', 'approved', 'rejected'], true)) {
+                $this->assignment_skipped_rows[] = [
+                    'row'        => $application['excel_row'] ?? null, // works if you added excel_row
+                    'old_id'     => $application['old_id'] ?? null,
+                    'service_id' => $application['service_id'] ?? null,
+                    'status'     => $app_status,
+                    'reason'     => 'ignored_due_to_status',
+                ];
+                continue;
+            }
+
+            foreach ($this->build_assignments_for_application($application) as $a) {
+                $assignment_rows[] = $a;
+            }
+
+            foreach ($this->build_history_for_application($application) as $h) {
+                $history_rows[] = $h;
+            }
+        }
+
+        foreach (array_chunk($assignment_rows, 2000) as $chunk) {
+            DB::table('application_workflow_assignments')->insert($chunk);
+        }
+
+        foreach (array_chunk($history_rows, 2000) as $chunk) {
+            DB::table('application_workflow_history')->insert($chunk);
+        }
+    }
+
+
+    protected function map_user_service_application($row, int $excel_row_number): ?array
     {
         $noc_details_id         = $row['noc_details_id'] ?? null;
         $noc_master_id          = $row['noc_master_id'] ?? null;
@@ -127,8 +162,11 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
                 'row'         => $excel_row_number,
                 'noc_id'      => $noc_details_id,
                 'old_user_id' => $old_user_id,
-                'reason'      => 'missing_required_fields',
+                'noc_master_id' => $noc_master_id,
+                'reason_key'  => 'missing_required_fields',
+                'reason'      => 'Missing required fields (noc_master_id / noc_details_id)',
             ];
+
             return null;
         }
 
@@ -139,8 +177,10 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
                 'row'           => $excel_row_number,
                 'noc_id'        => $noc_details_id,
                 'old_user_id'   => $old_user_id,
-                'reason'        => 'service_not_found',
+                'reason_key'    => 'service_not_found',
+                'reason'        => 'Service not found ',
             ];
+
             return null;
         }
 
@@ -152,8 +192,11 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
                     'row'         => $excel_row_number,
                     'noc_id'      => $noc_details_id,
                     'old_user_id' => $old_user_id,
-                    'reason'      => 'user_not_found',
+                    'noc_master_id' => $noc_master_id,
+                    'reason_key'  => 'user_not_found',
+                    'reason'      => 'User not found',
                 ];
+
                 return null;
             }
         }
@@ -164,7 +207,8 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
         ];
         $payment_status = $payment_map[$payment_status_raw] ?? null;
 
-        $status_key = strtolower(str_replace(' ', '_', $application_status_raw));
+        $status_key = strtolower(str_replace([' ', '-'], '_', $application_status_raw));
+
         $status_map = [
             'draft'                         => 'draft',
             'noc_issued'                    => 'noc_issued',
@@ -180,7 +224,21 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
             're_submitted'                  => 're_submitted',
             'rejected'                      => 'rejected',
         ];
-        $status = $status_map[$status_key] ?? 'saved';
+
+        $status = $status_map[$status_key] ?? null;
+
+        if ($status === null) {
+            $this->skipped_rows[] = [
+                'row'         => $excel_row_number,
+                'noc_id'      => $noc_details_id,
+                'old_user_id' => $old_user_id,
+                'noc_master_id' => $noc_master_id,
+                'reason_key'  => 'status_not_mapped',
+                'reason'      => 'Status not mapped',
+                'raw_status'  => $application_status_raw,
+            ];
+            return null;
+        }
 
         $renewal = null;
         if ($noc_type_raw === 'New' || $noc_type_raw === 'Other') {
@@ -209,7 +267,7 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
         $application_date = $this->parse_datetime($app_date_raw);
 
         return [
-            'id'                   => (int) $noc_details_id,
+            'old_id'               => (int) $noc_details_id,
             'user_id'              => $user_id,
             'service_id'           => $service_id,
             'renewal'              => $renewal,
@@ -221,7 +279,7 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
             'NOC_application_date' => $noc_app_date,
             'NOC_expiry_date'      => $noc_expiry_date,
             'NOC_certificate'      => $noc_certificate,
-            'NOC_letter_number'    => $noc_cert_number ?: null,
+            'license_id'           => $noc_cert_number ?: null,
             'NOC_letter_date'      => $noc_app_date,
             'NOC_generationDate'   => $noc_generation,
         ];
@@ -238,20 +296,15 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
         }
 
         if (!isset($this->service_flows_map[$service_id])) {
+            $this->assignment_skipped_rows[] = [
+                'row'        => $app_row['excel_row'] ?? null,
+                'old_id'     => $app_row['old_id'] ?? null,
+                'service_id' => $service_id,
+                'status'     => $app_status,
+                'reason'     => 'service_flow_not_found',
+            ];
             return [];
         }
-
-        $status_to_step_type = [
-            'saved'         => 'validation',
-            'pending'       => 'validation',
-            're_submitted'  => 'validation',
-            'extra_payment' => 'validation',
-            'send_back'     => 'validation',
-            'under_review'  => 'review',
-            'approved'      => 'approval',
-            'rejected'      => 'approval',
-            'noc_issued'    => 'approval',
-        ];
 
         $app_status_to_assignment = [
             'saved'         => 'saved',
@@ -260,39 +313,50 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
             'extra_payment' => 'extra_payment',
             'send_back'     => 'send_back',
             'under_review'  => 'in_progress',
-            'approved'      => 'approved',
-            'rejected'      => 'rejected',
-            'noc_issued'    => 'approved',
         ];
-
-        $active_step_type     = $status_to_step_type[$app_status] ?? null;
-        $active_assign_status = $app_status_to_assignment[$app_status] ?? 'pending';
 
         $now   = Carbon::now();
         $rows  = [];
-        $flows = $this->service_flows_map[$service_id];
 
-        foreach ($flows as $flow) {
-            $step_status = 'pending';
-            if ($active_step_type !== null && $flow->step_type === $active_step_type) {
-                $step_status = $active_assign_status;
-            }
-
-            $rows[] = [
-                'application_id'   => $application_id,
-                'service_id'       => $service_id,
-                'step_number'      => $flow->step_number,
-                'step_type'        => $flow->step_type,
-                'department_id'    => $flow->department_id,
-                'hierarchy_level'  => $flow->hierarchy_level,
-                'status'           => $step_status,
-                'action_taken_by'  => null,
-                'action_taken_at'  => null,
-                'remarks'          => null,
-                'created_at'       => $now,
-                'updated_at'       => $now,
+        if (!isset($app_status_to_assignment[$app_status])) {
+            $this->assignment_skipped_rows[] = [
+                'row'        => $app_row['excel_row'] ?? null,
+                'old_id'     => $app_row['old_id'] ?? null,
+                'service_id' => $service_id,
+                'status'     => $app_status,
+                'reason'     => 'status_not_eligible_for_assignment',
             ];
+            return [];
         }
+
+        $flows = collect($this->service_flows_map[$service_id] ?? []);
+        $validation_flow = $flows->firstWhere('step_type', 'validation');
+
+        if (!$validation_flow) {
+            $this->assignment_skipped_rows[] = [
+                'row'        => $app_row['excel_row'] ?? null,
+                'old_id'     => $app_row['old_id'] ?? null,
+                'service_id' => $service_id,
+                'status'     => $app_status,
+                'reason'     => 'validation_flow_not_found_for_service',
+            ];
+            return [];
+        }
+
+        $rows[] = [
+            'application_id'   => $application_id,
+            'service_id'       => $service_id,
+            'step_number'      => $validation_flow->step_number,
+            'step_type'        => $validation_flow->step_type,
+            'department_id'    => $validation_flow->department_id,
+            'hierarchy_level'  => $validation_flow->hierarchy_level,
+            'status'           => $app_status_to_assignment[$app_status],
+            'action_taken_by'  => null,
+            'action_taken_at'  => null,
+            'remarks'          => null,
+            'created_at'       => $now,
+            'updated_at'       => $now,
+        ];
 
         return $rows;
     }
@@ -326,7 +390,7 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
         $app_status_to_history = [
             'saved'         => 'saved',
             'pending'       => 'pending',
-            're_submitted'  => 're_submitted',
+            're_submitted'  => 'approved',
             'extra_payment' => 'extra_payment',
             'send_back'     => 'send_back',
             'under_review'  => 'in_progress',
@@ -368,8 +432,8 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
                     'status_file'            => null,
                     'remarks'                => null,
                     'external_status'        => null,
-                    'external_payment_amount'=> null,
-                    'external_payment_status'=> null,
+                    'external_payment_amount' => null,
+                    'external_payment_status' => null,
                     'external_noc_url'       => null,
                     'external_noc_file'      => null,
                     'source'                 => 'native',
