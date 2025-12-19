@@ -144,46 +144,35 @@ class DashboardController extends Controller
                 })
                 ->values();
 
-            $clarification_required = ApplicationWorkflowHistory::where('department_id', $department_id)
-                ->where('status', 'send_back')
-                ->where('action_taken_by', Auth::id())
-                ->with([
-                    'application' => function ($q) {
-                        $q->select('id', 'applicationId', 'service_id', 'user_id', 'application_date', 'remarks')
-                            ->with([
-                                'service:id,service_title_or_description',
-                                'user:id,authorized_person_name',
-                                'workflow'
-                            ]);
-                    },
-                ])
-                ->get(['id', 'application_id', 'status', 'status_file'])
-                ->map(function ($item) {
+            $clarification_required = UserServiceApplication::with([
+                'latestWorkflow',
+                'workflowHistory' => function ($q) use ($department_id) {
+                    $q->where('status', 'send_back')
+                        ->where('department_id', $department_id)
+                        ->orderByDesc('id');
+                },
+                'service:id,service_title_or_description',
+                'user:id,authorized_person_name',
+            ])
+                ->get()
+                ->filter(function ($app) {
+                    $latest = $app->latestWorkflow ?? $app->workflowHistory->first();
+                    return $latest && $latest->status === 'send_back';
+                })
+                ->map(function ($app) {
+                    $latest_send_back = $app->latestWorkflow && $app->latestWorkflow->status_file
+                        ? $app->latestWorkflow
+                        : $app->workflowHistory->first();
 
-                    $application = $item->application;
-
-                    $workflow   = $application->workflow ?? collect();
-
-                    $latest_send_back_step = $workflow->where('status', 'send_back')
-                        ->where('action_taken_by', Auth::id())
-                        ->sortByDesc('action_taken_at')
-                        ->first();
-
-                    $send_back_date = $latest_send_back_step
-                        ? Carbon::parse($latest_send_back_step->action_taken_at)
-                        : null;
-
-                    $service     = $application ? $application->service : null;
-                    $applicant_name  = $application?->user?->authorized_person_name;
                     return [
-                        'application_id'     => $item->application_id, // application_id saved in history table
-                        'applicationId'      => $item->application->applicationId ?? null,   // applicationId is the application number saved in user service applications table
-                        'status_file'        =>  $item->status_file ? url($item->status_file) : null,
-                        'service_name'              => $service->service_title_or_description ?? null,
-                        'remark'                    => $item->remarks ?? null,
-                        'application_date'          => $application->application_date ?? null,
-                        'clarification_raised_date' => $send_back_date ?? null,
-                        'applicant_name'            => $applicant_name ?? null,
+                        'application_id' => $app->id,  // application_id saved in history table
+                        'applicationId' => $app->applicationId, // applicationId is the application number saved in user service applications table
+                        'status_file' => $latest_send_back?->status_file ? url($latest_send_back->status_file) : null,
+                        'service_name' => $app->service?->service_title_or_description,
+                        'remark' => $latest_send_back?->remarks,
+                        'application_date' => $app->application_date,
+                        'applicant_name' => $app->user?->authorized_person_name,
+                        'clarification_raised_date' => $latest_send_back?->action_taken_at,
                     ];
                 });
 
@@ -395,7 +384,8 @@ class DashboardController extends Controller
                     $q->whereNotNull('NOC_certificate')
                         ->where('status', 'noc_issued');
                 }
-            ])->get(['id', 'service_title_or_description']);
+            ])->having('noc_issued_count', '>', 0)
+            ->get(['id', 'service_title_or_description']);
 
             $noc_issued_per_service = $services_with_noc_count->map(function ($service) {
                 return [
@@ -407,22 +397,28 @@ class DashboardController extends Controller
 
 
             $clarification_required = UserServiceApplication::where('user_id', $request->user_id)
-                ->whereHas('workflowHistory', function ($q) {
+                ->whereHas('latestWorkflow', function ($q) {
                     $q->where('status', 'send_back');
                 })
                 ->with([
+                    'latestWorkflow' => function ($q) {
+                        $q->where('status', 'send_back')
+                            ->orderBy('id', 'desc');
+                    },
+                    'latestWorkflow.department',
                     'workflowHistory' => function ($q) {
                         $q->where('status', 'send_back')
                             ->orderBy('id', 'desc');
                     },
                     'workflowHistory.department',
-                    'service:id,service_title_or_description',
+                    'service:id,service_title_or_description'
                 ])
                 ->get()
                 ->map(function ($app) {
 
-                    $latest_send_back = $app->workflowHistory->first();
-
+                    $latest_send_back = $app->latestWorkflow && $app->latestWorkflow->status_file
+                        ? $app->latestWorkflow
+                        : $app->workflowHistory->first();
                     return [
                         'application_id'    => $app->id,
                         'applicationId'     => $app->applicationId, // applicationId is the application number saved in user service applications table
@@ -432,7 +428,7 @@ class DashboardController extends Controller
                             ? $latest_send_back->department->name
                             : null,
                         'NOC_letter_number' => $app->NOC_letter_number,
-                        'status_file'       => $latest_send_back && $latest_send_back->status_file
+                        'status_file'       => $latest_send_back?->status_file
                             ? url($latest_send_back->status_file)
                             : null,
                         'comments'        => $app->comments,

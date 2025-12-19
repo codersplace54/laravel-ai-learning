@@ -16,7 +16,7 @@ return new class extends Migration
             $table->renameColumn('email', 'email_id')->after('authorized_person_name');
             $table->string('pan')->nullable()->after('email_id');
             $table->string('mobile_no')->after('pan');
-            $table->string('user_name')->unique()->after('mobile_no');
+            $table->string('user_name')->collation('utf8mb4_bin')->unique()->after('mobile_no');
             $table->string('bin')->unique()->nullable()->after('user_name');
             $table->bigInteger('district_id')->nullable()->after('user_name');
             $table->bigInteger('subdivision_id')->nullable()->after('district_id');
