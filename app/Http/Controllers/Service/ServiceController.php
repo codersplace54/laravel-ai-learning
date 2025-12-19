@@ -1112,7 +1112,7 @@ class ServiceController extends Controller
             if ($request->filled('date_from') && $request->filled('date_to')) {
                 $query->whereHas('application', function ($q) use ($request) {
                     $q->whereBetween('application_date', [
-                        $request->from_date,
+                        $request->date_from,
                         $request->date_to
                     ]);
                 });
@@ -1141,7 +1141,7 @@ class ServiceController extends Controller
                     'applicant_mobile' => $assignment->application->user->mobile_no ?? null,
                     'department'       => $assignment->department?->name ?? null,
                     'status'           => $assignment->application->status ?? null,
-                    'current_step'     => $assignment->current_step_number ?? null,
+                    'current_step'     => $assignment->application->current_step_number ?? null,
                     'step_type'        => $assignment->step_type ?? null,
                     'hierarchy_level'  => $hierarchy_level
                 ];

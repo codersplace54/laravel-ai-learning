@@ -153,7 +153,6 @@ class PaymentController extends Controller
             // $form_html .= '<script>document.getElementById("egrasForm").submit();</script>';
             $form_html .= '</body></html>';
             return $form_html;
-
         } catch (\Exception $e) {
 
             DB::rollBack();
@@ -409,11 +408,11 @@ class PaymentController extends Controller
             $user_id = Auth::id();
 
             $service_user_applications = UserServiceApplication::where('user_id', $user_id)
-            ->where('payment_status', $request->payment_status)
-            ->orderByDesc('created_at')
-            ->paginate($request->per_page);
+                ->where('payment_status', $request->payment_status)
+                ->orderByDesc('created_at')
+                ->paginate($request->per_page);
 
-            if ($service_user_applications->total() == 0){
+            if ($service_user_applications->total() == 0) {
                 return response()->json([
                     'status' => 0,
                     'message' => 'No applications found for the given status.',
@@ -433,7 +432,7 @@ class PaymentController extends Controller
                     $payment_type = 'Application Fee Payment';
                 }
 
-                $response_data[] = [ 
+                $response_data[] = [
                     'user_service_application_id' => $application->id,
                     'application_id' => $application->applicationId,
                     'service_title_or_description' => $application->service->service_title_or_description ?? null,
@@ -453,8 +452,10 @@ class PaymentController extends Controller
                 'pagination' => [
                     'current_page' => $service_user_applications->currentPage(),
                     'last_page' => $service_user_applications->lastPage(),
-                    'per_page' => $service_user_applications->perPage(),
+                    'per_page' => $service_user_applications->count(),
                     'total' => $service_user_applications->total(),
+                    'next_page_url' => $service_user_applications->nextPageUrl(),
+                    'prev_page_url' => $service_user_applications->previousPageUrl(),
                 ]
             ]);
         } catch (\Exception $e) {

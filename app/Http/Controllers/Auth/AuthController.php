@@ -70,6 +70,7 @@ class AuthController extends Controller
             $data = $user->only([
                 'id',
                 'authorized_person_name',
+                'name_of_enterprise',
                 'email_id',
                 'user_name',
                 'bin',

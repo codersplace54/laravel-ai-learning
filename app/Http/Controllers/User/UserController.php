@@ -243,9 +243,9 @@ class UserController extends Controller
             if ($request->user_type !== null) {
                 $rules['user_type'] = 'required|in:individual,department,admin';
             }
-            if ($request->pan !== null) {
-                $rules['pan'] = 'nullable|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/';
-            }
+            // if ($request->pan !== null) {
+            //     $rules['pan'] = 'nullable|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/';
+            // }
             if ($request->password !== null) {
                 $rules['password'] = 'nullable|string|min:6';
             }
@@ -296,7 +296,7 @@ class UserController extends Controller
                 'registered_enterprise_city.required' => 'Enterprise city is required.',
                 'user_type.required' => 'User type is required.',
                 'user_type.in' => 'User type must be individual,department or admin.',
-                'pan.regex' => 'The PAN number must be in valid format (e.g., ABCDE1234F).',
+               // 'pan.regex' => 'The PAN number must be in valid format (e.g., ABCDE1234F).',
                 'password.min' => 'Password must be at least 6 characters long.',
                 'district_id.exists'  => 'Selected district is invalid.',
                 'subdivision_id.exists' => 'Selected subdivision is invalid.',
@@ -350,9 +350,9 @@ class UserController extends Controller
             if ($request->ward_id !== null) {
                 $update_data['ward_id'] = $request->ward_id;
             }
-            if ($request->pan !== null) {
-                $update_data['pan'] = $request->pan;
-            }
+            // if ($request->pan !== null) {
+            //     $update_data['pan'] = $request->pan;
+            // }
             if ($request->password !== null) {
                 $update_data['password'] = Hash::make($request->password);
             }
@@ -361,7 +361,16 @@ class UserController extends Controller
 
             if ($user->user_type == "department") {
 
-                $admin = Auth::user();
+                $auth_user = Auth::user();
+                $hierarchy_level = $auth_user->department_user->hierarchy_level ?? null;
+
+                if (!in_array($hierarchy_level, ['state1', 'state2', 'state3']) && $auth_user->user_type != 'admin') {
+                    return response()->json([
+                        'status' => 0,
+                        'message' => 'You are not authorized to update department user locations.',
+                    ], 403);
+                }
+
                 DepartmentUser::where('user_id', $user->id)->delete();
                 $locations = $request->locations ?? [null];
 
@@ -375,7 +384,7 @@ class UserController extends Controller
                             'district_id' => $location['district_id'] ?? null,
                             'hierarchy_level' => $request->hierarchy_level,
                             'is_active' => 1,
-                            'created_by' =>  $admin->email_id,
+                            'created_by' =>  $auth_user->email_id,
                             'inspector' =>  $request->inspector ?? "no"
                         ]);
                     }

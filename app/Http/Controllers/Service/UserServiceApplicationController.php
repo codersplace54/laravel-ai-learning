@@ -167,6 +167,22 @@ class UserServiceApplicationController extends Controller
                 $previous_paid = $fee_data['previous_paid'];
                 $total_fee =  $final_fee;
                 $effective_fee = 0;
+
+                $status = $request->status ?? 'saved';
+                $payment_status = $request->payment_status ?? 'pending';
+                $paid_amount = null;
+
+                if ($status === 'draft') {
+                    $status = 'draft';
+                    $payment_status = 'pending';
+                    $paid_amount = null;
+                }
+                elseif ((float) $total_fee === 0.0) {
+                    $status = 'submitted';
+                    $payment_status = 'paid';
+                    $paid_amount = 0;
+                }
+                if (($user_service_application && $service_data->allow_repeat_application === 'no') || ($user_service_application && $request->status == 'draft')) {
                 if ($user_service_application) {
 
                     $total_fee =  $final_fee;
@@ -226,11 +242,11 @@ class UserServiceApplicationController extends Controller
                         'renewalYear'           => $request->renewalYear,
                         //  'applicationId'         => $application_number,
                         'application_date'      => $request->application_date ?? now(),
-                        'status'                => $request->status ?? 'saved',
+                        'status'                => $status,
                         'application_data'      => $user_service_application->application_data,
                         'applied_fee'           => $request->applied_fee,
                         'approved_fee'          => $request->approved_fee,
-                        'payment_status'        => $request->payment_status ?? 'pending',
+                        'payment_status'        => $payment_status,
                         'remarks'               => $request->remarks,
                         'NOC_application_date'  => $request->NOC_application_date,
                         'NOC_expiry_date'       => $request->NOC_expiry_date,
@@ -254,6 +270,7 @@ class UserServiceApplicationController extends Controller
                         'effective_fee'         => $effective_fee,
                         'current_step_number'   => $approval_flow->step_number ?? null,
                         'max_processing_date'   => $max_processing_date,
+                        'paid_amount'           => $paid_amount,
                     ]);
 
                     ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
@@ -311,11 +328,11 @@ class UserServiceApplicationController extends Controller
                         'renewal'               => $request->renewal,
                         'renewalYear'           => $request->renewalYear,
                         'application_date'      => $request->application_date ?? now(),
-                        'status'                => $request->status ?? 'saved',
+                        'status'                => $status,
                         'application_data'      => json_encode($application_data ?: null),
                         'applied_fee'           => $request->applied_fee,
                         'approved_fee'          => $request->approved_fee,
-                        'payment_status'        => $request->payment_status ?? 'pending',
+                        'payment_status'        => $payment_status,
                         'remarks'               => $request->remarks,
                         'NOC_application_date'  => $request->NOC_application_date,
                         'NOC_expiry_date'       => $request->NOC_expiry_date,
@@ -338,6 +355,7 @@ class UserServiceApplicationController extends Controller
                         'total_fee'             => $total_fee,
                         'current_step_number'   => $approval_flow->step_number,
                         'max_processing_date'   => $max_processing_date,
+                        'paid_amount'           => $paid_amount,
                     ]);
 
                     $application_number = $this->generate_application_number($request->service_id, $user_service_application->id);
@@ -1010,7 +1028,7 @@ class UserServiceApplicationController extends Controller
     {
 
         try {
-            // dd("sdaf");
+
 
             if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
@@ -1018,9 +1036,39 @@ class UserServiceApplicationController extends Controller
 
             $request->validate([
                 'user_id' => 'required|integer|exists:users,id',
+                'per_page'  => 'nullable|integer'
             ]);
 
-            $service_user_application = UserServiceApplication::where('user_id', $request->user_id)->with('my_feedback')->get();
+            $per_page = $request->per_page ?? 10;
+
+            $query = UserServiceApplication::where('user_id', $request->user_id)
+                ->with('my_feedback', 'service.department');
+
+            if ($request->filled('date_from') && $request->filled('date_to')) {
+                $query->whereBetween('application_date', [$request->date_from, $request->date_to]);
+            } elseif ($request->filled('date_from')) {
+                $query->whereDate('application_date', '>=', $request->date_from);
+            } elseif ($request->filled('date_to')) {
+                $query->whereDate('application_date', '<=', $request->date_to);
+            }
+
+            if ($request->filled('service_id')) {
+                $query->where('service_id', $request->service_id);
+            }
+
+            if ($request->filled('department_id')) {
+                $query->whereHas('service', function ($q) use ($request) {
+                    $q->where('department_id', $request->department_id);
+                });
+            }
+
+            if ($request->filled('application_type')) {
+                $query->whereHas('service', function ($q) use ($request) {
+                    $q->where('noc_type', $request->application_type);
+                });
+            }
+
+            $service_user_application = $query->paginate($per_page);
 
             if ($service_user_application->isEmpty()) {
                 return response()->json([
@@ -1060,7 +1108,15 @@ class UserServiceApplicationController extends Controller
             return response()->json([
                 'status' => 1,
                 'message' => 'Service user application fetched successfully.',
-                'data' => $response_data
+                'data' => $response_data,
+                'pagination' => [
+                    'current_page' => $service_user_application->currentPage(),
+                    'per_page'     => $service_user_application->count(),
+                    'total'        => $service_user_application->total(),
+                    'last_page'    => $service_user_application->lastPage(),
+                    'next_page_url' => $service_user_application->nextPageUrl(),
+                    'prev_page_url' => $service_user_application->previousPageUrl(),
+                ]
             ]);
         } catch (\Exception $e) {
 
@@ -1198,6 +1254,7 @@ class UserServiceApplicationController extends Controller
                         'id'              => $history->id,
                         'step_number'     => $history->step_number,
                         'status'          => $history->status,
+                        'step_type'       => $history->step_type,
                         'remarks'         => $history->remarks,
                         'status_file'     => $history->status_file ? asset('storage/' . $history->status_file) : null,
                         'action_taken_at' => $history->action_taken_at,
@@ -1751,8 +1808,8 @@ class UserServiceApplicationController extends Controller
     //             return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
     //         }
 
-    //         $perPage = $request->per_page ?? 10;
-    //         $applications = UserServiceApplication::orderBy('id', 'DESC')->paginate($perPage);
+    //         $per_page = $request->per_page ?? 10;
+    //         $applications = UserServiceApplication::orderBy('id', 'DESC')->paginate($per_page);
 
     //         if ($applications->isEmpty()) {
     //             return response()->json([
@@ -1824,7 +1881,7 @@ class UserServiceApplicationController extends Controller
     //             'pagination' => [
     //                 'current_page' => $applications->currentPage(),
     //                 'last_page' => $applications->lastPage(),
-    //                 'per_page' => $applications->perPage(),
+    //                 'per_page' => $applications->per_page(),
     //                 'total' => $applications->total(),
     //             ]
     //         ]);
@@ -1848,7 +1905,7 @@ class UserServiceApplicationController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $perPage = $request->per_page ?? 10;
+            $per_page = $request->per_page ?? 10;
             $query = UserServiceApplication::with('user')->orderBy('id', 'DESC');
 
             if ($request->search) {
@@ -1923,7 +1980,7 @@ class UserServiceApplicationController extends Controller
                 return Excel::download(new ApplicationsExport($exportData), 'applications.xlsx');
             }
 
-            $applications = $query->paginate($perPage);
+            $applications = $query->paginate($per_page);
 
             if ($applications->isEmpty()) {
                 return response()->json([
