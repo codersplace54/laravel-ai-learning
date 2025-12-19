@@ -198,7 +198,7 @@ class DashboardController extends Controller
                     $q->where('department_id', $department_id);
                 }
             ])
-                ->where('status', 'approved')
+                ->whereIn('status', ['approved', 'noc_issued'])
                 ->whereHas('service', function ($q) use ($department_id) {
                     $q->where('department_id', $department_id);
                 })

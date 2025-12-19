@@ -348,6 +348,7 @@ class ServiceMasterController extends Controller
                 'status' => 1,
                 'message' => 'Service details fetched successfully.',
                 'data' => $service,
+                'department_name' => $service->department->name ?? null,
                 'third_party_parameters' => $third_party_parameters
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
