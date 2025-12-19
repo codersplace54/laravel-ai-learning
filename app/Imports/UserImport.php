@@ -59,6 +59,18 @@ class UserImport
                 continue;
             }
 
+            $pan = $mapped_row['pan'] ?? null;
+            if ($pan === null || trim((string) $pan) === '') {
+                $this->skipped_count++;
+
+                $this->skipped_rows[] = [
+                    'row_index' => $index,
+                    'uid'       => $this->get_field_first_value($user_row, 'uid'),
+                    'mobile_no' => $mapped_row['mobile_no'] ?? $this->get_field_first_value($user_row, 'field_mobile'),
+                    'reason'    => 'pan_missing',
+                ];
+                continue;
+            }
             $mobile_no = $mapped_row['mobile_no'];
 
             if (isset($seen_mobiles[$mobile_no])) {
@@ -90,7 +102,7 @@ class UserImport
         if (!empty($chunk_rows)) {
 
             $inserted = DB::table('users')->insertOrIgnore($chunk_rows);
-            
+
             $this->imported_count += $inserted;
             $this->skipped_count  += (count($chunk_rows) - $inserted);
         }

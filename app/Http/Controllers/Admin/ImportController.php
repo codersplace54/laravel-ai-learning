@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use App\Imports\UserServiceApplicationImport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\UserImport;
+use App\Models\ApplicationWorkflowAssignment;
+use App\Models\ApplicationWorkflowHistory;
 use App\Models\User;
 use App\Models\UserServiceApplication;
 use Illuminate\Container\Attributes\DB;
@@ -23,17 +25,40 @@ class ImportController extends Controller
         $request->validate([
             'excel_file' => 'required|file|mimes:xlsx,xls,csv',
         ]);
+
         // UserServiceApplication::truncate();
+        // ApplicationWorkflowAssignment::truncate();
+        // ApplicationWorkflowHistory::truncate();
+
         $file = $request->file('excel_file');
 
         $import = new UserServiceApplicationImport();
         Excel::import($import, $file);
 
-        $skipped_rows = $import->skipped_rows;
+        $skipped_rows = $import->skipped_rows ?? [];
+        $skipped_count = count($skipped_rows);
+
+        $grouped = collect($skipped_rows)
+            ->groupBy(fn($r) => $r['reason_key'] ?? 'unknown')
+            ->map(fn($items) => [
+                'count' => $items->count(),
+                'rows'  => $items->values()->all(),
+            ])
+            ->toArray();
+
+        $assignment_skipped_rows = $import->assignment_skipped_rows ?? [];
+
+        $assignment_skipped_grouped = collect($assignment_skipped_rows)
+            ->groupBy('reason')
+            ->toArray();
 
         return back()->with([
-            'success'      => 'NOC applications imported successfully.',
-            'skipped_rows' => $skipped_rows,
+            'success'        => 'Import completed successfully.',
+            'skipped_count'  => $skipped_count,
+            'skipped_grouped' => $grouped,
+            'assignment_skipped_rows'    => $assignment_skipped_rows,
+            'assignment_skipped_count'   => count($assignment_skipped_rows),
+            'assignment_skipped_grouped' => $assignment_skipped_grouped,
         ]);
     }
 

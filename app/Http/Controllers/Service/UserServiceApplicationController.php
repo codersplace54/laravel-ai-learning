@@ -48,7 +48,7 @@ class UserServiceApplicationController extends Controller
                 ], 200);
             }
 
-            
+
             if ($request->save_data != 1) {
                 $request->validate([
                     'service_id'            => 'required|integer|exists:service_masters,id',
@@ -107,7 +107,7 @@ class UserServiceApplicationController extends Controller
                     'service_id' => 'required|integer|exists:service_masters,id',
                     'id' => 'nullable|integer|exists:user_service_applications,id',
                 ]);
- 
+
                 $request->merge([
                     'status' => 'draft',
                 ]);
@@ -150,16 +150,16 @@ class UserServiceApplicationController extends Controller
 
                 $max_processing_date = $this->add_working_days($application_date, $target_days);
 
-                if($request->id){
+                if ($request->id) {
                     $user_service_application = UserServiceApplication::where('id', $request->id)->first();
-                }else{
-                    $user_service_application = null ;
+                } else {
+                    $user_service_application = null;
                     // $user_service_application = UserServiceApplication::where('user_id', $user->id)
                     // ->where('service_id', $request->service_id)
                     // ->latest()
                     // ->first();
                 }
-                
+
                 $application_id =  $user_service_application->id ?? null;
                 $fee_data = $this->calculate_final_fee($request->service_id, $request->application_data, $application_id);
                 $final_fee = $fee_data['final_fee'];
@@ -273,17 +273,18 @@ class UserServiceApplicationController extends Controller
                         'paid_amount'           => $paid_amount,
                     ]);
 
-                    ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
-                        ->where('status', 'pending')
-                        ->update([
-                            'status'          => 're_submitted',
-                            'remarks'         => $request->remarks,
-                            'action_taken_by' => $user->id,
-                            'action_taken_at' => now(),
-                        ]);
-
-
                     if ($request->status != 'draft') {
+                        
+                        ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
+                            ->where('status', 'pending')
+                            ->update([
+                                'status'          => 're_submitted',
+                                'remarks'         => $request->remarks,
+                                'action_taken_by' => $user->id,
+                                'action_taken_at' => now(),
+                            ]);
+
+
                         ApplicationWorkflowAssignment::create([
                             'application_id'     => $user_service_application->id,
                             'service_id'         => $request->service_id,

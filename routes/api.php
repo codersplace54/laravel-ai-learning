@@ -46,6 +46,11 @@ Route::prefix('user')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('send-otp', [AuthController::class, 'send_otp']);
     Route::post('verify-otp', [AuthController::class, 'verify_otp']);
+    Route::post('forgot-password-send-otp', [AuthController::class, 'forgot_password_send_otp']);
+    Route::post('forgot-password-verify-otp', [AuthController::class, 'forgot_password_verify_otp']);
+    Route::post('forgot-password-reset', [AuthController::class, 'forgot_password_reset']);
+    Route::post('check-pan-resgistered', [AuthController::class, 'check_pan_registered']);
+
 });
 
 Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function () {

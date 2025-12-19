@@ -34,6 +34,7 @@ class ExistingLicenseController extends Controller
             ]);
 
             $user = Auth::user();
+            $license_file = null;
 
             if ($request->file('license_file')) {
                 $file = $request->license_file;
@@ -127,7 +128,7 @@ class ExistingLicenseController extends Controller
                 'valid_from'     => $request->valid_from,
                 'expiry_date'    => $request->expiry_date,
                 'license_no'     => $request->license_no,
-                'license_file'   => $license_file,
+                'license_file'   => $license_file ?? $license -> license_file,
                 'status'         => $request->status ?? $license->status,
             ]);
 
