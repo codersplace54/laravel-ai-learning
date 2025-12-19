@@ -582,15 +582,19 @@ class ServiceController extends Controller
 
             $current_step = ApplicationWorkflowAssignment::where('application_id', $application->id)
                 ->orderByDesc('id')
-                ->first();
+                ->first(); 
 
             $max_step = ServiceApprovalFlow::where('service_id', $application->service_id)
                 ->max('step_number');
 
             $is_just_before_final_step = false;
+            $is_finally_approved = false;
 
             if ($current_step && $current_step->step_number == $max_step) {
                 $is_just_before_final_step = true;
+                if($current_step->status == 'approved'){
+                    $is_finally_approved = true;
+                }
             }
 
             // $formatted_data = [];
@@ -660,6 +664,7 @@ class ServiceController extends Controller
                     ];
                 }),
                 'just_before_final_step'  => $is_just_before_final_step,
+                'is_finally_approved'  => $is_finally_approved,
                 'history_data'    => $history_data,
             ];
 
