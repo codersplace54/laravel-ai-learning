@@ -380,12 +380,13 @@ class DashboardController extends Controller
             });
 
             $services_with_noc_count = ServiceMaster::withCount([
-                'applications as noc_issued_count' => function ($q) {
-                    $q->whereNotNull('NOC_certificate')
+                'applications as noc_issued_count' => function ($q) use ($user_id) {
+                    $q->where('user_id', $user_id)
+                        ->whereNotNull('NOC_certificate')
                         ->where('status', 'noc_issued');
                 }
             ])->having('noc_issued_count', '>', 0)
-            ->get(['id', 'service_title_or_description']);
+                ->get(['id', 'service_title_or_description']);
 
             $noc_issued_per_service = $services_with_noc_count->map(function ($service) {
                 return [

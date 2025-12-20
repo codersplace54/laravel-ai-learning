@@ -150,6 +150,29 @@ class UserServiceApplicationController extends Controller
 
                 $max_processing_date = $this->add_working_days($application_date, $target_days);
 
+                if ($service_data->allow_repeat_application  === 'no' && !$request->filled('id')) {
+                    $existing = UserServiceApplication::where('user_id', $user->id)
+                        ->where('service_id', $request->service_id)
+                        ->latest()
+                        ->select('id', 'status')
+                        ->first();
+
+                    if ($existing) {
+                        if (in_array($existing->status, ['draft', 're_submitted', 'send_back', 'extra_payment', 'saved'])) {
+                            $request->merge(
+                                [
+                                    'id' => $existing->id
+                                ]
+                            );
+                        } else {
+                            return response()->json([
+                                'status'  => 0,
+                                'message' => 'You have already applied for this service. Repeat application is not allowed.',
+                            ], 409);
+                        }
+                    }
+                }
+
                 if ($request->id) {
                     $user_service_application = UserServiceApplication::where('id', $request->id)->first();
                 } else {
@@ -185,7 +208,8 @@ class UserServiceApplicationController extends Controller
                     $paid_amount = 0;
                     $payment_time = now();
                 }
-             //   if (($user_service_application && $service_data->allow_repeat_application === 'no') || ($user_service_application && $request->status == 'draft')) {
+
+
                 if ($user_service_application) {
 
                     $total_fee =  $final_fee;
