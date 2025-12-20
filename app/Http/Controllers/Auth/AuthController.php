@@ -248,8 +248,8 @@ class AuthController extends Controller
                 ], 200);
             }
 
-            // $otp_code = random_int(100000, 999999);
-            $otp_code = 123456;
+            $otp_code = random_int(100000, 999999);
+            // $otp_code = 123456;
 
             $expires_at = Carbon::now()->addMinutes(10);
 
@@ -273,7 +273,16 @@ class AuthController extends Controller
                 ]);
             }
 
-            $this->send_sms_otp($mobile_no, $otp_code);
+            $otp_code = (string) random_int(100000, 999999);
+
+            $message = "Dear Applicant, your OTP for registration is {$otp_code}. Use this OTP to validate your registration in www.swaagat.tripura.gov.in.";
+
+            $sms_result = $this->send_sms_otp(
+                $mobile_no,
+                $message,
+                config('sms.otp_template_id')
+            );
+
 
             DB::commit();
 
@@ -416,7 +425,16 @@ class AuthController extends Controller
                 ]);
             }
 
-            $this->send_sms_otp($mobile_no, $otp_code);
+            $otp_code = (string) random_int(100000, 999999);
+
+            $message = "Dear Applicant, your OTP for registration is {$otp_code}. Use this OTP to validate your registration in www.swaagat.tripura.gov.in.";
+
+            $sms_result = $this->send_sms_otp(
+                $mobile_no,
+                $message,
+                config('sms.otp_template_id')
+            );
+
 
             DB::commit();
 
@@ -632,8 +650,61 @@ class AuthController extends Controller
     }
 
 
-    protected function send_sms_otp(string $mobile_no, string $otp_code): void
+    protected function send_sms_otp(string $mobile_no, string $message, string $dlt_template_id): array
     {
-        // TODO: Replace with real SMS integration
+        $gateway_url   = config('sms.gateway_url');
+        $user_name     = config('sms.username');
+        $pin           = config('sms.pin');
+        $signature     = config('sms.signature');
+        $dlt_entity_id = config('sms.dlt_entity_id');
+
+        if (! $gateway_url || ! $user_name || ! $pin || ! $signature || ! $dlt_entity_id) {
+            Log::error('sms_config_missing', [
+                'gateway_url'   => $gateway_url,
+                'user_name'     => $user_name,
+                'pin'           => $pin ? '***' : null,
+                'signature'     => $signature,
+                'dlt_entity_id' => $dlt_entity_id,
+            ]);
+
+            return [
+                'status_code' => 500,
+                'response'    => 'SMS configuration is incomplete.',
+            ];
+        }
+
+        $params = http_build_query([
+            'username'        => $user_name,
+            'pin'             => $pin,
+            'message'         => $message,
+            'mnumber'         => $mobile_no,
+            'signature'       => $signature,
+            'dlt_entity_id'   => $dlt_entity_id,
+            'dlt_template_id' => $dlt_template_id,
+        ]);
+
+        $url = $gateway_url . '?' . $params;
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+
+        $response = curl_exec($ch);
+        $error    = curl_error($ch);
+        $status   = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($error) {
+            Log::error('otp_sms_error', ['error' => $error]);
+        }
+
+        return [
+            'status_code' => $status,
+            'response'    => $response,
+        ];
     }
 }

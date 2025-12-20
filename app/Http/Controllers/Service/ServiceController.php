@@ -582,7 +582,7 @@ class ServiceController extends Controller
 
             $current_step = ApplicationWorkflowAssignment::where('application_id', $application->id)
                 ->orderByDesc('id')
-                ->first(); 
+                ->first();
 
             $max_step = ServiceApprovalFlow::where('service_id', $application->service_id)
                 ->max('step_number');
@@ -635,6 +635,7 @@ class ServiceController extends Controller
 
             $response = [
                 'application_id'  => $application->id,
+                'application_number'  => $application->applicationId,
                 'service_id'      => $application->service_id,
                 'service_name'    => $application->service->service_title_or_description,
                 'user' => [

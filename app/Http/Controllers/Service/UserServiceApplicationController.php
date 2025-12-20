@@ -150,6 +150,29 @@ class UserServiceApplicationController extends Controller
 
                 $max_processing_date = $this->add_working_days($application_date, $target_days);
 
+                if ($service_data->allow_repeat_application  === 'no' && !$request->filled('id')) {
+                    $existing = UserServiceApplication::where('user_id', $user->id)
+                        ->where('service_id', $request->service_id)
+                        ->latest()
+                        ->select('id', 'status')
+                        ->first();
+
+                    if ($existing) {
+                        if (in_array($existing->status, ['draft', 're_submitted', 'send_back', 'extra_payment', 'saved'])) {
+                            $request->merge(
+                                [
+                                    'id' => $existing->id
+                                ]
+                            );
+                        } else {
+                            return response()->json([
+                                'status'  => 0,
+                                'message' => 'You have already applied for this service. Repeat application is not allowed.',
+                            ], 409);
+                        }
+                    }
+                }
+
                 if ($request->id) {
                     $user_service_application = UserServiceApplication::where('id', $request->id)->first();
                 } else {
@@ -171,18 +194,22 @@ class UserServiceApplicationController extends Controller
                 $status = $request->status ?? 'saved';
                 $payment_status = $request->payment_status ?? 'pending';
                 $paid_amount = null;
+                $payment_time = null;
 
                 if ($status === 'draft') {
                     $status = 'draft';
                     $payment_status = 'pending';
                     $paid_amount = null;
+                    $payment_time = null;
                 }
                 elseif ((float) $total_fee === 0.0) {
                     $status = 'submitted';
                     $payment_status = 'paid';
                     $paid_amount = 0;
+                    $payment_time = now();
                 }
-                if (($user_service_application && $service_data->allow_repeat_application === 'no') || ($user_service_application && $request->status == 'draft')) {
+
+
                 if ($user_service_application) {
 
                     $total_fee =  $final_fee;
@@ -253,7 +280,7 @@ class UserServiceApplicationController extends Controller
                         'PreviousNOCexpiryDate' => $request->PreviousNOCexpiryDate,
                         'payment_transId'       => $request->payment_transId,
                         'GRN_number'            => $request->GRN_number,
-                        'payment_time'          => $request->payment_time,
+                        'payment_time'          => $payment_time,
                         'extra_payment'         => $request->extra_payment,
                         'comments'              => $request->comments,
                         'NOC_certificate'       => $noc_certificate ?? $user_service_application->NOC_certificate,
@@ -274,7 +301,7 @@ class UserServiceApplicationController extends Controller
                     ]);
 
                     if ($request->status != 'draft') {
-                        
+
                         ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
                             ->where('status', 'pending')
                             ->update([
@@ -340,7 +367,7 @@ class UserServiceApplicationController extends Controller
                         'PreviousNOCexpiryDate' => $request->PreviousNOCexpiryDate,
                         'payment_transId'       => $request->payment_transId,
                         'GRN_number'            => $request->GRN_number,
-                        'payment_time'          => $request->payment_time,
+                        'payment_time'          => $payment_time,
                         'extra_payment'         => $request->extra_payment,
                         'comments'              => $request->comments,
                         'NOC_certificate'       => $noc_certificate,
@@ -1043,7 +1070,8 @@ class UserServiceApplicationController extends Controller
             $per_page = $request->per_page ?? 10;
 
             $query = UserServiceApplication::where('user_id', $request->user_id)
-                ->with('my_feedback', 'service.department');
+                ->with('my_feedback', 'service.department')
+                ->orderBy('application_date', 'desc');
 
             if ($request->filled('date_from') && $request->filled('date_to')) {
                 $query->whereBetween('application_date', [$request->date_from, $request->date_to]);

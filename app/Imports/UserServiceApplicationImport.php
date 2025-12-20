@@ -318,27 +318,16 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
         $now   = Carbon::now();
         $rows  = [];
 
-        if (!isset($app_status_to_assignment[$app_status])) {
+        $flows = $this->service_flows_map[$service_id] ?? [];
+        $first_step_flow = $flows[0] ?? null;
+
+        if (!$first_step_flow) {
             $this->assignment_skipped_rows[] = [
                 'row'        => $app_row['excel_row'] ?? null,
                 'old_id'     => $app_row['old_id'] ?? null,
                 'service_id' => $service_id,
                 'status'     => $app_status,
-                'reason'     => 'status_not_eligible_for_assignment',
-            ];
-            return [];
-        }
-
-        $flows = collect($this->service_flows_map[$service_id] ?? []);
-        $validation_flow = $flows->firstWhere('step_type', 'validation');
-
-        if (!$validation_flow) {
-            $this->assignment_skipped_rows[] = [
-                'row'        => $app_row['excel_row'] ?? null,
-                'old_id'     => $app_row['old_id'] ?? null,
-                'service_id' => $service_id,
-                'status'     => $app_status,
-                'reason'     => 'validation_flow_not_found_for_service',
+                'reason'     => 'no_steps_found_for_service',
             ];
             return [];
         }
@@ -346,10 +335,10 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
         $rows[] = [
             'application_id'   => $application_id,
             'service_id'       => $service_id,
-            'step_number'      => $validation_flow->step_number,
-            'step_type'        => $validation_flow->step_type,
-            'department_id'    => $validation_flow->department_id,
-            'hierarchy_level'  => $validation_flow->hierarchy_level,
+            'step_number'      => $first_step_flow->step_number,
+            'step_type'        => $first_step_flow->step_type,
+            'department_id'    => $first_step_flow->department_id,
+            'hierarchy_level'  => $first_step_flow->hierarchy_level,
             'status'           => $app_status_to_assignment[$app_status],
             'action_taken_by'  => null,
             'action_taken_at'  => null,
@@ -375,17 +364,6 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
             return [];
         }
 
-        $status_to_step_type = [
-            'saved'         => 'validation',
-            'pending'       => 'validation',
-            're_submitted'  => 'validation',
-            'extra_payment' => 'validation',
-            'send_back'     => 'validation',
-            'under_review'  => 'review',
-            'approved'      => 'approval',
-            'rejected'      => 'approval',
-            'noc_issued'    => 'approval',
-        ];
 
         $app_status_to_history = [
             'saved'         => 'saved',
@@ -399,14 +377,14 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
             'noc_issued'    => 'approved',
         ];
 
-        $active_step_type  = $status_to_step_type[$app_status] ?? null;
         $history_status    = $app_status_to_history[$app_status] ?? null;
 
-        if ($active_step_type === null || $history_status === null) {
+        $flows = $this->service_flows_map[$service_id] ?? [];
+        $first_step_flow = $flows[0] ?? null;
+
+        if (!$first_step_flow) {
             return [];
         }
-
-        $flows = $this->service_flows_map[$service_id];
 
         $action_time = null;
         if (in_array($app_status, ['approved', 'rejected', 'noc_issued'], true)) {
@@ -415,35 +393,29 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
             $action_time = $app_row['application_date'] ?? null;
         }
 
-        foreach ($flows as $flow) {
-            if ($flow->step_type === $active_step_type) {
-                $now = Carbon::now();
+        $now = Carbon::now();
 
-                return [[
-                    'application_id'         => $application_id,
-                    'service_id'             => $service_id,
-                    'step_number'            => $flow->step_number,
-                    'step_type'              => $flow->step_type,
-                    'department_id'          => $flow->department_id,
-                    'hierarchy_level'        => $flow->hierarchy_level,
-                    'action_taken_by'        => null,
-                    'action_taken_at'        => $action_time,
-                    'status'                 => $history_status,
-                    'status_file'            => null,
-                    'remarks'                => null,
-                    'external_status'        => null,
-                    'external_payment_amount' => null,
-                    'external_payment_status' => null,
-                    'external_noc_url'       => null,
-                    'external_noc_file'      => null,
-                    'source'                 => 'native',
-                    'created_at'             => $now,
-                    'updated_at'             => $now,
-                ]];
-            }
-        }
-
-        return [];
+        return [[
+            'application_id'         => $application_id,
+            'service_id'             => $service_id,
+            'step_number'            => $first_step_flow->step_number,
+            'step_type'              => $first_step_flow->step_type,
+            'department_id'          => $first_step_flow->department_id,
+            'hierarchy_level'        => $first_step_flow->hierarchy_level,
+            'action_taken_by'        => null,
+            'action_taken_at'        => $action_time,
+            'status'                 => $history_status,
+            'status_file'            => null,
+            'remarks'                => null,
+            'external_status'        => null,
+            'external_payment_amount' => null,
+            'external_payment_status' => null,
+            'external_noc_url'       => null,
+            'external_noc_file'      => null,
+            'source'                 => 'native',
+            'created_at'             => $now,
+            'updated_at'             => $now,
+        ]];
     }
 
     protected function parse_date(?string $value): ?string
