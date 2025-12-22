@@ -592,7 +592,7 @@ class ServiceController extends Controller
 
             if ($current_step && $current_step->step_number == $max_step) {
                 $is_just_before_final_step = true;
-                if($current_step->status == 'approved'){
+                if ($current_step->status == 'approved') {
                     $is_finally_approved = true;
                 }
             }
@@ -1112,10 +1112,8 @@ class ServiceController extends Controller
 
             if ($request->filled('date_from') && $request->filled('date_to')) {
                 $query->whereHas('application', function ($q) use ($request) {
-                    $q->whereBetween('application_date', [
-                        $request->date_from,
-                        $request->date_to
-                    ]);
+                    $q->whereDate('application_date', '>=', $request->date_from)
+                        ->whereDate('application_date', '<=', $request->date_to);
                 });
             } elseif ($request->filled('date_from')) {
                 $query->whereHas('application', function ($q) use ($request) {
@@ -1127,7 +1125,7 @@ class ServiceController extends Controller
                 });
             }
 
-
+            $query->orderByDesc('id');
             $applications = $query->paginate($per_page);
 
             $applications->getCollection()->transform(function ($assignment) use ($hierarchy_level) {
