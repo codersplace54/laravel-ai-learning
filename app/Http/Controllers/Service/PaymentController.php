@@ -258,6 +258,11 @@ class PaymentController extends Controller
                         $status = 'submitted';
                     }
 
+                    if ($application->current_step_number == 0) {
+                        $status = 'approved';
+                    }
+
+
                     UserServiceApplication::where('id', $application->id)->update([
                         'payment_status'   => 'paid',
                         'paid_amount'      => $amount,

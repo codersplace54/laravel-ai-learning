@@ -138,12 +138,15 @@ class UserServiceApplicationController extends Controller
                     ->orderBy('step_number', 'asc')
                     ->first();
 
-                if (!$approval_flow) {
-                    return response()->json([
-                        'status'  => 0,
-                        'message' => 'You cannot submit an application for this particular service; please contact the administrator.'
-                    ], 404);
-                }
+                // if (!$approval_flow) {
+                //     return response()->json([
+                //         'status'  => 0,
+                //         'message' => 'You cannot submit an application for this particular service; please contact the administrator.'
+                //     ], 404);
+                // }
+
+                $has_approval_flow = !is_null($approval_flow);
+
 
                 $application_date = Carbon::parse($request->NOC_application_date ?? now());
                 $target_days = $service_data->target_days ?? 0;
@@ -201,9 +204,13 @@ class UserServiceApplicationController extends Controller
                     $payment_status = 'pending';
                     $paid_amount = null;
                     $payment_time = null;
-                }
-                elseif ((float) $total_fee === 0.0) {
+                } elseif ((float) $total_fee === 0.0 && $has_approval_flow) {
                     $status = 'submitted';
+                    $payment_status = 'paid';
+                    $paid_amount = 0;
+                    $payment_time = now();
+                } elseif ((float) $total_fee === 0.0 && !$has_approval_flow) {
+                    $status = 'approved';
                     $payment_status = 'paid';
                     $paid_amount = 0;
                     $payment_time = now();
@@ -295,12 +302,12 @@ class UserServiceApplicationController extends Controller
                         'final_fee'             => $final_fee,
                         'total_fee'             => $total_fee,
                         'effective_fee'         => $effective_fee,
-                        'current_step_number'   => $approval_flow->step_number ?? null,
-                        'max_processing_date'   => $max_processing_date,
+                        'current_step_number'   => $approval_flow->step_number ?? 0,
+                        'max_processing_date'   => $has_approval_flow ? $max_processing_date : null,
                         'paid_amount'           => $paid_amount,
                     ]);
 
-                    if ($request->status != 'draft') {
+                    if ($request->status != 'draft' && $has_approval_flow) {
 
                         ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
                             ->where('status', 'pending')
@@ -381,17 +388,18 @@ class UserServiceApplicationController extends Controller
                         'NSW_Push_Document_ID'  => $request->NSW_Push_Document_ID,
                         'final_fee'             => $final_fee,
                         'total_fee'             => $total_fee,
-                        'current_step_number'   => $approval_flow->step_number,
-                        'max_processing_date'   => $max_processing_date,
+                        'current_step_number'   => $approval_flow->step_number ?? 0,
+                        'max_processing_date'   => $has_approval_flow ? $max_processing_date : null,
                         'paid_amount'           => $paid_amount,
                     ]);
 
                     $application_number = $this->generate_application_number($request->service_id, $user_service_application->id);
+
                     $user_service_application->update([
                         'applicationId' => $application_number
                     ]);
 
-                    if ($request->status != 'draft') {
+                    if ($request->status != 'draft' && $has_approval_flow) {
                         ApplicationWorkflowAssignment::create([
                             'application_id'     => $user_service_application->id,
                             'service_id'         => $request->service_id,
@@ -420,9 +428,9 @@ class UserServiceApplicationController extends Controller
                             'final_fee' => $final_fee,
                             'extra_payment' => $user_service_application->extra_payment,
                             'total_fee' => $total_fee,
-                            'current_step_number' => $approval_flow->step_number,
-                            'assigned_department_id' => $approval_flow->department_id,
-                            'assigned_hierarchy_level' => $approval_flow->hierarchy_level,
+                            'current_step_number' => $has_approval_flow ? $approval_flow->step_number : null,
+                            'assigned_department_id' => $has_approval_flow ? $approval_flow->department_id : null,
+                            'assigned_hierarchy_level' => $has_approval_flow ? $approval_flow->hierarchy_level : null,
                             'max_processing_date' => $max_processing_date->format('Y-m-d'),
                             'payment_status' => $user_service_application->payment_status,
                         ]
@@ -1556,7 +1564,7 @@ class UserServiceApplicationController extends Controller
             DB::commit();
 
             ApplicationWorkflowHistory::create([
-                'application_id'            =>  $user_service_application->external_application_id,
+                'application_id'            =>  $user_service_application->id,
                 'service_id'                =>  $request->service_id,
                 'external_status'           =>  $user_service_application->external_status,
                 'external_payment_amount'   =>  $request->external_payment_amount,
@@ -1570,8 +1578,8 @@ class UserServiceApplicationController extends Controller
                 'status'  => 1,
                 'message' => 'Redirect to third-party portal.',
                 'data' => [
-                    'applicationId' => $user_service_application->applicationId,
-                    'redirect_url' => $user_service_application->service->redirect_url,
+                    'applicationId' => $user_service_application->applicationId ?? null,
+                    'redirect_url' => $user_service_application->service->redirect_url ?? null,
                     'params'  => [
                         'swaagat_user_id' => $user_service_application->user_id,
                         'bin'             => $user_service_application->user->bin,
@@ -1600,6 +1608,7 @@ class UserServiceApplicationController extends Controller
 
             $service_user_application = UserServiceApplication::where('user_id', $request->user_id)
                 ->where('service_id', $request->service_id)
+                ->orderBy('id', 'desc')
                 ->get();
 
             if ($service_user_application->isEmpty()) {
@@ -2167,6 +2176,7 @@ class UserServiceApplicationController extends Controller
             $current_payment = isset($effective_fee) ? $effective_fee : $total_fee;
             $previous_paid = $application->paid_amount ?? 0;
             $final_paid_amount = $previous_paid + $current_payment;
+            $status = $application->current_step_number == 0 ? 'approved' : 'submitted';
 
             $application->update([
                 'GRN_number'     => $request->GRN_number,
@@ -2174,7 +2184,7 @@ class UserServiceApplicationController extends Controller
                 'payment_status' => 'paid',
                 'payment_time'   => now(),
                 'paid_amount'    => $final_paid_amount,
-                'status'         => "submitted",
+                'status'         => $status,
             ]);
 
             PaymentOrder::create([
@@ -2199,7 +2209,7 @@ class UserServiceApplicationController extends Controller
                     'comments'       => $application->comments,
                     'payment_time'   => $application->payment_time,
                     'paid_amount'    => $application->total_fee,
-                    'status'         => "submitted"
+                    'status'         => $status
                 ]
             ]);
         } catch (\Exception $e) {
