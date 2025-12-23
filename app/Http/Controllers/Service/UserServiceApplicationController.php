@@ -39,15 +39,6 @@ class UserServiceApplicationController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $is_caf_filled = UnitDetail::where('user_id', $user->id)->exists();
-
-            if (!$is_caf_filled) {
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'Please complete your CAF (Common Application Form) details before proceeding.',
-                ], 200);
-            }
-
 
             if ($request->save_data != 1) {
                 $request->validate([
@@ -130,7 +121,17 @@ class UserServiceApplicationController extends Controller
             }
 
             $service_data = ServiceMaster::where('id', $request->service_id)
-                ->first(['noc_name', 'service_mode',  'target_days', 'allow_repeat_application']);
+                ->first(['noc_name', 'service_mode',  'target_days', 'allow_repeat_application','caf_depends']);
+
+            $is_caf_filled = UnitDetail::where('user_id', $user->id)->exists();
+            $service_depends_and_caf_filled = ($service_data->caf_depends === 'yes') ? $is_caf_filled : true;
+
+            if (!$service_depends_and_caf_filled) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Please complete your CAF (Common Application Form) details before proceeding.',
+                ], 200);
+            }
 
             if ($service_data->service_mode === "native") {
 
@@ -204,7 +205,7 @@ class UserServiceApplicationController extends Controller
                     $payment_status = 'pending';
                     $paid_amount = null;
                     $payment_time = null;
-                } elseif ((float) $total_fee === 0.0 && $has_approval_flow) {
+                } elseif ((float) $total_fee === 0.0) {
                     $status = 'submitted';
                     $payment_status = 'paid';
                     $paid_amount = 0;

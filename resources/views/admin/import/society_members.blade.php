@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Import Users (JSON)</title>
+    <title>Patch Cooperative Society Member Details (Excel)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
@@ -14,7 +14,7 @@
 
     <div class="container py-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3 mb-0">Import Users (JSON)</h1>
+            <h1 class="h3 mb-0">Patch Cooperative Society Member Details (Excel)</h1>
             <a href="{{ url()->previous() }}" class="btn btn-outline-secondary btn-sm">
                 ← Back
             </a>
@@ -28,11 +28,10 @@
             @if (session('skipped_count', 0) > 0)
                 @php
                     $reason_labels = [
-                        'missing_required_fields' => 'Missing required fields',
-                        'pan_missing' => 'PAN missing',
-                        'duplicate_mobile_in_json' => 'Duplicate mobile in JSON',
-                        'invalid_object' => 'Invalid object / row format',
-                        'insert_or_ignore_skipped_due_to_db_unique' => 'Skipped due to DB unique constraint',
+                        'missing_nid_or_uid_target_id' => 'Missing NID / UID Target ID',
+                        'user_not_found_for_uid_target_id' => 'User not found for UID Target ID',
+                        'empty_member_payload_after_mapping' => 'Member data empty after mapping',
+                        'service_not_found_for_fixed_noc_master_id' => 'Service not mapped for fixed noc master',
                         'unknown' => 'Unknown',
                     ];
 
@@ -45,12 +44,12 @@
                         <span class="badge bg-dark">Total: {{ session('skipped_count') }}</span>
                     </div>
 
-                    <div class="accordion mt-3" id="skippedUsersAccordion">
+                    <div class="accordion mt-3" id="skippedAccordion">
                         @foreach ($grouped as $reason_key => $group)
                             @php
                                 $title = $reason_labels[$reason_key] ?? $reason_key;
-                                $collapse_id = 'u_collapse_' . preg_replace('/[^a-zA-Z0-9_]/', '_', $reason_key);
-                                $heading_id = 'u_heading_' . preg_replace('/[^a-zA-Z0-9_]/', '_', $reason_key);
+                                $collapse_id = 'collapse_' . md5($reason_key);
+                                $heading_id = 'heading_' . md5($reason_key);
                             @endphp
 
                             <div class="accordion-item">
@@ -64,36 +63,25 @@
                                 </h2>
 
                                 <div id="{{ $collapse_id }}" class="accordion-collapse collapse"
-                                    aria-labelledby="{{ $heading_id }}" data-bs-parent="#skippedUsersAccordion">
-
+                                    aria-labelledby="{{ $heading_id }}" data-bs-parent="#skippedAccordion">
                                     <div class="accordion-body">
                                         <ul class="mb-0">
                                             @foreach ($group['rows'] as $row)
                                                 <li class="mb-1">
-                                                    Row Index: <strong>{{ $row['row_index'] ?? 'N/A' }}</strong>,
-                                                    UID: {{ $row['uid'] ?? 'N/A' }},
-                                                    Mobile: {{ $row['mobile_no'] ?? 'N/A' }},
+                                                    Row: <strong>{{ $row['row'] ?? 'N/A' }}</strong>,
+                                                    NID: {{ $row['nid'] ?? 'N/A' }},
+                                                    UID Target ID: {{ $row['uid_target_id'] ?? 'N/A' }},
                                                     Reason: {{ $row['reason'] ?? 'N/A' }}
-
-                                                    @if (!empty($row['missing_fields']) && is_array($row['missing_fields']))
-                                                        , Missing: <code>{{ implode(', ', $row['missing_fields']) }}</code>
-                                                    @endif
-
-                                                    @if (!empty($row['count']))
-                                                        , Count: <strong>{{ $row['count'] }}</strong>
-                                                    @endif
                                                 </li>
                                             @endforeach
                                         </ul>
                                     </div>
-
                                 </div>
                             </div>
                         @endforeach
                     </div>
                 </div>
             @endif
-            
         @endif
 
         @if (session('error'))
@@ -104,32 +92,22 @@
 
         <div class="card shadow-sm">
             <div class="card-body">
-                <form action="{{ route('admin.import.users') }}" method="POST" enctype="multipart/form-data">
+                <form action="{{ route('admin.import.society_members') }}" method="POST" enctype="multipart/form-data">
                     @csrf
 
                     <div class="mb-3">
-                        <label for="json_file" class="form-label">Upload JSON File</label>
-                        <input type="file" name="json_file" id="json_file" class="form-control">
+                        <label for="excel_files" class="form-label">Upload Member Excel Files</label>
+                        <input type="file" name="excel_files[]" id="excel_files" class="form-control" multiple>
                         <small class="text-muted">
-                            Allowed: <code>.json</code> or <code>.txt</code>.
-                            If both file and text are provided, file will be used.
+                            Allowed: <code>.xlsx</code>, <code>.xls</code>, <code>.csv</code>. You can select multiple files.
                         </small>
-                        @error('json_file')
-                            <div class="text-danger small mt-1">{{ $message }}</div>
-                        @enderror
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="json_text" class="form-label">Or Paste JSON Here</label>
-                        <textarea name="json_text" id="json_text" rows="10"
-                            class="form-control">{{ old('json_text') }}</textarea>
-                        @error('json_text')
+                        @error('excel_files.*')
                             <div class="text-danger small mt-1">{{ $message }}</div>
                         @enderror
                     </div>
 
                     <button type="submit" class="btn btn-primary">
-                        Import Users
+                        Patch Member Details
                     </button>
                 </form>
             </div>

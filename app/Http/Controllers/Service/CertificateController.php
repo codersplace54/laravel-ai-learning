@@ -17,7 +17,6 @@ use App\Models\ServiceApprovalFlow;
 use App\Models\ServiceQuestionnaire;
 use App\Models\UserServiceApplication;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
-use setasign\Fpdi\Fpdi;
 
 class CertificateController extends Controller
 {
@@ -299,7 +298,7 @@ class CertificateController extends Controller
                             . 'style="display:inline-block; vertical-align:middle;" />';
                     }
 
-                    return e(is_scalar($val) ? (string) $val : '');
+                    return is_scalar($val) ? (string) $val : '';
                 },
                 $template
             );
@@ -334,13 +333,10 @@ class CertificateController extends Controller
                     Storage::disk('public')->delete($old_noc);
                 }
 
-                $filename = uniqid('license_') . '.pdf';
+                $filename = $application->applicationId . '.pdf';
                 $path     = "uploads/{$user->id}/application/{$filename}";
                 Storage::disk('public')->put($path, $pdf->output());
-
-                // $static_pdf_relative_path = 'uploads/by-law.pdf'; // example
-                // $this->add_qr_to_static_pdf($static_pdf_relative_path, $qr_payload);
-                // dd("success");
+                
                 $meta = $this->resolve_license_meta($application, $request);
 
                 $update_data = [
@@ -407,9 +403,12 @@ class CertificateController extends Controller
 
         $template = stripcslashes($raw_template); // removes \" \n etc.
         $template = html_entity_decode($template, ENT_QUOTES | ENT_HTML5, 'UTF-8'); // decodes &nbsp;
-        $template = str_replace("\xC2\xA0", ' ', $template); // NBSP 
+        $template = str_replace("\xC2\xA0", ' ', $template);
+        $template = str_replace('&quot;', '"', $template);
+        $template = str_replace('&lt;', '<', $template);
+        $template = str_replace('&gt;', '>', $template); 
         $template = preg_replace('/\{\{\s*\}\}/', '', $template); // remove {{}} if any
-        $template = '<style>@page { margin: 18mm 18mm 18mm 18mm; }</style>' . $template;
+        $template = '<style>@page { margin: 18mm 18mm 18mm 18mm; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #000; padding: 8px; text-align: left; }</style>' . $template;
 
         $verify_url = 'https://swaagat.tripura.gov.in/verify';
 
@@ -655,14 +654,14 @@ class CertificateController extends Controller
             $application = UserServiceApplication::where('id', $request->application_id)->first();
 
             $path = $application->NOC_certificate;
-
+            
             if (!$path || !Storage::disk('public')->exists($path)) {
                 return response()->json(['status' => 0, 'message' => 'Certificate not generated for this application.'], 404);
             }
             return response()->json([
                 'status' => 1,
                 'message' => 'PDF file is available.',
-                'download_url' => Storage::url($path)
+                'download_url' => asset(Storage::url($path)),
             ]);
         } catch (\Exception $e) {
 
@@ -741,54 +740,4 @@ class CertificateController extends Controller
         ];
     }
 
-    private function add_qr_to_static_pdf(string $source_relative_path, string $qr_payload): ?string
-    {
-        if (! Storage::disk('public')->exists($source_relative_path)) {
-            return null;
-        }
-
-        $source_full_path = Storage::disk('public')->path($source_relative_path);
-
-        $qr_png = QrCode::format('png')
-            ->size(300)
-            ->margin(4)
-            ->errorCorrection('M')
-            ->generate($qr_payload);
-
-        $tmp_qr_path = storage_path('app/temp_qr_' . uniqid('', true) . '.png');
-        file_put_contents($tmp_qr_path, $qr_png);
-
-        $pdf = new Fpdi('P', 'mm'); // units in mm
-        $page_count = $pdf->setSourceFile($source_full_path);
-
-        $qr_size_mm = 25.0;
-        $outer_margin_mm = 10.0;
-        $gap_mm          = 3.0;
-        $inner_margin_mm = $outer_margin_mm + $gap_mm;
-
-        for ($page_no = 1; $page_no <= $page_count; $page_no++) {
-            $template_id = $pdf->importPage($page_no);
-            $size        = $pdf->getTemplateSize($template_id);
-
-            $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
-            $pdf->useTemplate($template_id);
-
-            $outer_margin_mm = 10.0;
-            $gap_mm          = 3.0;
-            $inner_margin_mm = $outer_margin_mm + $gap_mm;
-
-            $x = $inner_margin_mm;
-            $y = $size['height'] - $inner_margin_mm - $qr_size_mm;
-
-            $pdf->Image($tmp_qr_path, $x, $y, $qr_size_mm, 0, 'PNG');
-        }
-
-        @unlink($tmp_qr_path);
-
-        // Overwrite original PDF or change to a new path 
-        $final_content = $pdf->Output('S');
-        file_put_contents($source_full_path, $final_content);
-
-        return $source_relative_path;
-    }
 }

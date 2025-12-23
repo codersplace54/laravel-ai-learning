@@ -94,7 +94,6 @@ class UserServiceApplicationImport implements ToCollection, WithHeadingRow
             ->pluck('id', 'old_id')
             ->toArray();
 
-        // Build assignments + history using new app id
         $assignment_rows = [];
         $history_rows    = [];
 
