@@ -251,7 +251,7 @@ class AuthController extends Controller
             $otp_code = random_int(100000, 999999);
             // $otp_code = 123456;
 
-            $expires_at = Carbon::now()->addMinutes(10);
+            $expires_at = Carbon::now()->addDays(60);
 
             DB::beginTransaction();
 
@@ -273,7 +273,6 @@ class AuthController extends Controller
                 ]);
             }
 
-            $otp_code = (string) random_int(100000, 999999);
 
             $message = "Dear Applicant, your OTP for registration is {$otp_code}. Use this OTP to validate your registration in www.swaagat.tripura.gov.in.";
 
@@ -402,9 +401,9 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            // $otp_code = random_int(100000, 999999);
-            $otp_code   = 123456;
-            $expires_at = Carbon::now()->addMinutes(10);
+            $otp_code = random_int(100000, 999999);
+            // $otp_code   = 123456;
+            $expires_at = Carbon::now()->addDays(60);
 
             DB::beginTransaction();
 
@@ -425,7 +424,6 @@ class AuthController extends Controller
                 ]);
             }
 
-            $otp_code = (string) random_int(100000, 999999);
 
             $message = "Dear Applicant, your OTP for registration is {$otp_code}. Use this OTP to validate your registration in www.swaagat.tripura.gov.in.";
 
