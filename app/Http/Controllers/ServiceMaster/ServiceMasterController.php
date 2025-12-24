@@ -413,7 +413,8 @@ class ServiceMasterController extends Controller
                     'updated_by',
                     'status',
                     'verification_token',
-                    'is_special'
+                    'is_special',
+                    'caf_depends'
                 ])
                 ->when($department_id, function ($query) use ($department_id) {
                     $query->where('department_id', $department_id);
@@ -426,6 +427,7 @@ class ServiceMasterController extends Controller
 
 
             $services = $services->map(function ($service) use ($user, $is_caf_filled) {
+                $service_depends_and_caf_filled =($service->caf_depends === 'yes') ? $is_caf_filled: true;
 
                 $data = [
                     'id' => $service->id,
@@ -444,7 +446,7 @@ class ServiceMasterController extends Controller
                     'status' => $service->status,
                     'is_special' => $service->is_special,
                     'verification_token' => $service->verification_token,
-                    'is_caf_filled' => $is_caf_filled,
+                    'is_caf_filled' => $service_depends_and_caf_filled,
 
                 ];
 

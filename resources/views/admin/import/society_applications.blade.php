@@ -170,12 +170,12 @@
                     @csrf
 
                     <div class="mb-3">
-                        <label for="excel_file" class="form-label">Upload Excel File</label>
-                        <input type="file" name="excel_file" id="excel_file" class="form-control">
+                        <label for="excel_files" class="form-label">Upload Excel Files</label>
+                        <input type="file" name="excel_files[]" id="excel_files" class="form-control" multiple>
                         <small class="text-muted">
-                            Allowed: <code>.xlsx</code>, <code>.xls</code>, <code>.csv</code>
+                            Allowed: <code>.xlsx</code>, <code>.xls</code>, <code>.csv</code>. You can select multiple files.
                         </small>
-                        @error('excel_file')
+                        @error('excel_files.*')
                             <div class="text-danger small mt-1">{{ $message }}</div>
                         @enderror
                     </div>

@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ServiceApplicationExport;
 use App\Services\ApplicationDataFormatter;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use setasign\Fpdi\Fpdi;
 
 class ServiceController extends Controller
 {
@@ -667,6 +669,7 @@ class ServiceController extends Controller
                 'just_before_final_step'  => $is_just_before_final_step,
                 'is_finally_approved'  => $is_finally_approved,
                 'history_data'    => $history_data,
+                'is_certificate_generated'    => $application->NOC_certificate ? true : false,
             ];
 
             return response()->json([
@@ -770,6 +773,8 @@ class ServiceController extends Controller
                         'status'       => 'approved',
                         'updated_at' => now(),
                     ]);
+
+                    $this->add_qr_to_by_law_file($application);
 
                     return response()->json([
                         'status' => 1,
@@ -1251,6 +1256,86 @@ class ServiceController extends Controller
                 'message' => 'Failed to generate Excel file',
                 'error'   => $e->getMessage(),
             ], 500);
+        }
+    }
+
+    private function add_qr_to_by_law_file($application): ?string
+    {
+        $application_data = json_decode($application->application_data, true);
+
+        $certificate_url = rtrim(config('app.url'), '/') ."/storage/uploads/{$application->user->id}/application/{$application->applicationId}";
+
+        $qr_payload = "Certificate Link: {$certificate_url}";
+
+        // for cooperative society only
+        if ($application->service_id == "2") {
+
+            if (!empty($application_data['278'])) {
+                $by_law_file = $application_data['278'];
+                
+            }else{
+                return null;
+            }
+        }
+
+        if (! Storage::disk('public')->exists($by_law_file)) {
+            return null;
+        }
+
+        $source_full_path = Storage::disk('public')->path($by_law_file);
+
+        try {
+            $qr_png = QrCode::format('png')
+                ->size(300)
+                ->margin(4)
+                ->errorCorrection('M')
+                ->generate($qr_payload);
+
+            $tmp_qr_path = storage_path('app/temp_qr_' . uniqid('', true) . '.png');
+
+            $temp_dir = dirname($tmp_qr_path);
+            if (!is_dir($temp_dir)) {
+                mkdir($temp_dir, 0755, true);
+            }
+
+            file_put_contents($tmp_qr_path, $qr_png);
+
+            $pdf = new Fpdi('P', 'mm'); 
+            $page_count = $pdf->setSourceFile($source_full_path);
+
+            $qr_size_mm = 25.0;
+            $outer_margin_mm = 10.0;
+            $gap_mm          = 3.0;
+            $inner_margin_mm = $outer_margin_mm + $gap_mm;
+
+            for ($page_no = 1; $page_no <= $page_count; $page_no++) {
+                $template_id = $pdf->importPage($page_no);
+                $size        = $pdf->getTemplateSize($template_id);
+
+                $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
+                $pdf->useTemplate($template_id);
+
+                $outer_margin_mm = 10.0;
+                $gap_mm          = 3.0;
+                $inner_margin_mm = $outer_margin_mm + $gap_mm;
+
+                $x = $inner_margin_mm;
+                $y = $size['height'] - $inner_margin_mm - $qr_size_mm;
+
+                $pdf->Image($tmp_qr_path, $x, $y, $qr_size_mm, 0, 'PNG');
+            }
+
+            @unlink($tmp_qr_path);
+
+            $final_content = $pdf->Output('S');
+            file_put_contents($source_full_path, $final_content);
+
+            return $by_law_file;
+        } catch (\Exception $e) {
+            if (isset($tmp_qr_path) && file_exists($tmp_qr_path)) {
+                @unlink($tmp_qr_path);
+            }
+            return null;
         }
     }
 }

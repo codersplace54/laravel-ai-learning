@@ -18,6 +18,8 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
     protected array $service_id_map = [];
     protected array $user_id_map = [];
     protected array $service_flows_map = [];
+    protected string $member_section_key = 'Member Details';
+    protected int $fixed_noc_master_id = 2;
 
     protected array $excel_question_id_map = [
         'title'                 => 187, // Name of proposed society
@@ -35,7 +37,7 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
         'prescribed_by_laws'        => 278, // Prescribed By-laws (Please use normal PDF, in Portrait, leave some space in the footer area)
         'promoter_voter_card'       => 284, // Voter Identity Card/ Aadhar Card for proof of identity of the promoter members
         'special_form_1'            => 271, // Co-operative Special Form No -1
-        'special_form_7'            => 0,
+        'special_form_7'            => 273,
         'three_years_project_report' => 280, // 3 (three) years project report, i.e scheme which would be related with objects of the concerned Proposed Society
         'other_documents'           => 285, // Other Documents
 
@@ -56,13 +58,16 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
 
     ];
 
-    protected int $fixed_noc_master_id = 2;
-
     public function __construct()
     {
         DB::disableQueryLog();
 
-        $this->service_id_map = ServiceMaster::pluck('id', 'old_id')->toArray();
+        $this->service_id_map = ServiceMaster::query()
+            ->whereNotNull('old_id')
+            ->where('old_id', '!=', '')
+            ->pluck('id', 'old_id')
+            ->toArray();
+
         $this->user_id_map    = User::pluck('id', 'old_id')->toArray();
 
         $flows = DB::table('service_approval_flows')
@@ -154,7 +159,6 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
 
             $app_status = $application['status'] ?? null;
 
-            // keep your old rule (same as you had)
             if (in_array($app_status, ['draft', 'noc_issued', 'approved', 'rejected'], true)) {
                 $this->assignment_skipped_rows[] = [
                     'row'        => $application['excel_row'] ?? null,
@@ -189,7 +193,7 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
         $noc_details_id = $row['nid'] ?? null;
 
         $noc_master_id = $this->fixed_noc_master_id;
-        $old_user_id = $row['old_user_id'] ?? null;
+        $old_user_id = $row['user_id'] ?? null;
 
         $application_id = $row['application_id'] ?? null;
         $app_date_raw   = $row['application_date'] ?? null;
@@ -199,19 +203,43 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
         $payment_status_raw     = strtolower((string) ($row['paymentstatus'] ?? ''));
         $application_status_raw = (string) ($row['application_status'] ?? '');
 
-        if (empty($noc_details_id) || empty($noc_master_id) || empty($old_user_id) || empty($application_id)) {
+        if (empty($noc_details_id)) {
             $this->skipped_rows[] = [
                 'row'           => $excel_row_number,
-                'old_id'        => $noc_details_id,
+                'old_id'        => null,
                 'noc_master_id' => $noc_master_id,
                 'old_user_id'   => $old_user_id,
-                'reason_key'    => 'missing_required_fields',
-                'reason'        => 'Missing required fields',
+                'reason_key'    => 'missing_noc_details_id',
+                'reason'        => 'Missing NOC details ID',
             ];
             return null;
         }
 
-        $service_id = $this->service_id_map[$noc_master_id] ?? null;
+        if (empty($old_user_id)) {
+            $this->skipped_rows[] = [
+                'row'           => $excel_row_number,
+                'old_id'        => $noc_details_id,
+                'noc_master_id' => $noc_master_id,
+                'old_user_id'   => null,
+                'reason_key'    => 'missing_old_user_id',
+                'reason'        => 'Missing old user ID',
+            ];
+            return null;
+        }
+
+        // if (empty($application_id)) {
+        //     $this->skipped_rows[] = [
+        //         'row'           => $excel_row_number,
+        //         'old_id'        => $noc_details_id,
+        //         'noc_master_id' => $noc_master_id,
+        //         'old_user_id'   => $old_user_id,
+        //         'reason_key'    => 'missing_application_id',
+        //         'reason'        => 'Missing application ID',
+        //     ];
+        //     return null;
+        // }
+
+        $service_id = 2;
         if ($service_id === null) {
             $this->skipped_rows[] = [
                 'row'           => $excel_row_number,
@@ -225,6 +253,7 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
         }
 
         $user_id = $this->user_id_map[$old_user_id] ?? null;
+
         if ($user_id === null) {
             $this->skipped_rows[] = [
                 'row'           => $excel_row_number,
@@ -237,17 +266,17 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
             return null;
         }
 
-        if (empty($application_status_raw)) {
-            $this->skipped_rows[] = [
-                'row'           => $excel_row_number,
-                'old_id'        => $noc_details_id,
-                'noc_master_id' => $noc_master_id,
-                'old_user_id'   => $old_user_id,
-                'reason_key'    => 'missing_status',
-                'reason'        => 'Application status is missing',
-            ];
-            return null;
-        }
+        // if (empty($application_status_raw)) {
+        //     $this->skipped_rows[] = [
+        //         'row'           => $excel_row_number,
+        //         'old_id'        => $noc_details_id,
+        //         'noc_master_id' => $noc_master_id,
+        //         'old_user_id'   => $old_user_id,
+        //         'reason_key'    => 'missing_status',
+        //         'reason'        => 'Application status is missing',
+        //     ];
+        //     return null;
+        // }
 
         $status_key = strtolower(str_replace([' ', '-'], '_', $application_status_raw));
 
@@ -263,25 +292,27 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
             'extra_payment_raised'          => 'extra_payment',
             'extra_payment_paid'            => 're_submitted',
             'forward_to_approval_authority' => 'under_review',
+            'send_back'                     => 'send_back',
+            'noc_issued'                    => 'noc_issued',
+            'under_review'                  => 'under_review',
         ];
 
         $status = $status_map[$status_key] ?? null;
 
-        if ($status === null) {
-            $this->skipped_rows[] = [
-                'row'           => $excel_row_number,
-                'old_id'        => $noc_details_id,
-                'noc_master_id' => $noc_master_id,
-                'old_user_id'   => $old_user_id,
-                'reason_key'    => 'status_not_mapped',
-                'reason'        => 'Status not mapped',
-                'raw_status'    => $application_status_raw,
-            ];
-            return null;
-        }
+        // if ($status === null) {
+        //     $this->skipped_rows[] = [
+        //         'row'           => $excel_row_number,
+        //         'old_id'        => $noc_details_id,
+        //         'noc_master_id' => $noc_master_id,
+        //         'old_user_id'   => $user_id,
+        //         'reason_key'    => 'status_not_mapped',
+        //         'reason'        => 'Status not mapped',
+        //         'raw_status'    => $application_status_raw,
+        //     ];
+        //     return null;
+        // }
 
-        // payment status
-        $payment_status = 'pending';
+        $payment_status = 'paid';
         if (!empty($payment_status_raw)) {
             $payment_map = [
                 'unpaid' => 'pending',
@@ -290,12 +321,18 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
             $payment_status = $payment_map[$payment_status_raw] ?? 'pending';
         }
 
-        $application_date = $this->parse_datetime($app_date_raw);
-
         $created_at = $this->parse_datetime($created_at_raw) ?: now();
+        $application_date = $this->parse_datetime($app_date_raw) ?? $created_at;
+
         $updated_at = $created_at;
 
-        $application_data = $this->build_application_data($row);
+        $application_data = $this->build_application_data($row, $user_id);
+
+        $member_ids = $this->parse_member_node_ids($row['member_node_ids'] ?? null);
+
+        if (!empty($member_ids)) {
+            $application_data[$this->member_section_key] = $member_ids;
+        }
 
         return [
             'excel_row' => $excel_row_number,
@@ -328,7 +365,7 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
     }
 
 
-    private function build_application_data($row): array
+    private function build_application_data($row, $user_id): array
     {
         $application_data = [];
 
@@ -353,14 +390,22 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
             // remove wrapping quotes if excel cell had "...."
             $excel_answer = trim($excel_answer, " \t\n\r\0\x0B\"");
 
-            // MULTI-LINE => array of urls
+            // array of urls
             if (preg_match("/\r\n|\n|\r/", $excel_answer)) {
 
                 $urls = preg_split("/\r\n|\n|\r/", $excel_answer);
 
-                $urls = array_values(array_filter(array_map(function ($u) {
+                $urls = array_values(array_filter(array_map(function ($u) use ($user_id) {
                     $u = trim((string) $u, " \t\n\r\0\x0B\"");
-                    return $u === '' ? null : $u;
+                    if ($u === '') {
+                        return null;
+                    }
+
+                    if (str_starts_with($u, 'https://swaagatbackend.tripura.gov.in/')) {
+                        return $this->normalizeFilePath($u, $user_id);
+                    }
+
+                    return $u;
                 }, $urls)));
 
                 if (!empty($urls)) {
@@ -369,11 +414,20 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
 
                 continue;
             }
-
+            if (str_starts_with($excel_answer, 'https://swaagatbackend.tripura.gov.in/')) {
+                $excel_answer = $this->normalizeFilePath($excel_answer, $user_id);
+            }
             $application_data[(string) $question_id] = $excel_answer;
         }
 
         return $application_data;
+    }
+
+    private function normalizeFilePath(string $url, int $user_id): string
+    {
+        $filename = basename($url);
+
+        return "uploads/{$user_id}/applications/{$filename}";
     }
 
     protected function build_assignments_for_application(array $app_row): array
@@ -490,16 +544,70 @@ class CooperativeSocietyApplicationImport implements ToCollection, WithHeadingRo
         ]];
     }
 
-    protected function parse_datetime(?string $value): ?string
+    protected function parse_datetime($value): ?string
     {
         if ($value === null || $value === '') {
             return null;
         }
 
         try {
+            if (is_numeric($value)) {
+                return Carbon::instance(
+                    \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($value)
+                )->format('Y-m-d H:i:s');
+            }
+
+            $value = trim((string) $value);
+
+            // "01-07-2025 11.24"
+            if (preg_match('/^\d{2}-\d{2}-\d{4}\s+\d{1,2}\.\d{2}$/', $value)) {
+                return Carbon::createFromFormat('d-m-Y H.i', $value)
+                    ->format('Y-m-d H:i:s');
+            }
+
+            // "02-07-2025"
+            if (preg_match('/^\d{2}-\d{2}-\d{4}$/', $value)) {
+                return Carbon::createFromFormat('d-m-Y', $value)
+                    ->startOfDay()
+                    ->format('Y-m-d H:i:s');
+            }
+
             return Carbon::parse($value)->format('Y-m-d H:i:s');
         } catch (\Throwable $e) {
             return null;
         }
+    }
+
+
+    private function parse_member_node_ids($value): array
+    {
+        if ($value === null) {
+            return [];
+        }
+
+        $value = is_string($value) ? trim($value) : trim((string) $value);
+
+        if ($value === '') {
+            return [];
+        }
+
+        $tokens = preg_split('/[,\|\r\n\s]+/', $value);
+
+        $ids = array_values(array_filter(array_map(function ($v) {
+            $v = trim((string) $v);
+            return ctype_digit($v) ? (int) $v : null;
+        }, $tokens)));
+
+        $seen = [];
+        $final = [];
+
+        foreach ($ids as $id) {
+            if (!isset($seen[$id])) {
+                $seen[$id] = true;
+                $final[] = $id;
+            }
+        }
+
+        return $final;
     }
 }

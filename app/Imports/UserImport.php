@@ -31,10 +31,9 @@ class UserImport
         $chunk_size   = 1000;
 
         foreach ($users_array as $index => $user_row) {
+
             if (!is_array($user_row)) {
-
                 $this->skipped_count++;
-
                 $this->skipped_rows[] = [
                     'row_index' => $index,
                     'uid'       => null,
@@ -44,39 +43,28 @@ class UserImport
                 continue;
             }
 
-            $mapped_row = $this->map_user_row_to_db($user_row);
+            $mapped_row = $this->map_user_row_to_db($user_row, $index);
 
             if ($mapped_row === null) {
-
-                $this->skipped_count++;
-
-                $this->skipped_rows[] = [
-                    'row_index' => $index,
-                    'uid'       => $this->get_field_first_value($user_row, 'uid'),
-                    'mobile_no' => $this->get_field_first_value($user_row, 'field_mobile'),
-                    'reason'    => 'missing_required_fields',
-                ];
+                // map_user_row_to_db already pushed exact skip reason(s)
                 continue;
             }
 
-            $pan = $mapped_row['pan'] ?? null;
-            if ($pan === null || trim((string) $pan) === '') {
-                $this->skipped_count++;
+            $mobile_no = $mapped_row['mobile_no'] ?? null;
 
+            if (!$mobile_no) {
+                $this->skipped_count++;
                 $this->skipped_rows[] = [
                     'row_index' => $index,
                     'uid'       => $this->get_field_first_value($user_row, 'uid'),
-                    'mobile_no' => $mapped_row['mobile_no'] ?? $this->get_field_first_value($user_row, 'field_mobile'),
-                    'reason'    => 'pan_missing',
+                    'mobile_no' => null,
+                    'reason'    => 'mobile_missing_after_mapping',
                 ];
                 continue;
             }
-            $mobile_no = $mapped_row['mobile_no'];
 
             if (isset($seen_mobiles[$mobile_no])) {
-
                 $this->skipped_count++;
-
                 $this->skipped_rows[] = [
                     'row_index' => $index,
                     'uid'       => $this->get_field_first_value($user_row, 'uid'),
@@ -90,56 +78,129 @@ class UserImport
             $chunk_rows[] = $mapped_row;
 
             if (count($chunk_rows) >= $chunk_size) {
-
-                $inserted = DB::table('users')->insertOrIgnore($chunk_rows);
-
-                $this->imported_count += $inserted;
-                $this->skipped_count  += (count($chunk_rows) - $inserted);
+                $this->flush_chunk($chunk_rows, $index);
                 $chunk_rows = [];
             }
         }
 
         if (!empty($chunk_rows)) {
-
-            $inserted = DB::table('users')->insertOrIgnore($chunk_rows);
-
-            $this->imported_count += $inserted;
-            $this->skipped_count  += (count($chunk_rows) - $inserted);
+            $this->flush_chunk($chunk_rows, null);
         }
     }
 
-    protected function map_user_row_to_db(array $user_row): ?array
+    protected function flush_chunk(array $chunk_rows, ?int $index): void
     {
-        $old_id                  = $this->get_field_first_value($user_row, 'uid');
-        $name_of_enterprise      = $this->get_field_first_value($user_row, 'field_name_of_industrial');
-        $authorized_person_name  = $this->get_field_first_value($user_row, 'field_user_full_name');
-        $email_id                = $this->get_field_first_value($user_row, 'mail');
-        $mobile_no               = $this->get_field_first_value($user_row, 'field_mobile');
-        $user_name               = $this->get_field_first_value($user_row, 'name');
+        if (empty($chunk_rows)) {
+            return;
+        }
 
-        if (
-            empty($name_of_enterprise) ||
-            empty($authorized_person_name) ||
-            empty($email_id) ||
-            empty($mobile_no) ||
-            empty($user_name)
-        ) {
+        $inserted = DB::table('users')->insertOrIgnore($chunk_rows);
+
+        $this->imported_count += (int) $inserted;
+
+        $skipped_in_db = count($chunk_rows) - (int) $inserted;
+        if ($skipped_in_db > 0) {
+            // DB skip can happen due to unique indexes (mobile/email/old_id etc.)
+            $this->skipped_count += $skipped_in_db;
+
+            $this->skipped_rows[] = [
+                'row_index' => $index,
+                'uid'       => null,
+                'mobile_no' => null,
+                'reason'    => 'insert_or_ignore_skipped_due_to_db_unique',
+                'count'     => $skipped_in_db,
+            ];
+        }
+    }
+
+    protected function map_user_row_to_db(array $user_row, int $row_index): ?array
+    {
+        $role_key = strtolower((string) $this->get_field_first_value($user_row, 'roles'));
+        $role_key = trim($role_key);
+
+        if ($role_key !== 'industrial') {
+            $this->skipped_rows[] = [
+                'row'        => $row_index,
+                'old_id'     => $this->get_field_first_value($user_row, 'uid'),
+                'role'       => $role_key ?: null,
+                'reason_key' => 'role_not_industrial',
+                'reason'     => 'Skipped because role is not industrial',
+            ];
             return null;
         }
 
-        $pan                           = $this->get_field_first_value($user_row, 'field_pan');
+        $old_id                 = $this->get_field_first_value($user_row, 'uid');
+        $name_of_enterprise     = $this->get_field_first_value($user_row, 'field_name_of_industrial');
+        $authorized_person_name = $this->get_field_first_value($user_row, 'field_user_full_name');
+        $email_id               = $this->get_field_first_value($user_row, 'mail');
+        $mobile_no              = $this->get_field_first_value($user_row, 'field_mobile');
+        $user_name              = $this->get_field_first_value($user_row, 'name');
+        $user_type              = "industrial";
+
+        $missing_fields = [];
+
+        if (empty($email_id)) {
+            $this->skipped_count++;
+            $this->skipped_rows[] = [
+                'row_index' => $row_index,
+                'uid'       => $old_id,
+                'mobile_no' => $mobile_no,
+                'reason'    => 'email_missing',
+            ];
+            return null;
+        }
+        if (empty($mobile_no)) {
+            $this->skipped_count++;
+            $this->skipped_rows[] = [
+                'row_index' => $row_index,
+                'uid'       => $old_id,
+                'mobile_no' => $mobile_no,
+                'reason'    => 'mobile_missing',
+            ];
+            return null;
+        }
+
+        if (empty($user_name)) {
+            $this->skipped_count++;
+            $this->skipped_rows[] = [
+                'row_index' => $row_index,
+                'uid'       => $old_id,
+                'mobile_no' => $mobile_no,
+                'reason'    => 'username_missing',
+            ];
+            return null;
+        }
+
+        if (!empty($missing_fields)) {
+            $this->skipped_count++;
+            $this->skipped_rows[] = [
+                'row_index'      => $row_index,
+                'uid'            => $old_id,
+                'mobile_no'      => $mobile_no,
+                'reason'         => 'missing_required_fields',
+                'missing_fields' => $missing_fields,
+            ];
+            return null;
+        }
+
+        $pan = $this->get_field_first_value($user_row, 'field_pan');
+
+        if (($pan === null || trim((string) $pan) === '') && $user_type !== "industrial") {
+
+            $this->skipped_count++;
+            $this->skipped_rows[] = [
+                'row_index' => $row_index,
+                'uid'       => $old_id,
+                'mobile_no' => $mobile_no,
+                'reason'    => 'pan_missing',
+            ];
+            return null;
+        }
+
         $bin                           = $this->get_field_first_value($user_row, 'field_unique_identification');
         $registered_enterprise_address = $this->get_field_first_value($user_row, 'field_company_address_usr');
         $registered_enterprise_city    = $this->get_field_first_value($user_row, 'field_company_city');
         $business_activity             = $this->get_field_first_value($user_row, 'field_company_activity');
-        $role_key                      = $this->get_field_first_value($user_row, 'roles');
-
-        $user_type = 'individual';
-        if ($role_key === 'department') {
-            $user_type = 'department';
-        } elseif ($role_key === 'admin') {
-            $user_type = 'admin';
-        }
 
         $status_value       = $this->get_field_first_value($user_row, 'status');
         $status             = 'active';
@@ -215,5 +276,17 @@ class UserImport
         } catch (\Exception $e) {
             return null;
         }
+    }
+
+    public function skipped_grouped(): array
+    {
+        $grouped = [];
+
+        foreach ($this->skipped_rows as $row) {
+            $reason = $row['reason'] ?? 'unknown';
+            $grouped[$reason][] = $row;
+        }
+
+        return $grouped;
     }
 }

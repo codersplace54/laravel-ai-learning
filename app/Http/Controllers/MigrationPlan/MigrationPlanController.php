@@ -23,7 +23,7 @@ class MigrationPlanController extends Controller
                 return [
                     'id'                   => $plan->id,
                     'service_name'         => $plan->service_name,
-                    'unavailability_from'  => $plan->unavailability_from ? $plan->unavailability_from->format('d-M-Y') : null,
+                    'unavailability_from'  => $plan->unavailability_from ? $plan->unavailability_from->format('d-M-Y h:i A') : null,
                 ];
             })
             ->values();
@@ -36,7 +36,7 @@ class MigrationPlanController extends Controller
                 return [
                     'id'                => $plan->id,
                     'service_name'      => $plan->service_name,
-                    'availability_from' => $plan->availability_from ? $plan->availability_from->format('d-M-Y') : null,
+                    'availability_from' => $plan->availability_from ? $plan->availability_from->format('d-M-Y h:i A') : null,
                     'hyperlink'         => $plan->hyperlink,
                 ];
             })
