@@ -10,11 +10,9 @@ class ApplicationDataFormatter
     public function build_application_view_data(UserServiceApplication $application): array
     {
         $raw = $application->application_data;
-
         $application_data = is_array($raw) ? $raw : (json_decode($raw, true) ?: []);
 
-
-        if (empty($application_data) || ! is_array($application_data)) {
+        if (empty($application_data) || !is_array($application_data)) {
             return [];
         }
 
@@ -32,7 +30,6 @@ class ApplicationDataFormatter
         $section_items = [];
 
         foreach ($application_data as $key => $value) {
-
             if (is_numeric($key)) {
                 $question_id = (int) $key;
                 $question    = $questions->get($question_id);
@@ -50,14 +47,14 @@ class ApplicationDataFormatter
             }
         }
 
-        usort($single_items, function ($a, $b) {
-            return $a['order'] <=> $b['order'];
-        });
+        usort($single_items, fn($a, $b) => $a['order'] <=> $b['order']);
 
-        $formatted_data = [];
+        $formatted_data = [
+            'fields' => []
+        ];
 
         foreach ($single_items as $item) {
-            $formatted_data[] = $item['data'];
+            $formatted_data['fields'][] = $item['data'];
         }
 
         foreach ($section_items as $section_name => $rows) {
@@ -66,6 +63,7 @@ class ApplicationDataFormatter
 
         return $formatted_data;
     }
+
 
     public function collect_question_ids(array $data): array
     {

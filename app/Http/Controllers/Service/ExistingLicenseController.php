@@ -25,7 +25,7 @@ class ExistingLicenseController extends Controller
             $request->validate([
                 'service_id'    => 'nullable|integer|exists:service_masters,id',
                 'licensee_name' => 'required|string|max:255',
-                'application_no'=> 'nullable|string|max:255',
+                'application_no' => 'nullable|string|max:255',
                 'valid_from'    => 'nullable|date',
                 'expiry_date'   => 'nullable|date|after_or_equal:valid_from',
                 'license_no'    => 'required|string|max:255|unique:existing_licenses,license_no',
@@ -41,7 +41,7 @@ class ExistingLicenseController extends Controller
                 $filename = uniqid() . '.' . $file->getClientOriginalExtension();
                 $license_file = $file->storeAs("uploads/{$user->id}/existing_license", $filename, 'public');
             }
-            
+
             $license = ExistingLicense::create([
                 'user_id'        => $user->id,
                 'service_id'     => $request->service_id,
@@ -61,7 +61,6 @@ class ExistingLicenseController extends Controller
                 'message' => 'Existing license created successfully.',
                 'data'    => $license,
             ], 201);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
 
 
@@ -71,7 +70,6 @@ class ExistingLicenseController extends Controller
                 'message' => 'Validation failed.',
                 'errors'  => $e->errors(),
             ], 422);
-
         } catch (Exception $e) {
 
 
@@ -94,16 +92,16 @@ class ExistingLicenseController extends Controller
                 'id'            => 'required|integer|exists:existing_licenses,id',
                 'service_id'    => 'nullable|integer|exists:service_masters,id',
                 'licensee_name' => 'required|string|max:255',
-                'application_no'=> 'nullable|string|max:255',
+                'application_no' => 'nullable|string|max:255',
                 'valid_from'    => 'nullable|date',
                 'expiry_date'   => 'nullable|date|after_or_equal:valid_from',
                 'license_no'    => 'required|string|max:255|unique:existing_licenses,license_no,' . $request->id,
-                'status'        => 'nullable|in:pending,approved,rejected', 
+                'status'        => 'nullable|in:pending,approved,rejected',
                 'license_file'  => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
             ]);
 
             $user   = Auth::user();
-            $license = ExistingLicense::where('id',$request->id)->where('user_id',Auth::id())->first();
+            $license = ExistingLicense::where('id', $request->id)->where('user_id', Auth::id())->first();
 
             if (!$license) {
                 return response()->json([
@@ -113,7 +111,7 @@ class ExistingLicenseController extends Controller
             }
 
             if ($request->file('license_file')) {
-                if($license->license_file){
+                if ($license->license_file) {
                     Storage::disk('public')->delete($license->license_file);
                 }
                 $file = $request->license_file;
@@ -128,7 +126,7 @@ class ExistingLicenseController extends Controller
                 'valid_from'     => $request->valid_from,
                 'expiry_date'    => $request->expiry_date,
                 'license_no'     => $request->license_no,
-                'license_file'   => $license_file ?? $license -> license_file,
+                'license_file'   => $license_file ?? $license->license_file,
                 'status'         => $request->status ?? $license->status,
             ]);
 
@@ -139,7 +137,6 @@ class ExistingLicenseController extends Controller
                 'message' => 'Existing license updated successfully.',
                 'data'    => $license,
             ]);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
 
 
@@ -166,25 +163,39 @@ class ExistingLicenseController extends Controller
         try {
             $user_type = User::where('id', Auth::id())->value('user_type');
 
-            if($user_type === 'admin'){
-                $licenses = ExistingLicense::latest()->get();
-            }else{
-                $licenses = ExistingLicense::where('user_id',Auth::id())->latest()->get();
+            if ($user_type === 'admin') {
+                $licenses = ExistingLicense::with([
+                    'service:id,department_id,service_title_or_description',
+                    'service.department:id,name'
+                ])->latest()->get();
+            } else {
+                $licenses = ExistingLicense::where('user_id', Auth::id())->with([
+                    'service:id,department_id,service_title_or_description',
+                    'service.department:id,name'
+                ])->latest()->get();
             }
 
-            $licenses->transform(function ($license) {
-            if (!empty($license->license_file)) {
-                $license->license_file = Storage::disk('public')->url($license->license_file);
-            }
-
-            return $license;
-        });
+            $licenses = $licenses->map(function ($license) {
+                return [
+                    'id' => $license->id,
+                    'user_id' => $license->user_id,
+                    'application_no' => $license->application_no,
+                    'license_no' => $license->license_no,
+                    'valid_from' => $license->valid_from,
+                    'expiry_date' => $license->expiry_date,
+                    'status' => $license->status,
+                    'license_file' => $license->license_file
+                        ? Storage::disk('public')->url($license->license_file)
+                        : null,
+                    'service_name' => $license->service?->service_title_or_description,
+                    'department_name' => $license->service?->department?->name,
+                ];
+            });
 
             return response()->json([
                 'status' => 1,
                 'data'   => $licenses,
             ]);
-
         } catch (Exception $e) {
 
             return response()->json([
@@ -204,10 +215,10 @@ class ExistingLicenseController extends Controller
 
             $user_type = User::where('id', Auth::id())->value('user_type');
 
-            if($user_type === 'admin'){
-                $license = ExistingLicense::where('id',$request->id)->first();
-            }else{
-                $license = ExistingLicense::where('id',$request->id)->where('user_id',Auth::id())->first();
+            if ($user_type === 'admin') {
+                $license = ExistingLicense::where('id', $request->id)->first();
+            } else {
+                $license = ExistingLicense::where('id', $request->id)->where('user_id', Auth::id())->first();
 
                 if (!$license) {
                     return response()->json([
@@ -250,7 +261,7 @@ class ExistingLicenseController extends Controller
                 'id' => 'required|integer|exists:existing_licenses,id',
             ]);
 
-            $license = ExistingLicense::where('id',$request->id)->where('user_id',Auth::id())->first();
+            $license = ExistingLicense::where('id', $request->id)->where('user_id', Auth::id())->first();
 
             if (!$license) {
                 return response()->json([
@@ -300,16 +311,15 @@ class ExistingLicenseController extends Controller
 
             $admin   = Auth::user();
 
-            if($admin->user_type !== 'admin'){
+            if ($admin->user_type !== 'admin') {
 
-                 response()->json([
-                    'status' => 0, 
+                response()->json([
+                    'status' => 0,
                     'message' => 'Only admins can perform this action.'
                 ], 403);
-
             }
-            
-            $license = ExistingLicense::where('id',$request->id)->first();
+
+            $license = ExistingLicense::where('id', $request->id)->first();
 
             $license->update([
                 'status'          => $request->status,
@@ -358,7 +368,7 @@ class ExistingLicenseController extends Controller
 
             $services = ServiceMaster::where('department_id', $request->department_id)
                 ->where('status', 1)
-                ->select('id','service_title_or_description')
+                ->select('id', 'service_title_or_description')
                 ->get();
 
             return response()->json([
@@ -376,6 +386,4 @@ class ExistingLicenseController extends Controller
             ], 500);
         }
     }
-
-
 }
