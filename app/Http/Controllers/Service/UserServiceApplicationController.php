@@ -649,6 +649,19 @@ class UserServiceApplicationController extends Controller
                 $effective_fee = 0;
             }
 
+              $status = $request->status ?? 'saved';
+                $payment_status = $request->payment_status ?? 'pending';
+                $paid_amount = null;
+                $payment_time = null;
+
+            if ((float) $total_fee === 0.0) {
+                $status = 'submitted';
+                $payment_status = 'paid';
+                $paid_amount = 0;
+                $payment_time = now();
+            }
+
+
             $user_service_application->update([
                 'user_id'               => $user->id,
                 'service_id'            => $request->service_id,
@@ -657,18 +670,18 @@ class UserServiceApplicationController extends Controller
                 'renewalYear'           => $request->renewalYear,
                 // 'applicationId'         => $request->applicationId,
                 'application_date'      => $request->application_date ?? now(),
-                'status'                => $request->status ?? 'saved',
+                'status'                => $status,
                 'application_data'      => $encoded_application_data,
                 'applied_fee'           => $request->applied_fee,
                 'approved_fee'          => $request->approved_fee,
-                'payment_status'        => $request->payment_status ?? 'pending',
+                'payment_status'        => $payment_status,
                 'remarks'               => $request->remarks,
                 'NOC_application_date'  => $request->NOC_application_date,
                 'NOC_expiry_date'       => $request->NOC_expiry_date,
                 'PreviousNOCexpiryDate' => $request->PreviousNOCexpiryDate,
                 'payment_transId'       => $request->payment_transId,
                 'GRN_number'            => $request->GRN_number,
-                'payment_time'          => $request->payment_time,
+                'payment_time'          => $payment_time,
                 'extra_payment'         => $request->extra_payment,
                 'comments'              => $request->comments,
                 'NOC_certificate'       => $noc_certificate,
@@ -684,7 +697,8 @@ class UserServiceApplicationController extends Controller
                 'total_fee'             => $total_fee,
                 'effective_fee'         => $effective_fee,
                 'current_step_number'   => $approval_flow->step_number,
-                'max_processing_date'   => $max_processing_date
+                'max_processing_date'   => $max_processing_date,
+                'paid_amount'           => $paid_amount,
             ]);
 
             ApplicationWorkflowAssignment::create([
