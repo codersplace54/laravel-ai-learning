@@ -205,7 +205,7 @@ class UserServiceApplicationController extends Controller
                     $payment_status = 'pending';
                     $paid_amount = null;
                     $payment_time = null;
-                } elseif ((float) $total_fee === 0.0) {
+                } elseif ((float) $total_fee === 0.0 && $has_approval_flow) {
                     $status = 'submitted';
                     $payment_status = 'paid';
                     $paid_amount = 0;
