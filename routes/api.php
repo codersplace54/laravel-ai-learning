@@ -111,6 +111,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
     Route::prefix('admin')->group(function () {
 
+        Route::post('login-by-admin', [AuthController::class, 'login_by_admin']);
+
         Route::prefix('incentive')->group(function () {
 
             Route::post('proforma-store', [ProformaController::class, 'proforma_store']);

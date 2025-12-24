@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 use Exception;
 use App\Models\JWTToken;
 use App\Models\Otp;
@@ -706,5 +707,86 @@ class AuthController extends Controller
             'status_code' => $status,
             'response'    => $response,
         ];
+    }
+
+    public function login_by_admin(Request $request)
+    {
+
+        try {
+
+            $request->validate([
+                'user_id' => 'required|integer|exists:users,id',
+            ]);
+
+            $admin = Auth::user();
+
+            if ($admin->user_type !== 'admin') {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Unauthorized'
+                ], 403);
+            }
+
+            $user = User::find($request->user_id);
+
+            if ($user->status == 'blocked') {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'This user is inactive.'
+                ], 403);
+            }
+
+            $token = JWTAuth::fromUser($user);
+
+            JWTToken::create([
+                'user_id' => $user->id,
+                'token' => $token,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->header('User-Agent'),
+                'expires_at' => now()->addMinutes(JWTAuth::factory()->getTTL()),
+                'last_activity_at' => now(),
+            ]);
+
+            $data = $user->only([
+                'id',
+                'authorized_person_name',
+                'name_of_enterprise',
+                'email_id',
+                'user_name',
+                'bin',
+                'user_type',
+            ]);
+
+            $data['district'] = $user->district->district_name ?? null;
+            $data['subdivision'] = $user->district->sub_division ?? null;
+            $data['ulb'] = $user->district->ulb_name ?? null;
+            $data['ward'] = $user->district->name_of_gp_vc_or_ward ?? null;
+
+            if ($user->user_type === 'department') {
+                $department_user = $user->department_user()->with('department')->first();
+                if ($department_user && $department_user->department) {
+                    $data['department_id'] = $department_user->department->id;
+                    $data['department_name'] = $department_user->department->name;
+                    $data['designation'] = $department_user->designation;
+                    $data['hierarchy'] = $department_user->hierarchy_level;
+                }
+            }
+
+            return response()->json([
+                'status' => 1,
+                'token' => $token,
+                'token_type' => 'bearer',
+                'expires_in' => JWTAuth::factory()->getTTL() * 60,
+                'data' => $data
+            ]);
+        } catch (Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to login as user',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
