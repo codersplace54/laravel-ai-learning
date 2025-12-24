@@ -620,6 +620,10 @@ class ServiceController extends Controller
                 ->orderByDesc('id')
                 ->first();
 
+            $step_files = ApplicationWorkflowHistory::where('application_id', $application->id)
+                ->orderByDesc('id')
+                ->get();
+
             if ($history_data) {
                 $history_data = [
                     'id'             => $history_data->id,
@@ -654,7 +658,13 @@ class ServiceController extends Controller
                 'extra_payment'        => $application->extra_payment ?? 0,
                 'total_fee'         => $application->total_fee ?? 0,
                 'payment_status'   => $application->payment_status,
-                'workflow' => $application->workflow->map(function ($flow) {
+                'workflow' => $application->workflow->map(function ($flow) use ($step_files) {
+
+                    $history = $step_files->first(function ($h) use ($flow) {
+                        return $h->step_number == $flow->step_number
+                            && $h->status === $flow->status;
+                    });
+
                     return [
                         'step_number'     => $flow->step_number,
                         'step_type'       => $flow->step_type,
@@ -664,6 +674,9 @@ class ServiceController extends Controller
                         'action_taken_at' => $flow->action_taken_at,
                         'hierarchy_level'     => $flow->hierarchy_level,
                         'remarks'         => $flow->remarks,
+                        'status_file'     => $history && $history->status_file
+                            ? asset('storage/' . $history->status_file)
+                            : null,
                     ];
                 }),
                 'just_before_final_step'  => $is_just_before_final_step,
