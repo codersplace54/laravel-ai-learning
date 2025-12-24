@@ -1276,20 +1276,16 @@ class ServiceController extends Controller
     {
         $application_data = json_decode($application->application_data, true);
 
-        $certificate_url = rtrim(config('app.url'), '/') ."/storage/uploads/{$application->user->id}/application/{$application->applicationId}";
+        $certificate_url = rtrim(config('app.url'), '/') . "/storage/uploads/{$application->user->id}/application/{$application->applicationId}.pdf";
 
         $qr_payload = "Certificate Link: {$certificate_url}";
 
         // for cooperative society only
-        if ($application->service_id == "2") {
-
-            if (!empty($application_data['278'])) {
-                $by_law_file = $application_data['278'];
-                
-            }else{
-                return null;
-            }
+        if ($application->service_id !== "2" || empty($application_data['278'])) {
+            return null;
         }
+
+        $by_law_file = $application_data['278'];
 
         if (! Storage::disk('public')->exists($by_law_file)) {
             return null;
@@ -1313,7 +1309,7 @@ class ServiceController extends Controller
 
             file_put_contents($tmp_qr_path, $qr_png);
 
-            $pdf = new Fpdi('P', 'mm'); 
+            $pdf = new Fpdi('P', 'mm');
             $page_count = $pdf->setSourceFile($source_full_path);
 
             $qr_size_mm = 25.0;
