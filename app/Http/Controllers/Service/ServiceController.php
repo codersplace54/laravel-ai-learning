@@ -20,6 +20,7 @@ use App\Exports\ServiceApplicationExport;
 use App\Services\ApplicationDataFormatter;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use setasign\Fpdi\Fpdi;
+use App\Services\SmsService;
 
 class ServiceController extends Controller
 {
@@ -774,6 +775,13 @@ class ServiceController extends Controller
                 'remarks'         => $request->remarks,
             ]);
 
+            $department_name = null;
+
+            if ($current_step->department_id) {
+                $department_name = Department::where('id', $current_step->department_id)
+                    ->value('name');
+            }
+
             $next_step = null;
 
             if ($request->status === 'approved') {
@@ -788,6 +796,19 @@ class ServiceController extends Controller
                     ]);
 
                     $this->add_qr_to_by_law_file($application);
+
+                    if ($application->status === 'approved') {
+                        $sms = SmsService::buildSmsMessage('application_approved', [
+                            'APP_NO' => $application->applicationId,
+                            'DEPT_NAME' => $department_name ?? 'the department',
+                        ]);
+
+                        SmsService::send(
+                            $user->mobile_no,
+                            $sms['message'],
+                            $sms['template_id']
+                        );
+                    }
 
                     return response()->json([
                         'status' => 1,

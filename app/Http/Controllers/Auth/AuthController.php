@@ -93,13 +93,14 @@ class AuthController extends Controller
                 'email_id',
                 'user_name',
                 'bin',
+                'pan',
                 'user_type',
             ]);
 
-            $data['district'] = $user->district->district_name ?? null;
-            $data['subdivision'] = $user->district->sub_division ?? null;
-            $data['ulb'] = $user->district->ulb_name ?? null;
-            $data['ward'] = $user->district->name_of_gp_vc_or_ward ?? null;
+            $data['district']    = $user->district_id ? $user->district?->district_name : null;
+            $data['subdivision'] = $user->subdivision_id ? $user->subdivision?->sub_division : null;
+            $data['ulb']         = $user->ulb_id ? $user->ulb?->ulb_name : null;
+            $data['ward']        = $user->ward_id ? $user->ward?->name_of_gp_vc_or_ward : null;
 
             if ($user->user_type === 'department') {
                 $department_user = $user->department_user()->with('department')->first();

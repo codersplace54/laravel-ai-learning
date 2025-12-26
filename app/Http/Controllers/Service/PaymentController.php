@@ -16,6 +16,7 @@ use App\Models\PaymentOrder;
 use App\Models\UserServiceApplication;
 use App\Models\User;
 use App\Models\ApplicationWorkflowHistory;
+use App\Services\SmsService;
 
 class PaymentController extends Controller
 {
@@ -272,6 +273,19 @@ class PaymentController extends Controller
                         'payment_time'     => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime),
                         'updated_at'       => now(),
                     ]);
+
+                    $user = User::find($application->user_id);
+
+                    $sms = SmsService::buildSmsMessage('application_payment', [
+                        'AMOUNT' => $application->paid_amount,
+                        'GRN' => $application->GRN_number,
+                    ]);
+
+                    SmsService::send(
+                        $user->mobile_no,
+                        $sms['message'],
+                        $sms['template_id']
+                    );
                 }
             }
 
