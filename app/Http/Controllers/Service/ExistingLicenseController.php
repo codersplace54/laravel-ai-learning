@@ -183,12 +183,13 @@ class ExistingLicenseController extends Controller
                     'license_no' => $license->license_no,
                     'valid_from' => $license->valid_from,
                     'expiry_date' => $license->expiry_date,
+                    'licensee_name' => $license->licensee_name,
                     'status' => $license->status,
                     'license_file' => $license->license_file
                         ? Storage::disk('public')->url($license->license_file)
                         : null,
-                    'service_name' => $license->service?->service_title_or_description,
-                    'department_name' => $license->service?->department?->name,
+                    'service_id' => $license->service_id,
+                    'department_id' => $license->service?->department_id,
                 ];
             });
 

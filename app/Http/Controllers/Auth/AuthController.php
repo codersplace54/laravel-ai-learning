@@ -245,13 +245,16 @@ class AuthController extends Controller
 
             if ($user && $user->is_mobile_verified) {
                 return response()->json([
-                    'status'  => 1,
-                    'message' => 'Mobile number is already taken and verified.',
+                    'status'  => 0,
+                    'message' => 'Mobile number is already taken.',
                 ], 200);
             }
 
-            $otp_code = random_int(100000, 999999);
-            // $otp_code = 123456;
+            if (app()->environment('production')) {
+                $otp_code = random_int(100000, 999999);
+            } else {
+                $otp_code = 123456;
+            }
 
             $expires_at = Carbon::now()->addDays(60);
 
@@ -381,18 +384,35 @@ class AuthController extends Controller
     {
         try {
             $request->validate([
-                'pan_no'    => 'required|string|max:15',
+                'phone_or_pan' => 'required|string|max:15',
+            ], [
+                'phone_or_pan.required' => 'PAN number or mobile number is required.',
+                'phone_or_pan.string' => 'PAN number or mobile number must be a string.',
+                'phone_or_pan.max' => 'PAN number or mobile number cannot exceed 15 characters.',
             ]);
 
-            $pan_no    = strtoupper(trim($request->pan_no));
+            $phone_or_pan = trim($request->phone_or_pan);
 
-            $user = User::where('pan', $pan_no)->first();
-
-            if (! $user) {
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'No account is registered with this PAN number.',
-                ], 404);
+            if (preg_match('/[A-Za-z]/', $phone_or_pan)) {
+                
+                $pan_no = strtoupper($phone_or_pan);
+                $user = User::where('pan', $pan_no)->first();
+                
+                if (! $user) {
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'No account is registered with this PAN number.',
+                    ], 404);
+                }
+            } else {
+                $user = User::where('mobile_no', $phone_or_pan)->first();
+                
+                if (! $user) {
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'No account is registered with this mobile number.',
+                    ], 404);
+                }
             }
 
             $mobile_no = $user->mobile_no;
@@ -403,8 +423,12 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            $otp_code = random_int(100000, 999999);
-            // $otp_code   = 123456;
+            if (app()->environment('production')) {
+                $otp_code = random_int(100000, 999999);
+            } else {
+                $otp_code = 123456;
+            }
+
             $expires_at = Carbon::now()->addDays(60);
 
             DB::beginTransaction();
@@ -426,7 +450,6 @@ class AuthController extends Controller
                 ]);
             }
 
-
             $message = "Dear Applicant, your OTP for registration is {$otp_code}. Use this OTP to validate your registration in www.swaagat.tripura.gov.in.";
 
             $sms_result = $this->send_sms_otp(
@@ -434,7 +457,6 @@ class AuthController extends Controller
                 $message,
                 config('sms.otp_template_id')
             );
-
 
             DB::commit();
 
@@ -468,20 +490,41 @@ class AuthController extends Controller
     {
         try {
             $request->validate([
-                'pan_no'    => 'required|string|max:15',
-                'otp_code'  => 'required|string|size:6',
+                'phone_or_pan' => 'required|string|max:15',
+                'otp_code'     => 'required|string|size:6',
+            ], [
+                'phone_or_pan.required' => 'PAN number or mobile number is required.',
+                'phone_or_pan.string' => 'PAN number or mobile number must be a string.',
+                'phone_or_pan.max' => 'PAN number or mobile number cannot exceed 15 characters.',
+                'otp_code.required' => 'OTP code is required.',
+                'otp_code.string' => 'OTP code must be a string.',
+                'otp_code.size' => 'OTP code must be exactly 6 digits.',
             ]);
 
-            $pan_no    = strtoupper(trim($request->pan_no));
-            $otp_code  = $request->otp_code;
+            $phone_or_pan = trim($request->phone_or_pan);
+            $otp_code     = $request->otp_code;
 
-            $user = User::where('pan', $pan_no)->first();
-
-            if (! $user) {
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'No account is registered with this PAN number.',
-                ], 404);
+            if (preg_match('/[A-Za-z]/', $phone_or_pan)) {
+                
+                $pan_no = strtoupper($phone_or_pan);
+                $user = User::where('pan', $pan_no)->first();
+                
+                if (! $user) {
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'No account is registered with this PAN number.',
+                    ], 404);
+                }
+            } else {
+                
+                $user = User::where('mobile_no', $phone_or_pan)->first();
+                
+                if (! $user) {
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'No account is registered with this mobile number.',
+                    ], 404);
+                }
             }
 
             $mobile_no = $user->mobile_no;
@@ -532,19 +575,39 @@ class AuthController extends Controller
     {
         try {
             $request->validate([
-                'pan_no'       => 'required|string|max:15',
+                'phone_or_pan' => 'required|string|max:15',
                 'new_password' => 'required|string|min:6|confirmed',
+            ], [
+                'phone_or_pan.required' => 'PAN number or mobile number is required.',
+                'phone_or_pan.string' => 'PAN number or mobile number must be a string.',
+                'phone_or_pan.max' => 'PAN number or mobile number cannot exceed 15 characters.',
+                'new_password.required' => 'New password is required.',
+                'new_password.string' => 'New password must be a string.',
+                'new_password.min' => 'New password must be at least 6 characters.',
+                'new_password.confirmed' => 'New password confirmation does not match.',
             ]);
 
-            $pan_no    = strtoupper(trim($request->pan_no));
+            $phone_or_pan = trim($request->phone_or_pan);
 
-            $user = User::where('pan', $pan_no)->first();
-
-            if (! $user) {
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'Invalid PAN or registered mobile number.',
-                ], 404);
+            if (preg_match('/[A-Za-z]/', $phone_or_pan)) {
+                $pan_no = strtoupper($phone_or_pan);
+                $user = User::where('pan', $pan_no)->first();
+                
+                if (! $user) {
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'No account is registered with this PAN number.',
+                    ], 404);
+                }
+            } else {
+                $user = User::where('mobile_no', $phone_or_pan)->first();
+                
+                if (! $user) {
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'No account is registered with this mobile number.',
+                    ], 404);
+                }
             }
 
             $mobile_no = $user->mobile_no;
@@ -641,6 +704,45 @@ class AuthController extends Controller
             ], 422);
         } catch (\Exception $e) {
 
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function check_mobile_registered(Request $request)
+    {
+        try {
+            $request->validate([
+                'mobile_no' => 'required|string|max:15',
+            ]);
+
+            $mobile_no = trim($request->mobile_no);
+
+            $user = User::where('mobile_no', $mobile_no)->first();
+
+            if (! $user) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'No account is registered with this mobile number.',
+                    'is_registered'    => false,
+                ], 404);
+            }
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Account already exist with this mobile number.',
+                'is_registered' => true
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
             return response()->json([
                 'status'  => 0,
                 'message' => 'Something went wrong.',

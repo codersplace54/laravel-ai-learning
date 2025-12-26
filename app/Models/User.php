@@ -36,6 +36,7 @@ class User extends Authenticatable implements JWTSubject
         'is_mobile_verified',
         'business_activity',
         'old_id',
+        'whatsapp_no',
     ];
 
     protected $hidden = [

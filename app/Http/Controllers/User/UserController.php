@@ -31,6 +31,7 @@ class UserController extends Controller
                     'authorized_person_name' => 'required|string|max:255',
                     'email_id' => 'required|email|unique:users,email_id',
                     'mobile_no' => 'required|string|max:15|unique:users,mobile_no',
+                    'whatsapp_no' => 'required|string|max:15',
                     'user_name' => 'required|string|max:100|unique:users,user_name',
                     'district_id' => 'nullable|integer|exists:tripura_master_data,district_code',
                     'subdivision_id' => 'nullable|integer|exists:tripura_master_data,sub_lgd_code',
@@ -61,6 +62,7 @@ class UserController extends Controller
                     'email_id.email' => 'Please enter a valid email address.',
                     'email_id.unique' => 'This email is already registered.',
                     'mobile_no.required' => 'Mobile number is required.',
+                    'whatsapp_no.required' => 'WhatsApp number is required.',
                     'user_name.required' => 'Username is required.',
                     'user_name.unique' => 'This username is already taken.',
                     'district_id.required'   => 'District is required.',
@@ -118,6 +120,7 @@ class UserController extends Controller
                 'authorized_person_name' => $request->authorized_person_name,
                 'email_id' => $request->email_id,
                 'mobile_no' => $request->mobile_no,
+                'whatsapp_no' => $request->whatsapp_no,
                 'user_name' => $request->user_name,
                 'district_id' => $request->user_type === 'individual' ? $request->district_id : null,
                 'subdivision_id' => $request->user_type === 'individual' ? $request->subdivision_id : null,
@@ -137,7 +140,7 @@ class UserController extends Controller
                 $locations = $request->locations ?? [null];
                 foreach ($locations as $location) {
 
-                     DepartmentUser::create([
+                    DepartmentUser::create([
                         'user_id' => $user->id,
                         'department_id' => $request->department_id,
                         'designation' => $request->designation,
@@ -219,22 +222,14 @@ class UserController extends Controller
 
             $rules = [
                 'id' => 'required|exists:users,id',
+                'email_id' => 'required|email|unique:users,email_id,' . $request->id,
+                'mobile_no' => 'required|string|max:15',
+                'whatsapp_no' => 'required|string|max:15',
+                'pan' => 'required_if:user_type,individual|string|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/|unique:users,pan,' . $request->id,
             ];
 
             if ($request->name_of_enterprise !== null) {
                 $rules['name_of_enterprise'] = 'nullable|string|max:255';
-            }
-            if ($request->authorized_person_name !== null) {
-                $rules['authorized_person_name'] = 'required|string|max:255';
-            }
-            if ($request->email_id !== null) {
-                $rules['email_id'] = 'required|email|unique:users,email_id,' . $request->id;
-            }
-            if ($request->mobile_no !== null) {
-                $rules['mobile_no'] = 'required|string|max:15';
-            }
-            if ($request->user_name !== null) {
-                $rules['user_name'] = 'required|string|max:100|alpha_dash|unique:users,user_name,' . $request->id;
             }
             if ($request->registered_enterprise_address !== null) {
                 $rules['registered_enterprise_address'] = 'nullable|string';
@@ -245,9 +240,6 @@ class UserController extends Controller
             if ($request->user_type !== null) {
                 $rules['user_type'] = 'required|in:individual,department,admin';
             }
-            // if ($request->pan !== null) {
-            //     $rules['pan'] = 'nullable|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/';
-            // }
             if ($request->password !== null) {
                 $rules['password'] = 'nullable|string|min:6';
             }
@@ -291,6 +283,7 @@ class UserController extends Controller
                 'email_id.email' => 'Enter a valid email address.',
                 'email_id.unique' => 'This email is already registered.',
                 'mobile_no.required' => 'Mobile number is required.',
+                'whatsapp_no.required' => 'WhatsApp number is required.',
                 'user_name.required' => 'Username is required.',
                 'user_name.unique' => 'This username is already taken.',
                 'user_name.alpha_dash' => 'Username can only contain letters, numbers, dashes, and underscores.',
@@ -298,7 +291,6 @@ class UserController extends Controller
                 'registered_enterprise_city.required' => 'Enterprise city is required.',
                 'user_type.required' => 'User type is required.',
                 'user_type.in' => 'User type must be individual,department or admin.',
-               // 'pan.regex' => 'The PAN number must be in valid format (e.g., ABCDE1234F).',
                 'password.min' => 'Password must be at least 6 characters long.',
                 'district_id.exists'  => 'Selected district is invalid.',
                 'subdivision_id.exists' => 'Selected subdivision is invalid.',
@@ -306,6 +298,9 @@ class UserController extends Controller
                 'department_id.integer'  => 'The department must be a valid number.',
                 'department_id.exists'   => 'The selected department does not exist in our records.',
                 'hierarchy_level.in' => 'The hierarchy level must be one of: block, subdivision1, subdivision2, subdivision3, district1, district2, district3, state1, state2, or state3.',
+                'pan.required_if' => 'PAN is required.',
+                'pan.regex' => 'The PAN number must be in valid format (e.g., ABCDE1234F).',
+                'pan.unique' => 'This PAN number is already registered.',
             ]);
 
             DB::beginTransaction();
@@ -327,6 +322,9 @@ class UserController extends Controller
             }
             if ($request->mobile_no !== null) {
                 $update_data['mobile_no'] = $request->mobile_no;
+            }
+            if ($request->whatsapp_no !== null) {
+                $update_data['whatsapp_no'] = $request->whatsapp_no;
             }
             if ($request->user_name !== null) {
                 $update_data['user_name'] = $request->user_name;
@@ -352,9 +350,9 @@ class UserController extends Controller
             if ($request->ward_id !== null) {
                 $update_data['ward_id'] = $request->ward_id;
             }
-            // if ($request->pan !== null) {
-            //     $update_data['pan'] = $request->pan;
-            // }
+            if ($request->pan !== null) {
+                $update_data['pan'] = $request->pan;
+            }
             if ($request->password !== null) {
                 $update_data['password'] = Hash::make($request->password);
             }
@@ -376,20 +374,20 @@ class UserController extends Controller
                 DepartmentUser::where('user_id', $user->id)->delete();
                 $locations = $request->locations ?? [null];
 
-                    foreach ($locations as $location) {
-                         DepartmentUser::create([
-                            'user_id' => $user->id,
-                            'department_id' => $request->department_id,
-                            'designation' => $request->designation,
-                            'block_id' => $location['block_id'] ?? null,
-                            'subdivision_id' => $location['subdivision_id'] ?? null,
-                            'district_id' => $location['district_id'] ?? null,
-                            'hierarchy_level' => $request->hierarchy_level,
-                            'is_active' => 1,
-                            'created_by' =>  $auth_user->email_id,
-                            'inspector' =>  $request->inspector ?? "no"
-                        ]);
-                    }
+                foreach ($locations as $location) {
+                    DepartmentUser::create([
+                        'user_id' => $user->id,
+                        'department_id' => $request->department_id,
+                        'designation' => $request->designation,
+                        'block_id' => $location['block_id'] ?? null,
+                        'subdivision_id' => $location['subdivision_id'] ?? null,
+                        'district_id' => $location['district_id'] ?? null,
+                        'hierarchy_level' => $request->hierarchy_level,
+                        'is_active' => 1,
+                        'created_by' =>  $auth_user->email_id,
+                        'inspector' =>  $request->inspector ?? "no"
+                    ]);
+                }
             }
 
             $locations = $user->department_user_location->map(function ($loc) {
@@ -408,6 +406,7 @@ class UserController extends Controller
                 'authorized_person_name' => $user->authorized_person_name,
                 'email_id' => $user->email_id,
                 'mobile_no' => $user->mobile_no,
+                'whatsapp_no' => $user->whatsapp_no,
                 'pan' => $user->pan,
                 'bin' => $user->bin,
                 'district'                     => $user->district->district_name ?? null,
@@ -562,6 +561,7 @@ class UserController extends Controller
                 'authorized_person_name' => $user->authorized_person_name,
                 'email_id' => $user->email_id,
                 'mobile_no' => $user->mobile_no,
+                'whatsapp_no' => $user->whatsapp_no,
                 'pan' => $user->pan,
                 'bin' => $user->bin,
                 'district'                     => $user->district->district_name ?? null,
@@ -683,6 +683,7 @@ class UserController extends Controller
                         'authorized_person_name' => $user->authorized_person_name,
                         'email_id' => $user->email_id,
                         'mobile_no'  => $user->mobile_no,
+                        'whatsapp_no'  => $user->whatsapp_no,
                         'user_name'  => $user->user_name,
                         'districts_name'    => $districts_name,
                         'subdivisions_name' => $subdivisions_name,
