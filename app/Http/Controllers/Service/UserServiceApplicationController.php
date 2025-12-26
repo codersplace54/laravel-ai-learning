@@ -25,6 +25,8 @@ use App\Exports\ApplicationsExport;
 use App\Models\UnitDetail;
 use Illuminate\Http\UploadedFile;
 use App\Services\ApplicationDataFormatter;
+use App\Services\SmsService;
+use App\Models\Department;
 
 
 class UserServiceApplicationController extends Controller
@@ -121,7 +123,7 @@ class UserServiceApplicationController extends Controller
             }
 
             $service_data = ServiceMaster::where('id', $request->service_id)
-                ->first(['noc_name', 'service_mode',  'target_days', 'allow_repeat_application','caf_depends']);
+                ->first(['noc_name', 'service_mode',  'target_days', 'allow_repeat_application', 'caf_depends']);
 
             $is_caf_filled = UnitDetail::where('user_id', $user->id)->exists();
             $service_depends_and_caf_filled = ($service_data->caf_depends === 'yes') ? $is_caf_filled : true;
@@ -145,6 +147,13 @@ class UserServiceApplicationController extends Controller
                 //         'message' => 'You cannot submit an application for this particular service; please contact the administrator.'
                 //     ], 404);
                 // }
+
+                $department_name = null;
+
+                if ($approval_flow && $approval_flow->department_id) {
+                    $department_name = Department::where('id', $approval_flow->department_id)
+                        ->value('name');
+                }
 
                 $has_approval_flow = !is_null($approval_flow);
 
@@ -270,6 +279,9 @@ class UserServiceApplicationController extends Controller
 
                     $user_service_application->application_data = json_encode($application_data);
 
+                    if ((float) $total_fee === 0.0) {
+                        $status = 're_submitted';
+                    }
 
                     $user_service_application->update([
                         'renewal_cycle_id'      => $request->renewal_cycle_id,
@@ -340,6 +352,19 @@ class UserServiceApplicationController extends Controller
                         : json_decode($user_service_application->application_data ?? '[]', true);
 
                     DB::commit();
+
+                    if ($status === 're_submitted') {
+                        $sms = SmsService::buildSmsMessage('application_resubmitted', [
+                            'APP_NO' => $user_service_application->applicationId,
+                            'DEPT_NAME' => $department_name ?? 'the department',
+                        ]);
+
+                        SmsService::send(
+                            $user->mobile_no,
+                            $sms['message'],
+                            $sms['template_id']
+                        );
+                    }
 
                     return response()->json([
                         'status'  => 1,
@@ -416,6 +441,20 @@ class UserServiceApplicationController extends Controller
                         ]);
                     }
                     DB::commit();
+
+                    if ($status === 'saved') {
+                        $sms = SmsService::buildSmsMessage('application_saved', [
+                            'APP_NO' => $user_service_application->applicationId,
+                            'DEPT_NAME' => $department_name ?? 'the department',
+                        ]);
+
+                        SmsService::send(
+                            $user->mobile_no,
+                            $sms['message'],
+                            $sms['template_id']
+                        );
+                    }
+
 
                     return response()->json([
                         'status'  => 1,
@@ -649,18 +688,17 @@ class UserServiceApplicationController extends Controller
                 $effective_fee = 0;
             }
 
-              $status = $request->status ?? 'saved';
-                $payment_status = $request->payment_status ?? 'pending';
-                $paid_amount = null;
-                $payment_time = null;
+            $status = $request->status ?? 'saved';
+            $payment_status = $request->payment_status ?? 'pending';
+            $paid_amount = null;
+            $payment_time = null;
 
             if ((float) $total_fee === 0.0) {
-                $status = 'submitted';
+                $status = 're_submitted';
                 $payment_status = 'paid';
                 $paid_amount = 0;
                 $payment_time = now();
             }
-
 
             $user_service_application->update([
                 'user_id'               => $user->id,
