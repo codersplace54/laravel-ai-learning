@@ -14,6 +14,7 @@ use Exception;
 use Carbon\Carbon;
 use App\Models\DepartmentUser;
 use App\Models\Otp;
+use App\Services\SmsService;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\DepartmentUsersExport;
 
@@ -226,6 +227,7 @@ class UserController extends Controller
                 'mobile_no' => 'required|string|max:15',
                 'whatsapp_no' => 'required|string|max:15',
                 'pan' => 'required_if:user_type,individual|string|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/|unique:users,pan,' . $request->id,
+                'otp_code' => 'required_if:user_type,individual|string|size:6',
             ];
 
             if ($request->name_of_enterprise !== null) {
@@ -285,6 +287,8 @@ class UserController extends Controller
                 'mobile_no.required' => 'Mobile number is required.',
                 'whatsapp_no.required' => 'WhatsApp number is required.',
                 'user_name.required' => 'Username is required.',
+                'otp_code.required' => 'OTP code is required.',
+                'otp_code.size' => 'OTP code must be exactly 6 digits.',
                 'user_name.unique' => 'This username is already taken.',
                 'user_name.alpha_dash' => 'Username can only contain letters, numbers, dashes, and underscores.',
                 'registered_enterprise_address.required' => 'Enterprise address is required.',
@@ -307,6 +311,34 @@ class UserController extends Controller
 
 
             $user = User::findOrFail($request->id);
+
+            if ($user->user_type === "individual") {
+                $now = Carbon::now();
+
+                $otp = Otp::where('mobile_no', $user->mobile_no)
+                    ->where('code', $request->otp_code)
+                    ->where('expires_at', '>=', $now)
+                    ->first();
+
+                if (! $otp) {
+                    DB::rollBack();
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'Invalid or expired OTP.',
+                    ], 422);
+                }
+
+                if ($otp->is_verified !== 1) {
+                    DB::rollBack();
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'Please verify OTP first.',
+                    ], 422);
+                }
+
+                $otp->delete();
+            }
+
 
 
             $update_data = [];
@@ -789,6 +821,136 @@ class UserController extends Controller
                 'success' => false,
                 'message' => 'Something went wrong.',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function send_profile_update_otp(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Unauthorized.'
+                ], 401);
+            }
+
+            $mobile_no = $user->mobile_no;
+
+            if (app()->environment('production')) {
+                $otp_code = random_int(100000, 999999);
+            } else {
+                $otp_code = 123456;
+            }
+
+            $expires_at = Carbon::now()->addMinutes(10);
+
+            DB::beginTransaction();
+
+            $user_otp_exist = Otp::where('mobile_no', $mobile_no)->first();
+
+            if ($user_otp_exist) {
+                $user_otp_exist->update([
+                    'code' => $otp_code,
+                    'expires_at' => $expires_at,
+                    'is_verified' => 0,
+                ]);
+            } else {
+                Otp::create([
+                    'mobile_no' => $mobile_no,
+                    'code' => $otp_code,
+                    'expires_at' => $expires_at,
+                    'is_verified' => 0,
+                ]);
+            }
+
+            $sms = SmsService::buildSmsMessage('profile_update_otp', [
+                'OTP_CODE' => $otp_code,
+            ]);
+
+            $sms_result = SmsService::send(
+                $mobile_no,
+                $sms['message'],
+                $sms['template_id']
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'OTP sent successfully for profile update.',
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to send OTP.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function verify_profile_update_otp(Request $request)
+    {
+        try {
+            $request->validate([
+                'otp_code' => 'required|string|size:6',
+            ]);
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Unauthorized.'
+                ], 401);
+            }
+
+            $mobile_no = $user->mobile_no;
+            $otp_code = $request->otp_code;
+            $now = Carbon::now();
+
+            DB::beginTransaction();
+
+            $user_otp = Otp::where('mobile_no', $mobile_no)
+                ->where('code', $otp_code)
+                ->where('expires_at', '>=', $now)
+                ->first();
+
+            if (!$user_otp) {
+                DB::rollBack();
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Invalid or expired OTP.',
+                ], 422);
+            }
+
+            $user_otp->update(['is_verified' => 1]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'OTP verified successfully for profile update.',
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to verify OTP.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

@@ -59,6 +59,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('profile-update', [UserController::class, 'update_profile']);
         Route::post('profile-delete', [UserController::class, 'delete_profile']);
         Route::post('get-profile', [UserController::class, 'get_profile']);
+        Route::post('send-profile-update-otp', [UserController::class, 'send_profile_update_otp']);
+        Route::post('verify-profile-update-otp', [UserController::class, 'verify_profile_update_otp']);
 
         Route::post('logout', [AuthController::class, 'logout']);
         Route::post('change-password', [AuthController::class, 'change_password']);
