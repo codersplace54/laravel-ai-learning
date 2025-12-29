@@ -317,14 +317,21 @@ class UserController extends Controller
 
                 $otp = Otp::where('mobile_no', $user->mobile_no)
                     ->where('code', $request->otp_code)
-                    ->where('expires_at', '>=', $now)
                     ->first();
 
-                if (! $otp) {
+                if (!$otp) {
                     DB::rollBack();
                     return response()->json([
                         'status'  => 0,
-                        'message' => 'Invalid or expired OTP.',
+                        'message' => 'Invalid OTP. Please enter the correct OTP and try again.',
+                    ], 422);
+                }
+
+                if ($otp->expires_at < $now) {
+                    DB::rollBack();
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'OTP has expired. Please generate a new OTP to proceed.',
                     ], 422);
                 }
 
@@ -920,14 +927,21 @@ class UserController extends Controller
 
             $user_otp = Otp::where('mobile_no', $mobile_no)
                 ->where('code', $otp_code)
-                ->where('expires_at', '>=', $now)
                 ->first();
 
             if (!$user_otp) {
                 DB::rollBack();
                 return response()->json([
                     'status' => 0,
-                    'message' => 'Invalid or expired OTP.',
+                    'message' => 'Invalid OTP. Please enter the correct OTP and try again.',
+                ], 422);
+            }
+
+            if ($user_otp->expires_at < $now) {
+                DB::rollBack();
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'OTP has expired. Please generate a new OTP to proceed.',
                 ], 422);
             }
 
