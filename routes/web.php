@@ -20,4 +20,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
     Route::get('import-users', [ImportController::class, 'import_users_form'])->name('import.users.form');
     Route::post('import-users', [ImportController::class, 'import_users'])->name('import.users');
+
+    Route::get('import-partnership-registration', [ImportController::class, 'import_partnership_registration_form'])->name('import.partnership_registration.form');
+    Route::post('import-partnership-registration', [ImportController::class, 'import_partnership_registration'])->name('import.partnership_registration');
+
+    Route::get('import-partnership-partners', [ImportController::class, 'import_partnership_partners_form'])->name('import.partnership_partners.form');
+    Route::post('import-partnership-partners', [ImportController::class, 'import_partnership_partners'])->name('import.partnership_partners');
 });

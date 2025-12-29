@@ -467,6 +467,7 @@ class ServiceController extends Controller
             ]);
 
             $data = UserServiceApplication::with(['service', 'user', 'latestWorkflow'])
+                ->where('status', '!=', 'draft')
                 ->whereHas('service', function ($service) use ($request) {
                     $service->where('department_id', $request->department_id);
                 });
