@@ -14,6 +14,8 @@ use App\Models\UserServiceApplication;
 use Illuminate\Support\Facades\DB;
 use App\Imports\CooperativeSocietyApplicationImport;
 use App\Imports\CooperativeSocietyMemberImport;
+use App\Imports\PartnershipRegistrationImport;
+use App\Imports\PartnershipPartnerImport;
 
 class ImportController extends Controller
 {
@@ -217,5 +219,95 @@ class ImportController extends Controller
                 ->withInput()
                 ->with('error', 'Something went wrong: ' . $e->getMessage());
         }
+    }
+
+    public function import_partnership_registration_form()
+    {
+        return view('admin.import.partnership_registration');
+    }
+
+    public function import_partnership_registration(Request $request)
+    {
+        $request->validate([
+            'excel_files.*' => 'required|file|mimes:xlsx,xls,csv',
+        ]);
+
+        // DB::statement('SET FOREIGN_KEY_CHECKS=0');
+        // DB::table('user_service_applications')->where('id', '>', 1140)->delete();
+        // DB::statement('ALTER TABLE user_service_applications AUTO_INCREMENT = 1141');
+        // DB::statement('SET FOREIGN_KEY_CHECKS=1');
+
+        $files = $request->file('excel_files');
+        $all_skipped_rows = [];
+        $all_assignment_skipped_rows = [];
+
+        foreach ($files as $file) {
+            $import = new PartnershipRegistrationImport();
+            Excel::import($import, $file);
+
+            $all_skipped_rows = array_merge($all_skipped_rows, $import->skipped_rows ?? []);
+            $all_assignment_skipped_rows = array_merge($all_assignment_skipped_rows, $import->assignment_skipped_rows ?? []);
+        }
+
+        $skipped_count = count($all_skipped_rows);
+
+        $grouped = collect($all_skipped_rows)
+            ->groupBy(fn($r) => $r['reason_key'] ?? 'unknown')
+            ->map(fn($items) => [
+                'count' => $items->count(),
+                'rows'  => $items->values()->all(),
+            ])
+            ->toArray();
+
+        $assignment_skipped_grouped = collect($all_assignment_skipped_rows)
+            ->groupBy('reason')
+            ->toArray();
+
+        return back()->with([
+            'success'                    => 'Partnership registration import completed successfully.',
+            'skipped_count'              => $skipped_count,
+            'skipped_grouped'            => $grouped,
+            'assignment_skipped_rows'    => $all_assignment_skipped_rows,
+            'assignment_skipped_count'   => count($all_assignment_skipped_rows),
+            'assignment_skipped_grouped' => $assignment_skipped_grouped,
+        ]);
+    }
+
+    public function import_partnership_partners_form()
+    {
+        return view('admin.import.partnership_partners');
+    }
+
+    public function import_partnership_partners(Request $request)
+    {
+        $request->validate([
+            'excel_files.*' => 'required|file|mimes:xlsx,xls,csv',
+        ]);
+
+        $files = $request->file('excel_files');
+        $all_skipped_rows = [];
+
+        foreach ($files as $file) {
+            $import = new PartnershipPartnerImport();
+            Excel::import($import, $file);
+
+            $all_skipped_rows = array_merge($all_skipped_rows, $import->skipped_rows ?? []);
+        }
+
+        $skipped_count = count($all_skipped_rows);
+
+        $grouped = collect($all_skipped_rows)
+            ->groupBy(fn($r) => $r['reason'] ?? 'unknown')
+            ->map(fn($items) => [
+                'count' => $items->count(),
+                'rows'  => $items->values()->all(),
+            ])
+            ->toArray();
+
+        return back()->with([
+            'success'        => 'Partnership partner details patched successfully.',
+            'skipped_count'  => $skipped_count,
+            'skipped_grouped' => $grouped,
+        ]);
     }
 }
