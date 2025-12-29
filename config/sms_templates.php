@@ -25,4 +25,9 @@ return [
         'template_id' => '1007713532832471140',
         'message' => 'Dear Sir/Madam, Your One Time Password (OTP) is {OTP_CODE}. One Time Password (OTP) will be automatically expired after 10 Minutes. Do Not Share the OTP with anyone. Use this access code to validate your action in www.swaagat.tripura.gov.in.',
     ],
+    
+    'user_registration_otp' => [
+        'template_id' => '1007860856268153586',
+        'message' => 'Dear Applicant, your OTP for registration is {#var#}. Use this access code to validate your registration in www.swaagat.tripura.gov.in.',
+    ],
 ];

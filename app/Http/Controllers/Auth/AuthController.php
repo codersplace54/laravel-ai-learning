@@ -15,6 +15,7 @@ use App\Models\Otp;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use App\Services\SmsService;
 
 class AuthController extends Controller
 {
@@ -61,6 +62,16 @@ class AuthController extends Controller
                     'status' => 0,
                     'message' => 'Your account is inactive. Please contact admin.'
                 ], 403);
+            }
+
+            if ($user->password_reset_required == 1) {
+                JWTAuth::invalidate($token);
+
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'We found your account, but your password must be reset due to portal migration. Redirecting you to password reset…',
+                    'password_reset_required' => true
+                ], 200);
             }
 
             $old_token_row = JWTToken::where('user_id', $user->id)->first();
@@ -279,12 +290,14 @@ class AuthController extends Controller
             }
 
 
-            $message = "Dear Applicant, your OTP for registration is {$otp_code}. Use this OTP to validate your registration in www.swaagat.tripura.gov.in.";
+            $sms = SmsService::buildSmsMessage('user_registration_otp', [
+                '#var#' => $otp_code,
+            ]);
 
-            $sms_result = $this->send_sms_otp(
+            $sms_result = SmsService::send(
                 $mobile_no,
-                $message,
-                config('sms.otp_template_id')
+                $sms['message'],
+                $sms['template_id']
             );
 
 
@@ -339,15 +352,21 @@ class AuthController extends Controller
 
             $user_otp = Otp::where('mobile_no', $mobile_no)
                 ->where('code', $otp_code)
-                ->where('expires_at', '>=', $now)
                 ->first();
 
             if (!$user_otp) {
                 DB::rollBack();
-
                 return response()->json([
                     'status'  => 0,
-                    'message' => 'Invalid or expired OTP.',
+                    'message' => 'Invalid OTP. Please enter the correct OTP and try again.',
+                ], 422);
+            }
+
+            if ($user_otp->expires_at < $now) {
+                DB::rollBack();
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'OTP has expired. Please generate a new OTP to proceed.',
                 ], 422);
             }
 
@@ -450,12 +469,14 @@ class AuthController extends Controller
                 ]);
             }
 
-            $message = "Dear Applicant, your OTP for registration is {$otp_code}. Use this OTP to validate your registration in www.swaagat.tripura.gov.in.";
+            $sms = SmsService::buildSmsMessage('user_registration_otp', [
+                '#var#' => $otp_code,
+            ]);
 
-            $sms_result = $this->send_sms_otp(
+            $sms_result = SmsService::send(
                 $mobile_no,
-                $message,
-                config('sms.otp_template_id')
+                $sms['message'],
+                $sms['template_id']
             );
 
             DB::commit();
@@ -534,15 +555,21 @@ class AuthController extends Controller
 
             $otp_row = Otp::where('mobile_no', $mobile_no)
                 ->where('code', $otp_code)
-                ->where('expires_at', '>=', $now)
                 ->first();
 
-            if (! $otp_row) {
+            if (!$otp_row) {
                 DB::rollBack();
-
                 return response()->json([
                     'status'  => 0,
-                    'message' => 'Invalid or expired OTP.',
+                    'message' => 'Invalid OTP. Please enter the correct OTP and try again.',
+                ], 422);
+            }
+
+            if ($otp_row->expires_at < $now) {
+                DB::rollBack();
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'OTP has expired. Please generate a new OTP to proceed.',
                 ], 422);
             }
 
@@ -630,6 +657,7 @@ class AuthController extends Controller
             }
 
             $user->password = Hash::make($request->new_password);
+            $user->password_reset_required = 0;
             $user->save();
 
             $otp_row->delete();
@@ -752,63 +780,6 @@ class AuthController extends Controller
     }
 
 
-    protected function send_sms_otp(string $mobile_no, string $message, string $dlt_template_id): array
-    {
-        $gateway_url   = config('sms.gateway_url');
-        $user_name     = config('sms.username');
-        $pin           = config('sms.pin');
-        $signature     = config('sms.signature');
-        $dlt_entity_id = config('sms.dlt_entity_id');
-
-        if (! $gateway_url || ! $user_name || ! $pin || ! $signature || ! $dlt_entity_id) {
-            Log::error('sms_config_missing', [
-                'gateway_url'   => $gateway_url,
-                'user_name'     => $user_name,
-                'pin'           => $pin ? '***' : null,
-                'signature'     => $signature,
-                'dlt_entity_id' => $dlt_entity_id,
-            ]);
-
-            return [
-                'status_code' => 500,
-                'response'    => 'SMS configuration is incomplete.',
-            ];
-        }
-
-        $params = http_build_query([
-            'username'        => $user_name,
-            'pin'             => $pin,
-            'message'         => $message,
-            'mnumber'         => $mobile_no,
-            'signature'       => $signature,
-            'dlt_entity_id'   => $dlt_entity_id,
-            'dlt_template_id' => $dlt_template_id,
-        ]);
-
-        $url = $gateway_url . '?' . $params;
-
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL            => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_TIMEOUT        => 30,
-        ]);
-
-        $response = curl_exec($ch);
-        $error    = curl_error($ch);
-        $status   = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($error) {
-            Log::error('otp_sms_error', ['error' => $error]);
-        }
-
-        return [
-            'status_code' => $status,
-            'response'    => $response,
-        ];
-    }
 
     public function login_by_admin(Request $request)
     {
