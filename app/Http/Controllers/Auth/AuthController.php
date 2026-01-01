@@ -267,8 +267,6 @@ class AuthController extends Controller
                 $otp_code = 123456;
             }
 
-            $expires_at = Carbon::now()->addDays(60);
-
             DB::beginTransaction();
 
             $user_otp_exist = Otp::where('mobile_no', $mobile_no)->first();
@@ -277,7 +275,6 @@ class AuthController extends Controller
 
                 $user_otp_exist->update([
                     'code'        => $otp_code,
-                    'expires_at'  => $expires_at,
                     'is_verified' => 0,
                 ]);
             } else {
@@ -285,7 +282,6 @@ class AuthController extends Controller
                 Otp::create([
                     'mobile_no' => $mobile_no,
                     'code'      => $otp_code,
-                    'expires_at' => $expires_at,
                 ]);
             }
 
@@ -362,13 +358,7 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            if ($user_otp->expires_at < $now) {
-                DB::rollBack();
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'OTP has expired. Please generate a new OTP to proceed.',
-                ], 422);
-            }
+
 
             $user_otp->update([
                 'is_verified' => 1,
@@ -448,8 +438,6 @@ class AuthController extends Controller
                 $otp_code = 123456;
             }
 
-            $expires_at = Carbon::now()->addDays(60);
-
             DB::beginTransaction();
 
             $otp_row = Otp::where('mobile_no', $mobile_no)->first();
@@ -457,14 +445,12 @@ class AuthController extends Controller
             if ($otp_row) {
                 $otp_row->update([
                     'code'        => $otp_code,
-                    'expires_at'  => $expires_at,
                     'is_verified' => 0,
                 ]);
             } else {
                 Otp::create([
                     'mobile_no'   => $mobile_no,
                     'code'        => $otp_code,
-                    'expires_at'  => $expires_at,
                     'is_verified' => 0,
                 ]);
             }
@@ -565,14 +551,6 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            if ($otp_row->expires_at < $now) {
-                DB::rollBack();
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'OTP has expired. Please generate a new OTP to proceed.',
-                ], 422);
-            }
-
             $otp_row->update(['is_verified' => 1]);
 
             DB::commit();
@@ -644,7 +622,6 @@ class AuthController extends Controller
 
             $otp_row = Otp::where('mobile_no', $mobile_no)
                 ->where('is_verified', 1)
-                ->where('expires_at', '>=', $now)
                 ->first();
 
             if (! $otp_row) {
@@ -652,7 +629,7 @@ class AuthController extends Controller
 
                 return response()->json([
                     'status'  => 0,
-                    'message' => 'OTP not verified or expired.',
+                    'message' => 'OTP not verified.',
                 ], 422);
             }
 

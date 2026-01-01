@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Import Partnership Registration Applications (Excel)</title>
+    <title>Import Profession Tax Applications (Excel)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
@@ -14,7 +14,7 @@
 
     <div class="container py-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3 mb-0">Import Partnership Registration Applications (Excel)</h1>
+            <h1 class="h3 mb-0">Import Profession Tax Applications (Excel)</h1>
             <a href="{{ url()->previous() }}" class="btn btn-outline-secondary btn-sm">
                 ← Back
             </a>
@@ -28,14 +28,9 @@
             @if (session('skipped_count', 0) > 0)
                 @php
                     $reason_labels = [
-                        'missing_required_fields' => 'Missing required fields',
-                        'service_not_found' => 'Service ID not found / not mapped',
-                        'user_not_found' => 'User not found / not mapped',
-                        'missing_status' => 'Application status missing',
-                        'status_not_mapped' => 'Status not mapped',
-                        'duplicate_old_id' => 'Duplicate old_id (already imported)',
                         'missing_noc_details_id' => 'Missing NOC details ID',
                         'missing_old_user_id' => 'Missing old user ID',
+                        'user_not_found' => 'User not found / not mapped',
                         'unknown' => 'Unknown',
                     ];
 
@@ -75,11 +70,7 @@
                                                 <li class="mb-1">
                                                     Row: <strong>{{ $row['row'] ?? 'N/A' }}</strong>,
                                                     Old ID: {{ $row['old_id'] ?? 'N/A' }},
-                                                    Noc_master_id: {{ $row['noc_master_id'] ?? 'N/A' }},
                                                     Old User ID: {{ $row['old_user_id'] ?? 'N/A' }},
-                                                    @if (!empty($row['raw_status']))
-                                                        Raw Status: <code>{{ $row['raw_status'] }}</code>,
-                                                    @endif
                                                     Reason: {{ $row['reason'] ?? 'N/A' }}
                                                 </li>
                                             @endforeach
@@ -97,7 +88,6 @@
                     $assignment_reason_labels = [
                         'service_flow_not_found' => 'Service flow not found',
                         'ignored_due_to_status' => 'Ignored due to status',
-                        'validation_step_missing' => 'Validation step missing in service flow',
                         'unknown' => 'Unknown',
                     ];
 
@@ -157,71 +147,6 @@
                     </div>
                 </div>
             @endif
-
-            @if (session('history_skipped_count', 0) > 0)
-                @php
-                    $history_reason_labels = [
-                        'service_flow_not_found' => 'Service flow not found',
-                        'first_step_flow_not_found' => 'First step flow not found',
-                        'unknown' => 'Unknown',
-                    ];
-
-                    $history_grouped = session('history_skipped_grouped', []);
-
-                    $history_grouped_formatted = [];
-                    foreach ($history_grouped as $reason_key => $rows) {
-                        $history_grouped_formatted[$reason_key] = [
-                            'count' => count($rows),
-                            'rows' => $rows,
-                        ];
-                    }
-                @endphp
-
-                <div class="alert alert-warning mt-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <strong>History Skipped Rows</strong>
-                        <span class="badge bg-dark">Total: {{ session('history_skipped_count') }}</span>
-                    </div>
-
-                    <div class="accordion mt-3" id="historySkippedAccordion">
-                        @foreach ($history_grouped_formatted as $reason_key => $group)
-                            @php
-                                $title = $history_reason_labels[$reason_key] ?? $reason_key;
-                                $collapse_id = 'h_collapse_' . $reason_key;
-                                $heading_id = 'h_heading_' . $reason_key;
-                            @endphp
-
-                            <div class="accordion-item">
-                                <h2 class="accordion-header" id="{{ $heading_id }}">
-                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
-                                        data-bs-target="#{{ $collapse_id }}" aria-expanded="false"
-                                        aria-controls="{{ $collapse_id }}">
-                                        {{ $title }}
-                                        <span class="ms-2 badge bg-secondary">{{ $group['count'] }}</span>
-                                    </button>
-                                </h2>
-
-                                <div id="{{ $collapse_id }}" class="accordion-collapse collapse"
-                                    aria-labelledby="{{ $heading_id }}" data-bs-parent="#historySkippedAccordion">
-                                    <div class="accordion-body">
-                                        <ul class="mb-0">
-                                            @foreach ($group['rows'] as $r)
-                                                <li class="mb-1">
-                                                    Row: <strong>{{ $r['row'] ?? 'N/A' }}</strong>,
-                                                    Old ID: {{ $r['old_id'] ?? 'N/A' }},
-                                                    Service ID: {{ $r['service_id'] ?? 'N/A' }},
-                                                    Status: {{ $r['status'] ?? 'N/A' }},
-                                                    Reason: {{ $r['reason'] ?? 'N/A' }}
-                                                </li>
-                                            @endforeach
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-            @endif
         @endif
 
         @if (session('error'))
@@ -232,7 +157,7 @@
 
         <div class="card shadow-sm">
             <div class="card-body">
-                <form action="{{ route('admin.import.partnership_registration') }}" method="POST"
+                <form action="{{ route('admin.import.profession_tax') }}" method="POST"
                     enctype="multipart/form-data">
                     @csrf
 
@@ -248,7 +173,7 @@
                     </div>
 
                     <button type="submit" class="btn btn-primary">
-                        Import Partnership Registration
+                        Import Profession Tax Applications
                     </button>
                 </form>
             </div>

@@ -14,24 +14,21 @@ class PartnershipPartnerImport implements ToCollection, WithHeadingRow
     protected string $partner_section_key = 'Partner Details';
 
     protected array $partner_excel_question_id_map = [
-        'field_psps_name'                => 128,  // Name of Partner
-        'field_psps_father_name'         => 131,  // Partner's Father Name
-        'field_psps_address'             => 132,  // Partner's address
+        'field_psps_name'                => 128,  // Partner name
+        'field_psps_father_name'         => 321,  // Partner's Father Name
+        'field_psps_address'             => 323,  // Partner Address
         'field_psps_date_of_joining'     => 136,  // Partner's Date of joining
         'field_psps_dob'                 => 137,  // Partner's DOB
         'field_partner_pan'              => 141,  // Partner's PAN
         'field_partner_voter_id'         => 143,  // Partner's Voter ID
         'field_partner_aadhar'           => 301,  // Partner's Aadhar
         'field_psps_mobile'              => 322,  // Partner Phone Number
-        'field_psps_designation'         => 1088, // Partner Designation
-        'field_psps_id_proof'            => 1089, // Partner ID Proof
-        'field_psps_profession'          => 1090, // Partner Profession
-        'field_psps_sex'                 => 1091, // Partner Gender
-        'field_psps_social_status'       => 1092, // Partner Social Status
-        'field_partner_status'           => 1093, // Partner Status
-        'field_pspd_ratio'               => 1094, // Partnership Ratio (%)
-        'field_psps_age'                 => 1095, // Partner Age
-        'field_psps_capital_contribution' => 1096, // Partner Capital Contribution
+        'field_psps_designation'         => 1094, // Partner's Designation
+        'field_psps_profession'          => 1093, // Partner's Profession
+        'field_psps_sex'                 => 1095, // Gender
+        'field_psps_social_status'       => 1096, // Social Status
+        'field_pspd_ratio'               => 1097, // Partnership Ratio (%)
+        'field_psps_capital_contribution' => 1098, // Partner's Capital Contribution (₹)
     ];
 
     public function collection(Collection $rows)

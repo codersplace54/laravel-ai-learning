@@ -26,4 +26,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
     Route::get('import-partnership-partners', [ImportController::class, 'import_partnership_partners_form'])->name('import.partnership_partners.form');
     Route::post('import-partnership-partners', [ImportController::class, 'import_partnership_partners'])->name('import.partnership_partners');
+
+    Route::get('import-profession-tax', [ImportController::class, 'import_profession_tax_form'])->name('import.profession_tax.form');
+    Route::post('import-profession-tax', [ImportController::class, 'import_profession_tax'])->name('import.profession_tax');
+
+    Route::get('import-profession-tax-questions', [ImportController::class, 'import_profession_tax_questions_form'])->name('import.profession_tax_questions.form');
+    Route::post('import-profession-tax-questions', [ImportController::class, 'import_profession_tax_questions'])->name('import.profession_tax_questions');
 });

@@ -226,7 +226,7 @@ class UserImport
             'mobile_no'                     => $mobile_no,
             'is_mobile_verified'            => $is_mobile_verified,
             'user_name'                     => $user_name,
-            'user_role'                     => "individual",
+            'user_type'                     => "individual",
             'district_id'                   => null,
             'subdivision_id'                => null,
             'ulb_id'                        => null,

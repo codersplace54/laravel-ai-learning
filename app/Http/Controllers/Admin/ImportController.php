@@ -16,6 +16,8 @@ use App\Imports\CooperativeSocietyApplicationImport;
 use App\Imports\CooperativeSocietyMemberImport;
 use App\Imports\PartnershipRegistrationImport;
 use App\Imports\PartnershipPartnerImport;
+use App\Imports\ProfessionTaxApplicationImport;
+use App\Imports\ProfessionTaxQuestionImport;
 
 class ImportController extends Controller
 {
@@ -164,41 +166,65 @@ class ImportController extends Controller
     {
         try {
             $request->validate([
-                'json_file' => 'nullable|file|mimes:json,txt',
+                'json_files.*' => 'nullable|file|mimes:json,txt',
                 'json_text' => 'nullable|string',
             ]);
 
+            if (!$request->hasFile('json_files') && empty($request->json_text)) {
+                return back()
+                    ->withInput()
+                    ->with('error', 'Please upload JSON files or paste JSON text.');
+            }
+
             // User::truncate();
+            $all_skipped_rows = [];
+            $total_imported = 0;
+            $total_skipped = 0;
 
-            if (!$request->hasFile('json_file') && empty($request->json_text)) {
-                return back()
-                    ->withInput()
-                    ->with('error', 'Please upload a JSON file or paste JSON text.');
+            if ($request->hasFile('json_files')) {
+                foreach ($request->file('json_files') as $file) {
+                    $json_string = file_get_contents($file->getRealPath());
+                    $decoded_data = json_decode($json_string, true);
+
+                    if ($decoded_data === null && json_last_error() !== JSON_ERROR_NONE) {
+                        continue;
+                    }
+
+                    $users_array = (isset($decoded_data[0]) && is_array($decoded_data[0]))
+                        ? $decoded_data
+                        : [$decoded_data];
+
+                    $import = new UserImport();
+                    $import->import($users_array);
+
+                    $all_skipped_rows = array_merge($all_skipped_rows, $import->skipped_rows ?? []);
+                    $total_imported += $import->imported_count;
+                    $total_skipped += $import->skipped_count;
+                }
+            } else {
+                $decoded_data = json_decode($request->json_text, true);
+
+                if ($decoded_data === null && json_last_error() !== JSON_ERROR_NONE) {
+                    return back()
+                        ->withInput()
+                        ->with('error', 'Invalid JSON. Please check the format.');
+                }
+
+                $users_array = (isset($decoded_data[0]) && is_array($decoded_data[0]))
+                    ? $decoded_data
+                    : [$decoded_data];
+
+                $import = new UserImport();
+                $import->import($users_array);
+
+                $all_skipped_rows = $import->skipped_rows ?? [];
+                $total_imported = $import->imported_count;
+                $total_skipped = $import->skipped_count;
             }
 
-            $json_string = $request->hasFile('json_file')
-                ? file_get_contents($request->file('json_file')->getRealPath())
-                : $request->json_text;
+            $skipped_count = count($all_skipped_rows);
 
-            $decoded_data = json_decode($json_string, true);
-
-            if ($decoded_data === null && json_last_error() !== JSON_ERROR_NONE) {
-                return back()
-                    ->withInput()
-                    ->with('error', 'Invalid JSON. Please check the format.');
-            }
-
-            $users_array = (isset($decoded_data[0]) && is_array($decoded_data[0]))
-                ? $decoded_data
-                : [$decoded_data];
-
-            $import = new UserImport();
-            $import->import($users_array);
-
-            $skipped_rows  = $import->skipped_rows ?? [];
-            $skipped_count = count($skipped_rows);
-
-            $skipped_grouped = collect($skipped_rows)
+            $skipped_grouped = collect($all_skipped_rows)
                 ->groupBy(fn($r) => $r['reason'] ?? 'unknown')
                 ->map(fn($items) => [
                     'count' => $items->count(),
@@ -206,13 +232,13 @@ class ImportController extends Controller
                 ])
                 ->toArray();
 
-            $message = "Import completed. Imported: {$import->imported_count}, Skipped: {$import->skipped_count}.";
+            $message = "Import completed. Imported: {$total_imported}, Skipped: {$total_skipped}.";
 
             return back()->with([
                 'success'         => $message,
                 'skipped_count'   => $skipped_count,
                 'skipped_grouped' => $skipped_grouped,
-                'skipped_rows'    => $skipped_rows,
+                'skipped_rows'    => $all_skipped_rows,
             ]);
         } catch (\Exception $e) {
             return back()
@@ -240,6 +266,7 @@ class ImportController extends Controller
         $files = $request->file('excel_files');
         $all_skipped_rows = [];
         $all_assignment_skipped_rows = [];
+        $all_history_skipped_rows = [];
 
         foreach ($files as $file) {
             $import = new PartnershipRegistrationImport();
@@ -247,6 +274,7 @@ class ImportController extends Controller
 
             $all_skipped_rows = array_merge($all_skipped_rows, $import->skipped_rows ?? []);
             $all_assignment_skipped_rows = array_merge($all_assignment_skipped_rows, $import->assignment_skipped_rows ?? []);
+            $all_history_skipped_rows = array_merge($all_history_skipped_rows, $import->history_skipped_rows ?? []);
         }
 
         $skipped_count = count($all_skipped_rows);
@@ -263,6 +291,10 @@ class ImportController extends Controller
             ->groupBy('reason')
             ->toArray();
 
+        $history_skipped_grouped = collect($all_history_skipped_rows)
+            ->groupBy('reason')
+            ->toArray();
+
         return back()->with([
             'success'                    => 'Partnership registration import completed successfully.',
             'skipped_count'              => $skipped_count,
@@ -270,6 +302,9 @@ class ImportController extends Controller
             'assignment_skipped_rows'    => $all_assignment_skipped_rows,
             'assignment_skipped_count'   => count($all_assignment_skipped_rows),
             'assignment_skipped_grouped' => $assignment_skipped_grouped,
+            'history_skipped_rows'       => $all_history_skipped_rows,
+            'history_skipped_count'      => count($all_history_skipped_rows),
+            'history_skipped_grouped'    => $history_skipped_grouped,
         ]);
     }
 
@@ -307,6 +342,97 @@ class ImportController extends Controller
         return back()->with([
             'success'        => 'Partnership partner details patched successfully.',
             'skipped_count'  => $skipped_count,
+            'skipped_grouped' => $grouped,
+        ]);
+    }
+
+    public function import_profession_tax_form()
+    {
+        return view('admin.import.profession_tax');
+    }
+
+    public function import_profession_tax(Request $request)
+    {
+        $request->validate([
+            'excel_files.*' => 'required|file|mimes:xlsx,xls,csv',
+        ]);
+
+        // UserServiceApplication::truncate();
+
+        $files = $request->file('excel_files');
+        $all_skipped_rows = [];
+        $all_assignment_skipped_rows = [];
+
+        foreach ($files as $file) {
+            $import = new ProfessionTaxApplicationImport();
+            Excel::import($import, $file);
+
+            $all_skipped_rows = array_merge($all_skipped_rows, $import->skipped_rows ?? []);
+            $all_assignment_skipped_rows = array_merge($all_assignment_skipped_rows, $import->assignment_skipped_rows ?? []);
+        }
+
+        $skipped_count = count($all_skipped_rows);
+
+        $grouped = collect($all_skipped_rows)
+            ->groupBy(fn($r) => $r['reason_key'] ?? 'unknown')
+            ->map(fn($items) => [
+                'count' => $items->count(),
+                'rows'  => $items->values()->all(),
+            ])
+            ->toArray();
+
+        $assignment_skipped_grouped = collect($all_assignment_skipped_rows)
+            ->groupBy('reason')
+            ->toArray();
+
+        return back()->with([
+            'success'                    => 'Profession Tax applications import completed successfully.',
+            'skipped_count'              => $skipped_count,
+            'skipped_grouped'            => $grouped,
+            'assignment_skipped_rows'    => $all_assignment_skipped_rows,
+            'assignment_skipped_count'   => count($all_assignment_skipped_rows),
+            'assignment_skipped_grouped' => $assignment_skipped_grouped,
+        ]);
+    }
+
+    public function import_profession_tax_questions_form()
+    {
+        return view('admin.import.profession_tax_questions');
+    }
+
+    public function import_profession_tax_questions(Request $request)
+    {
+        $request->validate([
+            'excel_files.*' => 'required|file|mimes:xlsx,xls,csv',
+        ]);
+
+        $files = $request->file('excel_files');
+        $all_skipped_rows = [];
+        $all_updated_rows = [];
+
+        foreach ($files as $file) {
+            $import = new ProfessionTaxQuestionImport();
+            Excel::import($import, $file);
+
+            $all_skipped_rows = array_merge($all_skipped_rows, $import->skipped_rows ?? []);
+            $all_updated_rows = array_merge($all_updated_rows, $import->updated_rows ?? []);
+        }
+
+        $skipped_count = count($all_skipped_rows);
+        $updated_count = count($all_updated_rows);
+
+        $grouped = collect($all_skipped_rows)
+            ->groupBy(fn($r) => $r['reason'] ?? 'unknown')
+            ->map(fn($items) => [
+                'count' => $items->count(),
+                'rows'  => $items->values()->all(),
+            ])
+            ->toArray();
+
+        return back()->with([
+            'success'        => "Profession Tax questions import completed. Updated: {$updated_count}, Skipped: {$skipped_count}.",
+            'skipped_count'  => $skipped_count,
+            'updated_count'  => $updated_count,
             'skipped_grouped' => $grouped,
         ]);
     }

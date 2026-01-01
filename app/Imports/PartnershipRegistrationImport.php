@@ -14,6 +14,7 @@ class PartnershipRegistrationImport implements ToCollection, WithHeadingRow
 {
     public array $skipped_rows = [];
     public array $assignment_skipped_rows = [];
+    public array $history_skipped_rows = [];
 
     protected array $service_id_map = [];
     protected array $user_id_map = [];
@@ -23,26 +24,36 @@ class PartnershipRegistrationImport implements ToCollection, WithHeadingRow
 
     protected array $excel_question_id_map = [
         // firm details
-        'firm_duration'         => 117, // Duration of firm(with date of establishment)
-        'date_of_establishment' => 117, // Duration of firm(with date of establishment)
+        'firm_duration'         => 117, // Date of establishment
+        'date_of_establishment' => 117, // Date of establishment
         'location'              => 119, // Location
-        'contact_no'            => 122, // Phone no. of firm
-        'email'                 => 303, // Email of firm
+        'contact_no'            => 122, // Applicant's Phone No
+        'email'                 => 303, // Applicant's Email
         'applicant_name'        => 299, // Applicant Name
+        'applicant_father_name' => 131, // Applicant's Father Name
+        'applicant_dob'         => 1087, // Applicant's Date of Birth
+        'applicant_address'     => 1088, // Applicant's Address
+        'firm_name'             => 152, // Name of Firm
+        'habitation'            => 158, // Habitation / Area / Building
+        'kaitan_parcha'         => 159, // Kaitan Parcha
+        'photos'                => 160, // 2 Photos ( outside firm office with sign board and inside of firm office in received section)
+        'form_v'                => 162, // Form V
+        'form_vi'               => 163, // Form VI
+        'partnership_deed'      => 146, // Partnership Deed
+        'partner_signature'     => 145, // Partner's Signature
+        'principal_place'       => 1082, // Principal Place of Business
+        'address_proof'         => 1083, // Applicant Address Proof Document
+        'applicant_photo'       => 1084, // Applicant Photo
+        'land_agreement'        => 1085, // Land Agremeent Document
+        'witness_document'      => 1086, // Witness Document
+        'differently_abled'     => 1089, // Differently Abled
+        'women_entrepreneur'    => 1090, // Women Entrepreneur
+        'minority'              => 1091, // Minority
+        'nature_of_business'    => 1092, // Nature of Business to be carried on
 
-        // partner details (single partner fields from excel)
+        // partner details 
         'pfr_dob'      => 137, // Partner's DOB
         'pfr_address'  => 323, // Partner Address
-
-        // documents with file path handling
-        'trade_license'     => 152,  // Trade License/Govt.Approval
-        'address_proof'     => 1083, // Address Proof Document
-        'applicant_photo'   => 1084, // Applicant Photo
-        'land_agreement'    => 1085, // Land Agreement Document
-        'witness_document'  => 1086, // Witness Document
-
-        'pfr_district'      => 1082, // Partner District
-        'nature_of_business' => 1087, // Nature of Business
     ];
 
     public function __construct()
@@ -154,6 +165,10 @@ class PartnershipRegistrationImport implements ToCollection, WithHeadingRow
                     'status'     => $app_status,
                     'reason'     => 'ignored_due_to_status',
                 ];
+                
+                foreach ($this->build_history_for_application($application) as $h) {
+                    $history_rows[] = $h;
+                }
                 continue;
             }
 
@@ -452,6 +467,13 @@ class PartnershipRegistrationImport implements ToCollection, WithHeadingRow
         $first_step_flow = $flows[0] ?? null;
 
         if (!$first_step_flow) {
+            $this->assignment_skipped_rows[] = [
+                'row'        => $app_row['excel_row'] ?? null,
+                'old_id'     => $app_row['old_id'] ?? null,
+                'service_id' => $service_id,
+                'status'     => $app_status,
+                'reason'     => 'first_step_flow_not_found',
+            ];
             return [];
         }
 
@@ -482,6 +504,13 @@ class PartnershipRegistrationImport implements ToCollection, WithHeadingRow
         }
 
         if (!isset($this->service_flows_map[$service_id])) {
+            $this->history_skipped_rows[] = [
+                'row'        => $app_row['excel_row'] ?? null,
+                'old_id'     => $app_row['old_id'] ?? null,
+                'service_id' => $service_id,
+                'status'     => $app_status,
+                'reason'     => 'service_flow_not_found',
+            ];
             return [];
         }
 
@@ -503,6 +532,13 @@ class PartnershipRegistrationImport implements ToCollection, WithHeadingRow
         $first_step_flow = $flows[0] ?? null;
 
         if (!$first_step_flow) {
+            $this->history_skipped_rows[] = [
+                'row'        => $app_row['excel_row'] ?? null,
+                'old_id'     => $app_row['old_id'] ?? null,
+                'service_id' => $service_id,
+                'status'     => $app_status,
+                'reason'     => 'first_step_flow_not_found',
+            ];
             return [];
         }
 

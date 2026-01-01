@@ -327,13 +327,7 @@ class UserController extends Controller
                     ], 422);
                 }
 
-                if ($otp->expires_at < $now) {
-                    DB::rollBack();
-                    return response()->json([
-                        'status'  => 0,
-                        'message' => 'OTP has expired. Please generate a new OTP to proceed.',
-                    ], 422);
-                }
+
 
                 if ($otp->is_verified !== 1) {
                     DB::rollBack();
@@ -851,8 +845,6 @@ class UserController extends Controller
                 $otp_code = 123456;
             }
 
-            $expires_at = Carbon::now()->addMinutes(10);
-
             DB::beginTransaction();
 
             $user_otp_exist = Otp::where('mobile_no', $mobile_no)->first();
@@ -860,14 +852,12 @@ class UserController extends Controller
             if ($user_otp_exist) {
                 $user_otp_exist->update([
                     'code' => $otp_code,
-                    'expires_at' => $expires_at,
                     'is_verified' => 0,
                 ]);
             } else {
                 Otp::create([
                     'mobile_no' => $mobile_no,
                     'code' => $otp_code,
-                    'expires_at' => $expires_at,
                     'is_verified' => 0,
                 ]);
             }
@@ -937,13 +927,7 @@ class UserController extends Controller
                 ], 422);
             }
 
-            if ($user_otp->expires_at < $now) {
-                DB::rollBack();
-                return response()->json([
-                    'status' => 0,
-                    'message' => 'OTP has expired. Please generate a new OTP to proceed.',
-                ], 422);
-            }
+
 
             $user_otp->update(['is_verified' => 1]);
 
