@@ -108,13 +108,13 @@
                     @csrf
 
                     <div class="mb-3">
-                        <label for="json_file" class="form-label">Upload JSON File</label>
-                        <input type="file" name="json_file" id="json_file" class="form-control">
+                        <label for="json_files" class="form-label">Upload JSON Files</label>
+                        <input type="file" name="json_files[]" id="json_files" class="form-control" multiple>
                         <small class="text-muted">
-                            Allowed: <code>.json</code> or <code>.txt</code>.
-                            If both file and text are provided, file will be used.
+                            Allowed: <code>.json</code> or <code>.txt</code>. You can select multiple files.
+                            If both files and text are provided, files will be used.
                         </small>
-                        @error('json_file')
+                        @error('json_files.*')
                             <div class="text-danger small mt-1">{{ $message }}</div>
                         @enderror
                     </div>
