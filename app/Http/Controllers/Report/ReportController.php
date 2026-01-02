@@ -213,6 +213,8 @@ class ReportController extends Controller
             $service_id    = $request->service_id;
             $approval_step = $request->approval_step;
 
+            $hierarchy_levels = collect();
+
             $department_user_query = DepartmentUser::with([
                 'department:id,name',
                 'user:id,user_name,authorized_person_name,name_of_enterprise,email_id,mobile_no',
@@ -263,6 +265,13 @@ class ReportController extends Controller
             }
 
             $department_users = $department_user_query
+                ->whereHas('user')
+                ->whereIn('id', function ($q) {
+                    $q->selectRaw('MAX(id)')
+                        ->from('department_users')
+                        ->where('is_active', 1)
+                        ->groupBy('user_id');
+                })
                 ->orderBy('id', 'asc')
                 ->get();
 

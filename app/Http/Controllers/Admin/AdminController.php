@@ -48,7 +48,8 @@ class AdminController extends Controller
                         ->orWhere('email_id', 'LIKE', "%$search%")
                         ->orWhere('mobile_no', 'LIKE', "%$search%")
                         ->orWhere('pan', 'LIKE', "%$search%")
-                        ->orWhere('user_name', 'LIKE', "%$search%");
+                        ->orWhere('user_name', 'LIKE', "%$search%")
+                        ->orWhere('pan', 'LIKE', "%$search%");
                 });
             }
             if ($request->export == 'excel') {
@@ -148,7 +149,12 @@ class AdminController extends Controller
             }
 
             $query = User::where('user_type', 'department')
-                ->with(['district', 'subdivision', 'ulb', 'ward', 'department_user.department']);
+                ->with([
+                    'department_user.department',
+                    'department_user_location.district',
+                    'department_user_location.subdivision',
+                    'department_user_location.ulb'
+                ])->whereHas('department_user');
 
             if ($request->filled('search')) {
                 $search = $request->search;
@@ -181,6 +187,19 @@ class AdminController extends Controller
 
             $department_users = $query->paginate($per_page)
                 ->through(function ($user) {
+
+                    $locations = $user->department_user_location->map(function ($loc) {
+                        return [
+                            'district_name'    => $loc->district->district_name ?? null,
+                            'subdivision_name' => $loc->subdivision->sub_division ?? null,
+                            'block_name'       => $loc->ulb->ulb_name ?? null,
+                        ];
+                    });
+
+                    $districts_name = $locations->pluck('district_name')->filter()->unique()->implode(', ');
+                    $subdivisions_name = $locations->pluck('subdivision_name')->filter()->unique()->implode(', ');
+                    $blocks_name = $locations->pluck('block_name')->filter()->unique()->implode(', ');
+
                     return [
                         'id' => $user->id,
                         'name_of_enterprise' => $user->name_of_enterprise,
@@ -190,20 +209,15 @@ class AdminController extends Controller
                         'pan'  => $user->pan,
                         'user_name'  => $user->user_name,
                         'bin'   => $user->bin,
-                        'district_code'   => $user->district->district_code ?? null,
-                        'district_name' => $user->district->district_name ?? null,
-                        'subdivision_code'   => $user->subdivision->sub_lgd_code ?? null,
-                        'subdivision_name' =>  $user->subdivision->sub_division ?? null,
-                        'ulb_code'   => $user->ulb->ulb_lgd_code ?? null,
-                        'ulb_name' => $user->ulb->ulb_name ?? null,
-                        'ward_code'   => $user->ward->gp_vc_ward_lgd_code ?? null,
-                        'ward_name' => $user->ward->name_of_gp_vc_or_ward ?? null,
+                        'districts_name'    => $districts_name,
+                        'subdivisions_name' => $subdivisions_name,
+                        'blocks_name'       => $blocks_name,
                         'department_name' => $user->department_user->department->name ?? null,
                         'department_id' => $user->department_user->department_id ?? null,
                         'registered_enterprise_address' => $user->registered_enterprise_address,
                         'registered_enterprise_city' => $user->registered_enterprise_city,
                         'user_type' => $user->user_type,
-                        'is_inspector' => $user->department_user->inspector ?? null,
+                        'is_inspector' => $user->department_user?->inspector ?? 'no',
                         'hierarchy_level'  => $user->department_user->hierarchy_level ?? null,
                         'status' => $user->status,
                         'created_at'  => $user->created_at,
