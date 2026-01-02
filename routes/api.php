@@ -40,6 +40,7 @@ use App\Http\Controllers\KyaController;
 use App\Http\Controllers\MigrationPlan\MigrationPlanController;
 use App\Http\Controllers\Service\PaymentController;
 use App\Http\Controllers\Service\FeedbackController;
+use App\Http\Controllers\PanVerificationController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -355,3 +356,9 @@ Route::prefix('kya')->group(function () {
 
 Route::post('user/payment-callback', [PaymentController::class, 'payment_callback']);
 Route::post('migration-notice', [MigrationPlanController::class, 'migration_notice']);
+
+Route::prefix('pan')->group(function () {
+    Route::post('verify', [PanVerificationController::class, 'verify_pan']);
+    Route::post('verify-multiple', [PanVerificationController::class, 'verify_multiple_pans']);
+    Route::get('status-codes', [PanVerificationController::class, 'get_status_codes']);
+});
