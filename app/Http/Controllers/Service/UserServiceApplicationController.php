@@ -283,11 +283,16 @@ class UserServiceApplicationController extends Controller
                         $status = 're_submitted';
                     }
 
+                    $application_number = null;
+                    if ($user_service_application->status === 'draft' && $status !== 'draft') {
+                        $application_number = $this->generate_application_number($request->service_id, $user_service_application->id);
+                    }
+
                     $user_service_application->update([
                         'renewal_cycle_id'      => $request->renewal_cycle_id,
                         'renewal'               => $request->renewal,
                         'renewalYear'           => $request->renewalYear,
-                        //  'applicationId'         => $application_number,
+                        'applicationId'         => $application_number ?? $user_service_application->applicationId,
                         'application_date'      => $request->application_date ?? now(),
                         'status'                => $status,
                         'application_data'      => $user_service_application->application_data,
@@ -419,7 +424,11 @@ class UserServiceApplicationController extends Controller
                         'paid_amount'           => $paid_amount,
                     ]);
 
-                    $application_number = $this->generate_application_number($request->service_id, $user_service_application->id);
+                    if ($user_service_application->status !== "draft") {
+                        $application_number = $this->generate_application_number($request->service_id, $user_service_application->id);
+                    } else {
+                        $application_number = null;
+                    }
 
                     $user_service_application->update([
                         'applicationId' => $application_number
@@ -505,13 +514,12 @@ class UserServiceApplicationController extends Controller
 
     private function validate_questionnaire_file_inputs(Request $request): void
     {
-
         $service_id = $request->service_id;
 
         $file_questions = ServiceQuestionnaire::where('service_id', $service_id)
             ->whereIn('question_type', ['file', 'image'])
             ->where('status', 1)
-            ->get(['id', 'question_type', 'validation_rule']);
+            ->get(['id', 'question_type', 'validation_rule', 'is_required']); 
 
         if ($file_questions->isEmpty()) {
             return;
@@ -523,6 +531,7 @@ class UserServiceApplicationController extends Controller
             $field_key = 'application_data.' . $question->id;
 
             $existing_value = $request->input($field_key);
+
             if (is_string($existing_value) && (
                 str_starts_with($existing_value, 'uploads/') ||
                 str_starts_with($existing_value, 'http://') ||
@@ -531,15 +540,17 @@ class UserServiceApplicationController extends Controller
                 continue;
             }
 
-            $rule_string = 'nullable|file';
+            $rule_string = ($question->is_required === 'yes') ? 'required|file' : 'nullable|file';
+
             $validation_rule = $question->validation_rule ? json_decode($question->validation_rule, true) : [];
 
-            if (!empty($validation_rule['mimes'])) {
+            if (!empty($validation_rule['mimes']) && is_array($validation_rule['mimes'])) {
                 $rule_string .= '|mimes:' . implode(',', $validation_rule['mimes']);
             }
 
-            if (!empty($validation_rule['max_size_mb']) && $validation_rule['max_size_mb'] > 0) {
-                $rule_string .= '|max:' . ($validation_rule['max_size_mb'] * 1024);
+            $max_mb = (int) ($validation_rule['max_size_mb'] ?? 0);
+            if ($max_mb > 0) {
+                $rule_string .= '|max:' . ($max_mb * 1024); 
             }
 
             $rules[$field_key] = $rule_string;
