@@ -418,6 +418,7 @@ class UserController extends Controller
                         'hierarchy_level' => $request->hierarchy_level,
                         'is_active' => 1,
                         'created_by' =>  $auth_user->email_id,
+                        'updated_by' =>  $auth_user->email_id,
                         'inspector' =>  $request->inspector ?? "no"
                     ]);
                 }
