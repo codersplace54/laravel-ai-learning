@@ -229,7 +229,7 @@ class UserIncentiveApplicationController extends Controller
                     ], 422);
                 }
 
-                if (empty($application->application_no)) {
+                if (empty($application->application_no) && $request->save_data !== 1 ) {
                     $application->application_no = 'INE-' . date('y') . '-' . str_pad((string)$application->id, 6, '0', STR_PAD_LEFT);
                 }
 
