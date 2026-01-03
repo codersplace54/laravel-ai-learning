@@ -82,6 +82,19 @@
                                                     @if (!empty($row['count']))
                                                         , Count: <strong>{{ $row['count'] }}</strong>
                                                     @endif
+
+                                                    @if (!empty($row['unique_values']) && is_array($row['unique_values']))
+                                                        <br><strong>Conflicting Values:</strong>
+                                                        <ul class="mt-1 mb-0">
+                                                            @foreach ($row['unique_values'] as $values)
+                                                                <li>
+                                                                    Mobile: {{ $values['mobile_no'] ?? 'N/A' }}, 
+                                                                    Email: {{ $values['email_id'] ?? 'N/A' }}, 
+                                                                    Old ID: {{ $values['old_id'] ?? 'N/A' }}
+                                                                </li>
+                                                            @endforeach
+                                                        </ul>
+                                                    @endif
                                                 </li>
                                             @endforeach
                                         </ul>

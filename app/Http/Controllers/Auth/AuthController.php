@@ -455,8 +455,8 @@ class AuthController extends Controller
                 ]);
             }
 
-            $sms = SmsService::buildSmsMessage('user_registration_otp', [
-                '#var#' => $otp_code,
+            $sms = SmsService::buildSmsMessage('action_verification_otp', [
+                'OTP_CODE' => $otp_code,
             ]);
 
             $sms_result = SmsService::send(

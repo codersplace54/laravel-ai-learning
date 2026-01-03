@@ -109,11 +109,11 @@ class PanVerificationService
         $body_json = json_encode($payload['body'], JSON_UNESCAPED_SLASHES);
         
         // Log request for debugging
-        Log::info('PAN API Request', [
-            'headers' => $headers,
-            'body' => $body_json,
-            'endpoint' => $this->config['api_url']
-        ]);
+        // Log::info('PAN API Request', [
+        //     'headers' => $headers,
+        //     'body' => $body_json,
+        //     'endpoint' => $this->config['api_url']
+        // ]);
         
         $response = Http::timeout($this->config['timeout'])
             ->withOptions([
@@ -157,12 +157,12 @@ class PanVerificationService
         file_put_contents(storage_path('logs/last_request_headers.txt'), implode("\n", $headers_text));
         file_put_contents(storage_path('logs/last_request_body.json'), json_encode($request['body'], JSON_UNESCAPED_SLASHES));
         
-        Log::info('PAN verification transaction', [
-            'request_headers' => $request['headers'],
-            'request_body' => $request['body'],
-            'response' => $response,
-            'timestamp' => now()
-        ]);
+        // Log::info('PAN verification transaction', [
+        //     'request_headers' => $request['headers'],
+        //     'request_body' => $request['body'],
+        //     'response' => $response,
+        //     'timestamp' => now()
+        // ]);
     }
 
     /**

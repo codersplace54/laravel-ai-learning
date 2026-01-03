@@ -103,11 +103,21 @@ class UserImport
             // DB skip can happen due to unique indexes (mobile/email/old_id etc.)
             $this->skipped_count += $skipped_in_db;
 
+            $unique_values = [];
+            foreach ($chunk_rows as $row) {
+                $unique_values[] = [
+                    'mobile_no' => $row['mobile_no'] ?? null,
+                    'email_id' => $row['email_id'] ?? null,
+                    'old_id' => $row['old_id'] ?? null,
+                ];
+            }
+
             $this->skipped_rows[] = [
                 'row_index' => $index,
                 'uid'       => null,
                 'mobile_no' => null,
                 'reason'    => 'insert_or_ignore_skipped_due_to_db_unique',
+                'unique_values' => $unique_values,
                 'count'     => $skipped_in_db,
             ];
         }

@@ -21,7 +21,7 @@ return [
         'message' => 'Dear Sir/Madam, payment of Rs. {AMOUNT} is successful against GRN {GRN}. Please login to the website www.swaagat.tripura.gov.in to check details.',
     ],
     
-    'profile_update_otp' => [
+    'action_verification_otp' => [
         'template_id' => '1007713532832471140',
         'message' => 'Dear Sir/Madam, Your One Time Password (OTP) is {OTP_CODE}. One Time Password (OTP) will be automatically expired after 10 Minutes. Do Not Share the OTP with anyone. Use this access code to validate your action in www.swaagat.tripura.gov.in.',
     ],

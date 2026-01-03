@@ -863,7 +863,7 @@ class UserController extends Controller
                 ]);
             }
 
-            $sms = SmsService::buildSmsMessage('profile_update_otp', [
+            $sms = SmsService::buildSmsMessage('action_verification_otp', [
                 'OTP_CODE' => $otp_code,
             ]);
 
