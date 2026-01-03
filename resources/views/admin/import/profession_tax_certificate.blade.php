@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Import Profession Tax Certificate (Excel)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+</head>
+
+<body class="bg-light">
+
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">Import Profession Tax Certificate (Excel)</h1>
+            <a href="{{ url()->previous() }}" class="btn btn-outline-secondary btn-sm">
+                ← Back
+            </a>
+        </div>
+
+        @if (session('success'))
+            <div class="alert alert-success">
+                {{ session('success') }}
+            </div>
+
+            @if (session('skipped_count', 0) > 0)
+                @php
+                    $reason_labels = [
+                        'missing_noc_details_id' => 'Missing NOC details ID',
+                        'missing_old_user_id' => 'Missing old user ID',
+                        'user_not_found' => 'User not found / not mapped',
+                        'unknown' => 'Unknown',
+                    ];
+
+                    $grouped = session('skipped_grouped', []);
+                @endphp
+
+                <div class="alert alert-warning mt-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <strong>Skipped Rows</strong>
+                        <span class="badge bg-dark">Total: {{ session('skipped_count') }}</span>
+                    </div>
+
+                    <div class="accordion mt-3" id="skippedAccordion">
+                        @foreach ($grouped as $reason_key => $group)
+                            @php
+                                $title = $reason_labels[$reason_key] ?? $reason_key;
+                                $collapse_id = 'collapse_' . $reason_key;
+                                $heading_id = 'heading_' . $reason_key;
+                            @endphp
+
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="{{ $heading_id }}">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                        data-bs-target="#{{ $collapse_id }}" aria-expanded="false"
+                                        aria-controls="{{ $collapse_id }}">
+                                        {{ $title }}
+                                        <span class="ms-2 badge bg-secondary">{{ $group['count'] }}</span>
+                                    </button>
+                                </h2>
+
+                                <div id="{{ $collapse_id }}" class="accordion-collapse collapse"
+                                    aria-labelledby="{{ $heading_id }}" data-bs-parent="#skippedAccordion">
+
+                                    <div class="accordion-body">
+                                        <ul class="mb-0">
+                                            @foreach ($group['rows'] as $row)
+                                                <li class="mb-1">
+                                                    Row: <strong>{{ $row['row'] ?? 'N/A' }}</strong>,
+                                                    Old ID: {{ $row['old_id'] ?? 'N/A' }},
+                                                    Old User ID: {{ $row['old_user_id'] ?? 'N/A' }},
+                                                    Reason: {{ $row['reason'] ?? 'N/A' }}
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+            @if (session('assignment_skipped_count', 0) > 0)
+                @php
+                    $assignment_reason_labels = [
+                        'service_flow_not_found' => 'Service flow not found',
+                        'first_step_flow_not_found' => 'First step flow not found',
+                        'ignored_due_to_status' => 'Ignored due to status',
+                        'unknown' => 'Unknown',
+                    ];
+
+                    $assignment_grouped = session('assignment_skipped_grouped', []);
+
+                    $assignment_grouped_formatted = [];
+                    foreach ($assignment_grouped as $reason_key => $rows) {
+                        $assignment_grouped_formatted[$reason_key] = [
+                            'count' => count($rows),
+                            'rows' => $rows,
+                        ];
+                    }
+                @endphp
+
+                <div class="alert alert-warning mt-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <strong>Assignment Skipped Rows</strong>
+                        <span class="badge bg-dark">Total: {{ session('assignment_skipped_count') }}</span>
+                    </div>
+
+                    <div class="accordion mt-3" id="assignmentSkippedAccordion">
+                        @foreach ($assignment_grouped_formatted as $reason_key => $group)
+                            @php
+                                $title = $assignment_reason_labels[$reason_key] ?? $reason_key;
+                                $collapse_id = 'a_collapse_' . $reason_key;
+                                $heading_id = 'a_heading_' . $reason_key;
+                            @endphp
+
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="{{ $heading_id }}">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                        data-bs-target="#{{ $collapse_id }}" aria-expanded="false"
+                                        aria-controls="{{ $collapse_id }}">
+                                        {{ $title }}
+                                        <span class="ms-2 badge bg-secondary">{{ $group['count'] }}</span>
+                                    </button>
+                                </h2>
+
+                                <div id="{{ $collapse_id }}" class="accordion-collapse collapse"
+                                    aria-labelledby="{{ $heading_id }}" data-bs-parent="#assignmentSkippedAccordion">
+                                    <div class="accordion-body">
+                                        <ul class="mb-0">
+                                            @foreach ($group['rows'] as $r)
+                                                <li class="mb-1">
+                                                    Row: <strong>{{ $r['row'] ?? 'N/A' }}</strong>,
+                                                    Old ID: {{ $r['old_id'] ?? 'N/A' }},
+                                                    Service ID: {{ $r['service_id'] ?? 'N/A' }},
+                                                    Status: {{ $r['status'] ?? 'N/A' }},
+                                                    Reason: {{ $r['reason'] ?? 'N/A' }}
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+            @if (session('history_skipped_count', 0) > 0)
+                @php
+                    $history_reason_labels = [
+                        'service_flow_not_found' => 'Service flow not found',
+                        'first_step_flow_not_found' => 'First step flow not found',
+                        'missing_application_or_service_id' => 'Missing application or service ID',
+                        'ignored_due_to_status' => 'Ignored due to status',
+                        'unknown' => 'Unknown',
+                    ];
+
+                    $history_grouped = session('history_skipped_grouped', []);
+
+                    $history_grouped_formatted = [];
+                    foreach ($history_grouped as $reason_key => $rows) {
+                        $history_grouped_formatted[$reason_key] = [
+                            'count' => count($rows),
+                            'rows' => $rows,
+                        ];
+                    }
+                @endphp
+
+                <div class="alert alert-warning mt-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <strong>History Skipped Rows</strong>
+                        <span class="badge bg-dark">Total: {{ session('history_skipped_count') }}</span>
+                    </div>
+
+                    <div class="accordion mt-3" id="historySkippedAccordion">
+                        @foreach ($history_grouped_formatted as $reason_key => $group)
+                            @php
+                                $title = $history_reason_labels[$reason_key] ?? $reason_key;
+                                $collapse_id = 'h_collapse_' . $reason_key;
+                                $heading_id = 'h_heading_' . $reason_key;
+                            @endphp
+
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="{{ $heading_id }}">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                        data-bs-target="#{{ $collapse_id }}" aria-expanded="false"
+                                        aria-controls="{{ $collapse_id }}">
+                                        {{ $title }}
+                                        <span class="ms-2 badge bg-secondary">{{ $group['count'] }}</span>
+                                    </button>
+                                </h2>
+
+                                <div id="{{ $collapse_id }}" class="accordion-collapse collapse"
+                                    aria-labelledby="{{ $heading_id }}" data-bs-parent="#historySkippedAccordion">
+                                    <div class="accordion-body">
+                                        <ul class="mb-0">
+                                            @foreach ($group['rows'] as $r)
+                                                <li class="mb-1">
+                                                    Row: <strong>{{ $r['row'] ?? 'N/A' }}</strong>,
+                                                    Old ID: {{ $r['old_id'] ?? 'N/A' }},
+                                                    Service ID: {{ $r['service_id'] ?? 'N/A' }},
+                                                    Status: {{ $r['status'] ?? 'N/A' }},
+                                                    Reason: {{ $r['reason'] ?? 'N/A' }}
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+        @endif
+
+        @if (session('error'))
+            <div class="alert alert-danger">
+                {{ session('error') }}
+            </div>
+        @endif
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <form action="{{ route('admin.import.profession_tax_certificate') }}" method="POST"
+                    enctype="multipart/form-data">
+                    @csrf
+
+                    <div class="mb-3">
+                        <label for="excel_files" class="form-label">Upload Excel Files</label>
+                        <input type="file" name="excel_files[]" id="excel_files" class="form-control" multiple>
+                        <small class="text-muted">
+                            Allowed: <code>.xlsx</code>, <code>.xls</code>, <code>.csv</code>. You can select multiple files.
+                        </small>
+                        @error('excel_files.*')
+                            <div class="text-danger small mt-1">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        Import Profession Tax Certificate
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous">
+    </script>
+
+</body>
+
+</html>

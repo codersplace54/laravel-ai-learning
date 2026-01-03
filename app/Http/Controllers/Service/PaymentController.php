@@ -87,7 +87,7 @@ class PaymentController extends Controller
             $egrasUserId = 'finswgt';
             $valid_upto = Carbon::today()->format('d/m/Y');
 
-            $return_url = request()->getSchemeAndHttpHost() . '/api/user/payment-callback';
+            $return_url = request()->getSchemeAndHttpHost() . 'new/api/user/payment-callback';
             $secret_key = config('egras.secret_key');
 
             $hash_parts = [

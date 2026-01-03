@@ -32,4 +32,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
     Route::get('import-profession-tax-questions', [ImportController::class, 'import_profession_tax_questions_form'])->name('import.profession_tax_questions.form');
     Route::post('import-profession-tax-questions', [ImportController::class, 'import_profession_tax_questions'])->name('import.profession_tax_questions');
+
+    Route::get('import-profession-tax-certificate', [ImportController::class, 'import_profession_tax_certificate_form'])->name('import.profession_tax_certificate.form');
+    Route::post('import-profession-tax-certificate', [ImportController::class, 'import_profession_tax_certificate'])->name('import.profession_tax_certificate');
 });

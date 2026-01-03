@@ -354,7 +354,7 @@ Route::prefix('kya')->group(function () {
     Route::get('/approval-details', [KyaController::class, 'get_approval_details']);
 });
 
-Route::post('user/payment-callback', [PaymentController::class, 'payment_callback']);
+Route::post('new/user/payment-callback', [PaymentController::class, 'payment_callback']);
 Route::post('migration-notice', [MigrationPlanController::class, 'migration_notice']);
 
 Route::prefix('pan')->group(function () {

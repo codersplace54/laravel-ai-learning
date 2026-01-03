@@ -18,6 +18,7 @@ use App\Imports\PartnershipRegistrationImport;
 use App\Imports\PartnershipPartnerImport;
 use App\Imports\ProfessionTaxApplicationImport;
 use App\Imports\ProfessionTaxQuestionImport;
+use App\Imports\ProfessionTaxCertificateImport;
 
 class ImportController extends Controller
 {
@@ -434,6 +435,62 @@ class ImportController extends Controller
             'skipped_count'  => $skipped_count,
             'updated_count'  => $updated_count,
             'skipped_grouped' => $grouped,
+        ]);
+    }
+
+    public function import_profession_tax_certificate_form()
+    {
+        return view('admin.import.profession_tax_certificate');
+    }
+
+    public function import_profession_tax_certificate(Request $request)
+    {
+        $request->validate([
+            'excel_files.*' => 'required|file|mimes:xlsx,xls,csv',
+        ]);
+
+        $files = $request->file('excel_files');
+        $all_skipped_rows = [];
+        $all_assignment_skipped_rows = [];
+        $all_history_skipped_rows = [];
+
+        foreach ($files as $file) {
+            $import = new ProfessionTaxCertificateImport();
+            Excel::import($import, $file);
+
+            $all_skipped_rows = array_merge($all_skipped_rows, $import->skipped_rows ?? []);
+            $all_assignment_skipped_rows = array_merge($all_assignment_skipped_rows, $import->assignment_skipped_rows ?? []);
+            $all_history_skipped_rows = array_merge($all_history_skipped_rows, $import->history_skipped_rows ?? []);
+        }
+
+        $skipped_count = count($all_skipped_rows);
+
+        $grouped = collect($all_skipped_rows)
+            ->groupBy(fn($r) => $r['reason_key'] ?? 'unknown')
+            ->map(fn($items) => [
+                'count' => $items->count(),
+                'rows'  => $items->values()->all(),
+            ])
+            ->toArray();
+
+        $assignment_skipped_grouped = collect($all_assignment_skipped_rows)
+            ->groupBy('reason')
+            ->toArray();
+
+        $history_skipped_grouped = collect($all_history_skipped_rows)
+            ->groupBy('reason')
+            ->toArray();
+
+        return back()->with([
+            'success'                    => 'Profession Tax Certificate import completed successfully.',
+            'skipped_count'              => $skipped_count,
+            'skipped_grouped'            => $grouped,
+            'assignment_skipped_rows'    => $all_assignment_skipped_rows,
+            'assignment_skipped_count'   => count($all_assignment_skipped_rows),
+            'assignment_skipped_grouped' => $assignment_skipped_grouped,
+            'history_skipped_rows'       => $all_history_skipped_rows,
+            'history_skipped_count'      => count($all_history_skipped_rows),
+            'history_skipped_grouped'    => $history_skipped_grouped,
         ]);
     }
 }
