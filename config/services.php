@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'otp_sms' => [
+        'secret_key' => env('OTP_SMS_SECRET_KEY'),
+    ],
+
 ];

@@ -9,11 +9,11 @@ class SmsService
 
     public static function send(string $mobile_no, string $message, string $dlt_template_id): array
     {
-        $gateway_url   = config('sms.gateway_url');
-        $user_name     = config('sms.username');
-        $pin           = config('sms.pin');
-        $signature     = config('sms.signature');
-        $dlt_entity_id = config('sms.dlt_entity_id');
+            $gateway_url   = config('sms.gateway_url');
+            $user_name     = config('sms.username');
+            $pin           = config('sms.pin');
+            $signature     = config('sms.signature');
+            $dlt_entity_id = config('sms.dlt_entity_id');
 
         if (! $gateway_url || ! $user_name || ! $pin || ! $signature || ! $dlt_entity_id) {
             Log::error('sms_config_missing');

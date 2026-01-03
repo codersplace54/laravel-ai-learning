@@ -229,6 +229,10 @@ class ExistingLicenseController extends Controller
                 }
             }
 
+            $license->license_file = $license->license_file
+                ? Storage::disk('public')->url($license->license_file)
+                : null;
+
             return response()->json([
                 'status' => 1,
                 'message' => 'License details fetched successfully',
