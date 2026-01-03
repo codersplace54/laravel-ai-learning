@@ -9,6 +9,7 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Exception;
 use App\Models\JWTToken;
 use App\Models\Otp;
@@ -403,10 +404,10 @@ class AuthController extends Controller
             $phone_or_pan = trim($request->phone_or_pan);
 
             if (preg_match('/[A-Za-z]/', $phone_or_pan)) {
-                
+
                 $pan_no = strtoupper($phone_or_pan);
                 $user = User::where('pan', $pan_no)->first();
-                
+
                 if (! $user) {
                     return response()->json([
                         'status'  => 0,
@@ -415,7 +416,7 @@ class AuthController extends Controller
                 }
             } else {
                 $user = User::where('mobile_no', $phone_or_pan)->first();
-                
+
                 if (! $user) {
                     return response()->json([
                         'status'  => 0,
@@ -512,10 +513,10 @@ class AuthController extends Controller
             $otp_code     = $request->otp_code;
 
             if (preg_match('/[A-Za-z]/', $phone_or_pan)) {
-                
+
                 $pan_no = strtoupper($phone_or_pan);
                 $user = User::where('pan', $pan_no)->first();
-                
+
                 if (! $user) {
                     return response()->json([
                         'status'  => 0,
@@ -523,9 +524,9 @@ class AuthController extends Controller
                     ], 404);
                 }
             } else {
-                
+
                 $user = User::where('mobile_no', $phone_or_pan)->first();
-                
+
                 if (! $user) {
                     return response()->json([
                         'status'  => 0,
@@ -597,7 +598,7 @@ class AuthController extends Controller
             if (preg_match('/[A-Za-z]/', $phone_or_pan)) {
                 $pan_no = strtoupper($phone_or_pan);
                 $user = User::where('pan', $pan_no)->first();
-                
+
                 if (! $user) {
                     return response()->json([
                         'status'  => 0,
@@ -606,7 +607,7 @@ class AuthController extends Controller
                 }
             } else {
                 $user = User::where('mobile_no', $phone_or_pan)->first();
-                
+
                 if (! $user) {
                     return response()->json([
                         'status'  => 0,
@@ -775,6 +776,17 @@ class AuthController extends Controller
                     'message' => 'Unauthorized'
                 ], 403);
             }
+            $adminToken = JWTAuth::fromUser($admin);
+
+            Cache::put(
+                'admin_impersonate_' . $admin->id,
+                [
+                    'admin_id'    => $admin->id,
+                    'admin_token' => (string) $adminToken,
+                    'return_url'  => $request->header('Referer') ?? '/dashboard/home',
+                ],
+                now()->addMinutes(60)
+            );
 
             $user = User::find($request->user_id);
 
@@ -785,7 +797,9 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            $token = JWTAuth::fromUser($user);
+            $token = JWTAuth::claims([
+                'admin_id' => $admin->id
+            ])->fromUser($user);
 
             JWTToken::create([
                 'user_id' => $user->id,
@@ -826,7 +840,10 @@ class AuthController extends Controller
                 'token' => $token,
                 'token_type' => 'bearer',
                 'expires_in' => JWTAuth::factory()->getTTL() * 60,
-                'data' => $data
+                'data' => $data,
+                'admin_id' => $admin->id,
+                'back_to_admin_url' => url('/api/admin/return-to-admin'),
+                'logged_by_admin' => true
             ]);
         } catch (Exception $e) {
 
@@ -834,6 +851,44 @@ class AuthController extends Controller
             return response()->json([
                 'status' => 0,
                 'message' => 'Failed to login as user',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function return_to_admin(Request $request)
+    {
+
+        try {
+
+            $payload = JWTAuth::parseToken()->getPayload();
+            $adminId = $payload->get('admin_id');
+
+            if (!$adminId) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Not an impersonated session'
+                ], 403);
+            }
+            $adminContext = Cache::get('admin_impersonate_' . $adminId);
+
+            if (!$adminContext) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Admin session expired'
+                ], 403);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'token' => (string) $adminContext['admin_token'],
+                'redirect_url' => $adminContext['return_url'],
+            ]);
+        } catch (Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to return to admin',
                 'error' => $e->getMessage()
             ], 500);
         }

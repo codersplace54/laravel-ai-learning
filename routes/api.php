@@ -115,6 +115,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::prefix('admin')->group(function () {
 
         Route::post('login-by-admin', [AuthController::class, 'login_by_admin']);
+        Route::post('return-to-admin', [AuthController::class, 'return_to_admin']);
 
         Route::prefix('incentive')->group(function () {
 
@@ -183,6 +184,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('existing-license-details', [ExistingLicenseController::class, 'existing_license_details']);
 
         Route::post('get-all-applications-list', [UserServiceApplicationController::class, 'get_all_applications_list']);
+        Route::post('get-all-applications-details', [UserServiceApplicationController::class, 'get_all_applications_details']);
         Route::post('applications/export-full', [UserServiceApplicationController::class, 'export_all_applications']);
         Route::post('applications/export-filtered', [UserServiceApplicationController::class, 'export_filtered_applications']);
         Route::post('mark-application-paid', [UserServiceApplicationController::class, 'mark_application_paid']);

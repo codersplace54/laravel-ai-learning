@@ -100,6 +100,8 @@ class DashboardController extends Controller
 
             $services = ServiceMaster::withCount('applications')
                 ->where('department_id', $department_id)
+                ->orderByRaw('applications_count = 0')
+                ->orderBy('id', 'desc')
                 ->get(['id', 'service_title_or_description']);
 
             $application_count_per_service = $services->map(function ($service) {
@@ -369,7 +371,10 @@ class DashboardController extends Controller
 
             $services = ServiceMaster::withCount(['applications as user_application_count' => function ($q) use ($user_id) {
                 $q->where('user_id', $user_id);
-            }])->get(['id', 'service_title_or_description']);
+            }])
+                ->orderByRaw('user_application_count = 0')
+                ->orderBy('id', 'desc')
+                ->get(['id', 'service_title_or_description']);
 
             $application_count_per_service = $services->map(function ($service) {
                 return [
@@ -504,6 +509,8 @@ class DashboardController extends Controller
                 : 0;
 
             $services = ServiceMaster::withCount('applications')
+                ->orderByRaw('applications_count = 0')
+                ->orderBy('id', 'desc')
                 ->get(['id', 'service_title_or_description']);
 
             $application_count_per_service = $services->map(function ($service) {

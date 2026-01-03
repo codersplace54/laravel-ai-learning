@@ -685,6 +685,8 @@ class ServiceController extends Controller
                 'is_finally_approved'  => $is_finally_approved,
                 'history_data'    => $history_data,
                 'is_certificate_generated'    => $application->NOC_certificate ? true : false,
+                'created_at'    => $application->created_at,
+                'updated_at'    => $application->updated_at,
             ];
 
             return response()->json([
