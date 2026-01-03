@@ -451,7 +451,7 @@ class UserServiceApplicationController extends Controller
                     }
                     DB::commit();
 
-                    if ($status === 'saved') {
+                    if ($status === 'saved' || ($status === 'submitted' && $user_service_application->total_fee == 0)) {
                         $sms = SmsService::buildSmsMessage('application_saved', [
                             'APP_NO' => $user_service_application->applicationId,
                             'DEPT_NAME' => $department_name ?? 'the department',
@@ -519,7 +519,7 @@ class UserServiceApplicationController extends Controller
         $file_questions = ServiceQuestionnaire::where('service_id', $service_id)
             ->whereIn('question_type', ['file', 'image'])
             ->where('status', 1)
-            ->get(['id', 'question_type', 'validation_rule', 'is_required']); 
+            ->get(['id', 'question_type', 'validation_rule', 'is_required']);
 
         if ($file_questions->isEmpty()) {
             return;
@@ -550,7 +550,7 @@ class UserServiceApplicationController extends Controller
 
             $max_mb = (int) ($validation_rule['max_size_mb'] ?? 0);
             if ($max_mb > 0) {
-                $rule_string .= '|max:' . ($max_mb * 1024); 
+                $rule_string .= '|max:' . ($max_mb * 1024);
             }
 
             $rules[$field_key] = $rule_string;
@@ -2968,5 +2968,145 @@ class UserServiceApplicationController extends Controller
         }
 
         return $application_data;
+    }
+
+    public function get_all_applications_details(Request $request)
+    {
+        try {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'service_id' => 'required|integer|exists:service_masters,id',
+                'per_page' => 'nullable|integer'
+            ]);
+
+            $per_page = $request->per_page ?? 10;
+
+            $query = $query = UserServiceApplication::orderBy('id', 'DESC');
+
+            if ($request->filled('service_id')) {
+                $query->where('service_id', $request->service_id);
+            }
+
+            if ($request->filled('department_id')) {
+                $query->whereHas('service', function ($q) use ($request) {
+                    $q->where('department_id', $request->department_id);
+                });
+            }
+
+            if ($request->filled('application_type')) {
+                $query->whereHas('service', function ($q) use ($request) {
+                    $q->where('noc_type', $request->application_type);
+                });
+            }
+
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $query->where(function ($q) use ($search) {
+                    $q->where('applicationId', 'LIKE', "%{$search}%")
+                        ->orWhereHas('user', function ($u) use ($search) {
+                            $u->where('name_of_enterprise', 'LIKE', "%{$search}%")
+                                ->orWhere('email_id', 'LIKE', "%{$search}%");
+                        });
+                });
+            }
+
+            if ($request->filled('mobile_no')) {
+                $query->whereHas('user', function ($q) use ($request) {
+                    $q->where('mobile_no', 'LIKE', "%{$request->mobile_no}%");
+                });
+            }
+
+            if ($request->filled('payment_status')) {
+                $query->where('payment_status', $request->payment_status);
+            }
+
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+
+            if ($request->filled('date_from') && $request->filled('date_to')) {
+                $query->whereBetween('application_date', [$request->date_from, $request->date_to]);
+            } elseif ($request->filled('date_from')) {
+                $query->whereDate('application_date', '>=', $request->date_from);
+            } elseif ($request->filled('date_to')) {
+                $query->whereDate('application_date', '<=', $request->date_to);
+            }
+
+            $applications = $query->paginate($per_page);
+
+            if ($applications->isEmpty()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No applications found.'
+                ], 404);
+            }
+
+            $response_data = [];
+
+            foreach ($applications as $app) {
+                $app->application_data = json_decode($app->application_data, true);
+
+                $latest_workflow = $app->workflow()->latest('updated_at')->first();
+                $history_data = $app->workflow()->orderBy('id', 'desc')->get()->map(function ($history) {
+                    return [
+                        'id'              => $history->id,
+                        'step_number'     => $history->step_number,
+                        'status'          => $history->status,
+                        'step_type'       => $history->step_type,
+                        'remarks'         => $history->remarks,
+                        'status_file'     => $history->status_file ? asset('storage/' . $history->status_file) : null,
+                        'action_taken_at' => $history->action_taken_at,
+                        'action_taken_by' => $history->action_taken_by,
+                    ];
+                });
+
+                $response_data[] = [
+                    'application_id' => $app->id,
+                    'service_id' => $app->service_id,
+                    'application_data' => $app->application_data,
+                    'service_title_or_description' => $app->service->service_title_or_description ?? null,
+                    'application_type' => $app->service->noc_type ?? null,
+                    'department_id' => $app->service->department_id ?? null,
+                    'department_name' => $app->service->department->name ?? null,
+                    'application_number' => $app->applicationId ?? null,
+                    'application_date' => $app->application_date ?? null,
+                    'noc_payment_type' => $app->noc_payment_type ?? null,
+                    'NOC_expiry_date'  => $app->NOC_expiry_date ?? null,
+                    'payment_status'  => $app->payment_status ?? null,
+                    'status'  => $app->status ?? null,
+                    'renewal_date'  => $app->renewalYear ?? null,
+                    'allow_repeat_application' => $app->allow_repeat_application ?? null,
+                    'latest_workflow_status' => $latest_workflow?->status ?? null,
+                    'service_mode' => $app->service->service_mode ?? null,
+                    'already_rated' => $app->my_feedback ? true : false,
+                    'rating' => $app->my_feedback->satisfaction ?? null,
+                    'is_certificate' => $app->NOC_application_date,
+                    'workflow_history' => $history_data,
+                ];
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Applications fetched successfully.',
+                'data' => $response_data,
+                'pagination' => [
+                    'current_page' => $applications->currentPage(),
+                    'per_page'     => $applications->count(),
+                    'total'        => $applications->total(),
+                    'last_page'    => $applications->lastPage(),
+                    'next_page_url' => $applications->nextPageUrl(),
+                    'prev_page_url' => $applications->previousPageUrl(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 }
