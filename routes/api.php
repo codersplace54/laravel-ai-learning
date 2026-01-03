@@ -364,3 +364,6 @@ Route::prefix('pan')->group(function () {
     Route::post('verify-multiple', [PanVerificationController::class, 'verify_multiple_pans']);
     Route::get('status-codes', [PanVerificationController::class, 'get_status_codes']);
 });
+
+Route::post('/external-send-otp-sms', [AuthController::class, 'external_send_otp']);
+
