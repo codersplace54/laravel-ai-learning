@@ -17,6 +17,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use App\Services\SmsService;
+use App\Services\ExternalSmsService;
 
 class AuthController extends Controller
 {
@@ -855,7 +856,7 @@ class AuthController extends Controller
             ], 500);
         }
     }
-
+    
     public function return_to_admin(Request $request)
     {
 
@@ -890,6 +891,93 @@ class AuthController extends Controller
                 'status' => 0,
                 'message' => 'Failed to return to admin',
                 'error' => $e->getMessage()
+                 ], 500);
+        }
+    }
+
+    //For external portals 
+    public function external_send_otp(Request $request)
+    {
+        try {
+            $request->validate([
+                'mobile_no'       => 'required|string|max:15',
+                'template_msg'    => 'required|string',
+                'dlt_template_id' => 'required|string',
+                'gateway_url'     => 'required|string',
+                'username'        => 'required|string',
+                'pin'             => 'required|string',
+                'signature'       => 'required|string',
+                'dlt_entity_id'   => 'required|string',
+            ]);
+
+            $secret_key = config('services.otp_sms.secret_key');
+            $signature  = $request->header('X-Signature');
+
+            // Log::info('SIGNATURE_DEBUG', [
+            //     'signature' => $signature,
+            //     'signature_type' => gettype($signature),
+            //     'signature_empty' => empty($signature),
+            //     'secret_key_exists' => !empty($secret_key),
+            // ]);
+
+            if (empty($signature)) {
+                return response()->json(['status' => 0, 'message' => 'Missing signature.'], 401);
+            }
+
+            $expected = base64_encode(
+                hash_hmac('sha256', $request->mobile_no, $secret_key, true)
+            );
+
+            // Log::info('EXPECTED_SIGNATURE', [
+            //     'signature' => $expected,
+            //     'signature_type' => gettype($expected),
+            //     'signature_empty' => empty($expected),
+            //     'secret_key_exists' => !empty($secret_key),
+            // ]);
+
+            if (! hash_equals($expected, $signature)) {
+                return response()->json(['status' => 0, 'message' => 'Unauthorized request.'], 401);
+            }
+
+            $gateway_config = [
+                'gateway_url'   => $request->gateway_url,
+                'username'      => $request->username,
+                'pin'           => $request->pin,
+                'signature'     => $request->signature,
+                'dlt_entity_id' => $request->dlt_entity_id,
+            ];
+
+            $sms_result = ExternalSmsService::send(
+                $request->mobile_no,
+                $request->template_msg,
+                $request->dlt_template_id,
+                $gateway_config
+            );
+
+            if (!($sms_result['success'] ?? false)) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'SMS gateway failed.',
+                    'gateway' => $sms_result,
+                ], 502);
+            }
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'SMS sent successfully.',
+                'gateway' => $sms_result,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Failed to send SMS.',
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }

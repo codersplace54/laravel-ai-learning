@@ -451,6 +451,10 @@ class PaymentController extends Controller
                     $payment_type = 'Application Fee Payment';
                 }
 
+                if ($amount == 0) {
+                    continue;
+                }
+
                 $response_data[] = [
                     'user_service_application_id' => $application->id,
                     'application_id' => $application->applicationId,
