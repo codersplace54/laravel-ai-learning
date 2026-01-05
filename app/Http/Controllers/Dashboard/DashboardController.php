@@ -273,6 +273,10 @@ class DashboardController extends Controller
                 ->distinct('application_id')
                 ->count('application_id');
 
+            $total_individual_users = User::whereNull('old_id')
+                ->where('user_type', 'individual')
+                ->count();
+
 
             return response()->json([
                 'status'            => 1,
@@ -293,7 +297,8 @@ class DashboardController extends Controller
                 'license_issued_per_service'     => $license_issued_per_service,
                 'avg_approval_time_per_service'  => $avg_approval_time_per_service,
                 'total_pending_for_me'          => $total_pending_for_me,
-                'total_approved_by_me'          => $total_approved_by_me
+                'total_approved_by_me'          => $total_approved_by_me,
+                'total_individual_users'        => $total_individual_users
             ], 200);
         } catch (\Exception $e) {
 
@@ -521,6 +526,9 @@ class DashboardController extends Controller
                 ];
             });
 
+            $total_individual_users = User::whereNull('old_id')
+                ->where('user_type', 'individual')
+                ->count();
 
 
             return response()->json([
@@ -535,6 +543,7 @@ class DashboardController extends Controller
                 'total_count_approved_application' => $total_count_approved_application,
                 'total_count_rejected_application' => $total_count_rejected_application,
                 'application_count_per_service' => $application_count_per_service,
+                'total_individual_users'        => $total_individual_users,
 
             ], 200);
         } catch (\Exception $e) {
