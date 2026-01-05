@@ -45,13 +45,6 @@ class ExternalSmsService
         $status   = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        Log::info('EXTERNAL_SMS_GATEWAY_RESPONSE', [
-            'status_code' => $status,
-            'response' => $response,
-            'error' => $error,
-            'mobile' => $mobile_no,
-        ]);
-
         if ($error) {
             return [
                 'status_code' => 500,
@@ -60,7 +53,6 @@ class ExternalSmsService
             ];
         }
 
-        // Try to decode JSON response, fallback to raw response
         $decoded_response = json_decode($response, true);
         $final_response = $decoded_response ?: $response;
 
