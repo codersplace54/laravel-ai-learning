@@ -18,7 +18,7 @@ class ServiceApplicationExport implements FromCollection, WithHeadings, WithMapp
     {
         $user = Auth::user();
 
-        $hierarchy_level = $user->department_user->hierarchy_level;
+        $hierarchy_level = $user->department_user?->hierarchy_level;
 
         $application_ids = ApplicationWorkflowAssignment::where('status', 'pending')
             ->where('hierarchy_level', $hierarchy_level)

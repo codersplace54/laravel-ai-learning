@@ -526,20 +526,40 @@ class UserServiceApplicationController extends Controller
         }
 
         $rules = [];
+        $existing_application = null;
+        
+        if ($request->filled('id')) {
+            $existing_application = UserServiceApplication::find($request->id);
+        }
 
         foreach ($file_questions as $question) {
             $field_key = 'application_data.' . $question->id;
-
             $existing_value = $request->input($field_key);
-
-            if (is_string($existing_value) && (
+            $has_file_upload = $request->hasFile($field_key);
+            
+            if (!$existing_value && !$has_file_upload) {
+                $all_app_data = $request->input('application_data', []);
+                $existing_value = $this->find_nested_value($all_app_data, $question->id);
+            }
+            
+            $is_existing_file = is_string($existing_value) && (
                 str_starts_with($existing_value, 'uploads/') ||
                 str_starts_with($existing_value, 'http://') ||
                 str_starts_with($existing_value, 'https://')
-            )) {
+            );
+            
+            $has_existing_file = false;
+            if ($existing_application && $existing_application->application_data) {
+                $app_data = is_array($existing_application->application_data) 
+                    ? $existing_application->application_data 
+                    : json_decode($existing_application->application_data, true);
+                $has_existing_file = $this->find_nested_value($app_data, $question->id) !== null;
+            }
+            
+            if ($is_existing_file || (!$has_file_upload && $has_existing_file)) {
                 continue;
             }
-
+            
             $rule_string = ($question->is_required === 'yes') ? 'required|file' : 'nullable|file';
 
             $validation_rule = $question->validation_rule ? json_decode($question->validation_rule, true) : [];
@@ -555,10 +575,31 @@ class UserServiceApplicationController extends Controller
 
             $rules[$field_key] = $rule_string;
         }
-
+        
         if (!empty($rules)) {
             $request->validate($rules);
         }
+    }
+    
+    private function find_nested_value($data, $question_id)
+    {
+        if (!is_array($data)) {
+            return null;
+        }
+        
+        foreach ($data as $key => $value) {
+            if ($key == $question_id) {
+                return $value;
+            }
+            if (is_array($value)) {
+                $result = $this->find_nested_value($value, $question_id);
+                if ($result !== null) {
+                    return $result;
+                }
+            }
+        }
+        
+        return null;
     }
 
 
