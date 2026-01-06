@@ -871,19 +871,43 @@ class AuthController extends Controller
                     'message' => 'Not an impersonated session'
                 ], 403);
             }
-            $adminContext = Cache::get('admin_impersonate_' . $adminId);
+            $admin = User::where('id', $adminId)
+                ->where('user_type', 'admin')
+                ->first();
 
-            if (!$adminContext) {
-                return response()->json([
-                    'status' => 0,
-                    'message' => 'Admin session expired'
-                ], 403);
-            }
+            $token = JWTAuth::fromUser($admin);
+            JWTToken::create([
+                'user_id' => $admin->id,
+                'token' => $token,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->header('User-Agent'),
+                'expires_at' => now()->addMinutes(JWTAuth::factory()->getTTL()),
+                'last_activity_at' => now(),
+            ]);
+
+            $data = $admin->only([
+                'id',
+                'authorized_person_name',
+                'name_of_enterprise',
+                'email_id',
+                'user_name',
+                'bin',
+                'pan',
+                'user_type',
+            ]);
+
+            $data['district']    = $admin->district_id    ? $admin->district?->district_name : null;
+            $data['subdivision'] = $admin->subdivision_id ? $admin->subdivision?->sub_division : null;
+            $data['ulb']         = $admin->ulb_id         ? $admin->ulb?->ulb_name : null;
+            $data['ward']        = $admin->ward_id        ? $admin->ward?->name_of_gp_vc_or_ward : null;
 
             return response()->json([
                 'status' => 1,
-                'token' => (string) $adminContext['admin_token'],
-                'redirect_url' => $adminContext['return_url'],
+                'token' => $token,
+                'token_type' => 'bearer',
+                'expires_in' => JWTAuth::factory()->getTTL() * 60,
+                'data' => $data,
+                'logged_by_admin' => false
             ]);
         } catch (Exception $e) {
 
