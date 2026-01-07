@@ -2,10 +2,13 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\ImportController;
+use App\Http\Controllers\Service\PaymentController;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+Route::post('new/user/payment-callback', [PaymentController::class, 'payment_callback']);
 
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('import-society-members', [ImportController::class, 'import_society_members_form'])->name('admin.import.society_members_form');
