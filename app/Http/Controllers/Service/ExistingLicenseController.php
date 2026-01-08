@@ -160,6 +160,7 @@ class ExistingLicenseController extends Controller
 
     public function existing_license_view()
     {
+        // dd(Auth::id());
         try {
             $user_type = User::where('id', Auth::id())->value('user_type');
 
@@ -186,7 +187,7 @@ class ExistingLicenseController extends Controller
                     'licensee_name' => $license->licensee_name,
                     'status' => $license->status,
                     'license_file' => $license->license_file
-                        ? Storage::disk('public')->url($license->license_file)
+                        ? asset('storage/' . $license->license_file)
                         : null,
                     'service_id' => $license->service_id,
                     'department_id' => $license->service?->department_id,
@@ -230,7 +231,7 @@ class ExistingLicenseController extends Controller
             }
 
             $license->license_file = $license->license_file
-                ? Storage::disk('public')->url($license->license_file)
+                ? asset('storage/' . $license->license_file)
                 : null;
 
             return response()->json([
