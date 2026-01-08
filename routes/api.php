@@ -36,6 +36,7 @@ use App\Http\Controllers\Report\UserFeedbackController;
 use App\Http\Controllers\Inspection\InspectionController;
 use App\Http\Controllers\Service\ExistingLicenseController;
 use App\Http\Controllers\Dashboard\DashboardController;
+use App\Http\Controllers\EntityLockerController;
 use App\Http\Controllers\KyaController;
 use App\Http\Controllers\MigrationPlan\MigrationPlanController;
 use App\Http\Controllers\Service\PaymentController;
@@ -366,3 +367,6 @@ Route::prefix('pan')->group(function () {
 
 Route::post('/external-send-otp-sms', [AuthController::class, 'external_send_otp']);
 
+Route::post('entity_locker-initiate', [EntityLockerController::class, 'initiate_auth']);
+Route::get('entity_locker', [EntityLockerController::class, 'handle_callback']);
+Route::post('entity_locker-documents', [EntityLockerController::class, 'user_documents']);

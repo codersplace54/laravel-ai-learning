@@ -371,9 +371,11 @@ class UserServiceApplicationController extends Controller
                         );
                     }
 
+                    $message = $status === 'draft' ? 'Application saved as draft successfully.' : 'Application updated successfully.';
+                    
                     return response()->json([
                         'status'  => 1,
-                        'message' => 'Application updated successfully.',
+                        'message' => $message,
                         'data' => $user_service_application
                     ], 200);
                 } else {
@@ -465,9 +467,11 @@ class UserServiceApplicationController extends Controller
                     }
 
 
+                    $message = $status === 'draft' ? 'Application saved as draft successfully.' : 'Application created successfully.';
+                    
                     return response()->json([
                         'status'  => 1,
-                        'message' => 'Application created successfully.',
+                        'message' => $message,
                         'data' => [
                             'id' => $user_service_application->id,
                             'applicationId' => $user_service_application->applicationId,
