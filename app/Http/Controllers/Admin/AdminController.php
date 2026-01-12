@@ -38,7 +38,8 @@ class AdminController extends Controller
             $search = $request->get('search');
 
             $query = User::where('user_type', 'individual')
-                ->with(['district', 'subdivision', 'ulb', 'ward', 'department_user.department']);
+                ->with(['district', 'subdivision', 'ulb', 'ward', 'department_user.department'])
+                ->orderByDesc('created_at');
 
             if ($request->filled('search')) {
                 $search = $request->search;

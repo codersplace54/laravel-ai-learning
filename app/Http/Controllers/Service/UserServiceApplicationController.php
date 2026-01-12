@@ -158,7 +158,7 @@ class UserServiceApplicationController extends Controller
                 $has_approval_flow = !is_null($approval_flow);
 
 
-                $application_date = Carbon::parse($request->NOC_application_date ?? now());
+                $application_date = Carbon::parse($request->application_date ?? now());
                 $target_days = $service_data->target_days ?? 0;
 
                 $max_processing_date = $this->add_working_days($application_date, $target_days);
@@ -531,7 +531,7 @@ class UserServiceApplicationController extends Controller
 
         $rules = [];
         $existing_application = null;
-        
+
         if ($request->filled('id')) {
             $existing_application = UserServiceApplication::find($request->id);
         }
@@ -540,30 +540,30 @@ class UserServiceApplicationController extends Controller
             $field_key = 'application_data.' . $question->id;
             $existing_value = $request->input($field_key);
             $has_file_upload = $request->hasFile($field_key);
-            
+
             if (!$existing_value && !$has_file_upload) {
                 $all_app_data = $request->input('application_data', []);
                 $existing_value = $this->find_nested_value($all_app_data, $question->id);
             }
-            
+
             $is_existing_file = is_string($existing_value) && (
                 str_starts_with($existing_value, 'uploads/') ||
                 str_starts_with($existing_value, 'http://') ||
                 str_starts_with($existing_value, 'https://')
             );
-            
+
             $has_existing_file = false;
             if ($existing_application && $existing_application->application_data) {
-                $app_data = is_array($existing_application->application_data) 
-                    ? $existing_application->application_data 
+                $app_data = is_array($existing_application->application_data)
+                    ? $existing_application->application_data
                     : json_decode($existing_application->application_data, true);
                 $has_existing_file = $this->find_nested_value($app_data, $question->id) !== null;
             }
-            
+
             if ($is_existing_file || (!$has_file_upload && $has_existing_file)) {
                 continue;
             }
-            
+
             $rule_string = ($question->is_required === 'yes') ? 'required|file' : 'nullable|file';
 
             $validation_rule = $question->validation_rule ? json_decode($question->validation_rule, true) : [];
@@ -579,18 +579,18 @@ class UserServiceApplicationController extends Controller
 
             $rules[$field_key] = $rule_string;
         }
-        
+
         if (!empty($rules)) {
             $request->validate($rules);
         }
     }
-    
+
     private function find_nested_value($data, $question_id)
     {
         if (!is_array($data)) {
             return null;
         }
-        
+
         foreach ($data as $key => $value) {
             if ($key == $question_id) {
                 return $value;
@@ -602,7 +602,7 @@ class UserServiceApplicationController extends Controller
                 }
             }
         }
-        
+
         return null;
     }
 
@@ -724,7 +724,7 @@ class UserServiceApplicationController extends Controller
                 ->orderBy('step_number', 'asc')
                 ->first();
 
-            $application_date = Carbon::parse($request->NOC_application_date ?? now());
+            $application_date = Carbon::parse($request->application_date ?? now());
             $target_days = $service->target_days ?? 0;
             $max_processing_date = $this->add_working_days($application_date, $target_days);
 
@@ -1040,6 +1040,7 @@ class UserServiceApplicationController extends Controller
 
     function add_working_days(Carbon $startDate, int $workingDays)
     {
+
         $date = $startDate->copy();
 
         $addedDays = 0;
@@ -1227,6 +1228,29 @@ class UserServiceApplicationController extends Controller
                 $service->application_data = json_decode($service->application_data, true);
                 $latest_workflow = $service->workflow()->latest('updated_at')->first();
 
+                if ($service->status === 'approved') {
+                    $appeal_for = 'approved';
+                } elseif ($service->status === 'extra_payment') {
+                    $appeal_for = 'extra_payment';
+                } elseif (!empty($service->max_processing_date) && now()->gt($service->max_processing_date)) {
+                    $appeal_for = 'max_processing_date_exceed';
+                } else {
+                    $appeal_for = null;
+                }
+
+                $appeal = $service->appeal;
+
+                if ($appeal) {
+                    if ($appeal->status === 'pending') {
+                        $appeal_for = 'in_progress';
+                    } elseif ($appeal->status === 'rejected') {
+                        $appeal_for = 'rejected';
+                    }
+                    elseif ($appeal->status === 'approved') {
+                        $appeal_for = 'your appeal request approved';
+                    }
+                }
+
                 $response_data[] = [
                     'application_id' => $service->id,
                     'service_id' => $service->service_id,
@@ -1247,7 +1271,8 @@ class UserServiceApplicationController extends Controller
                     'service_mode' => $service->service->service_mode ?? null,
                     'already_rated' => $service->my_feedback ? true : false,
                     'rating' => $service->my_feedback->satisfaction ?? null,
-                    'is_certificate' => $service->NOC_application_date
+                    'is_certificate' => $service->NOC_application_date,
+                    'appeal_for' => $appeal_for
                 ];
             }
 
@@ -1295,7 +1320,7 @@ class UserServiceApplicationController extends Controller
                 : [$request->application_id];
 
             $application = UserServiceApplication::where('service_id', $request->service_id)
-                ->with('my_feedback')
+                ->with(['my_feedback', 'appeal'])
                 ->whereIn('id', $application_ids)
                 ->first();
 
@@ -1460,6 +1485,23 @@ class UserServiceApplicationController extends Controller
             $formatter = new ApplicationDataFormatter();
             $formatted_application_data = $formatter->build_application_view_data($application);
 
+            $appeal_details = null;
+
+            if ($application->appeal) {
+                $appeal = $application->appeal;
+
+                $appeal_details = [
+                    'appeal_id' => $appeal->id,
+                    'status' => $appeal->status,
+                    'remarks_from_user' => $appeal->remarks_from_user,
+                    'remarks_by_dept' => $appeal->remarks_by_dept,
+                    'appeal_file' => $appeal->appeal_file ? asset('storage/' . $appeal->appeal_file) : null,
+                    'dept_file' => $appeal->dept_file ? asset('storage/' . $appeal->dept_file) : null,
+                    'can_resubmit' => $appeal->status === 'rejected',
+                ];
+            }
+
+
             return response()->json([
                 'status'            => 1,
                 'message'           => 'Service user application fetched successfully.',
@@ -1470,6 +1512,7 @@ class UserServiceApplicationController extends Controller
                 'renewal_details' => $renewal_details,
                 'payment_details' => $payment_details,
                 'feedback_details' => $feedback_details,
+                'appeal_details'   => $appeal_details,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -1534,7 +1577,7 @@ class UserServiceApplicationController extends Controller
 
     public function store_third_party_application($request, $user)
     {
-        $application_date = Carbon::parse($request->NOC_application_date ?? now());
+        $application_date = Carbon::parse($request->application_date ?? now());
         $target_days = $service->target_days ?? 0;
         $max_processing_date = $this->add_working_days($application_date, $target_days);
 
