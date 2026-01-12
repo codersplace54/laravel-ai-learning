@@ -119,4 +119,9 @@ class UserServiceApplication extends Model
     {
         return $this->hasMany(PaymentOrder::class, 'application_id', 'id');
     }
+
+    public function appeal()
+    {
+        return $this->hasOne(Appeal::class, 'application_id');
+    }
 }

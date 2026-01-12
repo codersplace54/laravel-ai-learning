@@ -42,6 +42,7 @@ use App\Http\Controllers\MigrationPlan\MigrationPlanController;
 use App\Http\Controllers\Service\PaymentController;
 use App\Http\Controllers\Service\FeedbackController;
 use App\Http\Controllers\PanVerificationController;
+use App\Http\Controllers\Service\AppealController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -242,6 +243,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
     Route::post('service-feedback-store', [FeedbackController::class, 'service_feedback_store']);
     Route::post('service-feedback-list', [FeedbackController::class, 'service_feedback_list']);
+
+    Route::post('user-appeal-store', [AppealController::class, 'user_appeal_store']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
@@ -299,6 +302,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('inspection-date-update-by-inspector', [InspectionController::class, 'inspection_date_update_by_inspector']);
 
         Route::post('update-joint-inspection', [InspectionController::class, 'update_joint_inspection']);
+
+        Route::post('get-department-appeals/{user_id}', [AppealController::class, 'get_department_appeals']);
+        Route::post('update-appeal-status', [AppealController::class, 'update_appeal_status']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
