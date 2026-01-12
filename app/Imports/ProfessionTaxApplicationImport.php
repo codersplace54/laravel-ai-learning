@@ -153,7 +153,7 @@ class ProfessionTaxApplicationImport implements ToCollection, WithHeadingRow
         $status_map = [
             'draft' => 'draft',
             'submitted' => 'saved',
-            'acknowledged' => 'under_review',
+            'acknowledged' => 'approved',
             'approved' => 'approved',
             'rejected' => 'rejected',
             're_submitted' => 're_submitted',

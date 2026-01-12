@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\LogsModelActivity;
 
 class UserIncentiveApplication extends Model
 {
+    use LogsModelActivity;
     protected $table = 'user_incentive_applications';
 
     protected $fillable = [

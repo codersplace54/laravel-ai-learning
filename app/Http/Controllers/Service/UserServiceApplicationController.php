@@ -1247,7 +1247,7 @@ class UserServiceApplicationController extends Controller
                     'service_mode' => $service->service->service_mode ?? null,
                     'already_rated' => $service->my_feedback ? true : false,
                     'rating' => $service->my_feedback->satisfaction ?? null,
-                    'is_certificate' => $service->NOC_application_date
+                    'is_certificate' => $service->NOC_certificate ? true : false,
                 ];
             }
 
@@ -3128,7 +3128,7 @@ class UserServiceApplicationController extends Controller
                     'service_mode' => $app->service->service_mode ?? null,
                     'already_rated' => $app->my_feedback ? true : false,
                     'rating' => $app->my_feedback->satisfaction ?? null,
-                    'is_certificate' => $app->NOC_application_date,
+                    'is_certificate' => $app->NOC_certificate ? true : false,
                     'workflow_history' => $history_data,
                 ];
             }
