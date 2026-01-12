@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Concerns\LogsModelActivity;
 
 class Department extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsModelActivity;
 
 
     protected $table = 'departments';
