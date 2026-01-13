@@ -103,12 +103,7 @@ class InspectionController extends Controller
 
     public function get_inspection_departments()
     {
-        $departments = Department::whereIn('name', [
-            'Factories & Boilers Organisation',
-            'Directorate of Labour',
-            'Legal Metrology',
-            'Tripura State Pollution Control Board'
-        ])->get();
+        $departments = Department::where('is_inspection_dept', 'yes')->get();
 
         return response()->json([
             'status' => 1,
@@ -405,7 +400,7 @@ class InspectionController extends Controller
             $perPage       = $request->per_page ?? 10;
 
             $query = Inspection::where('department_id', $request->department_id)
-                ->whereIn('status', ['pending', 'approved','re_submitted']);
+                ->whereIn('status', ['pending', 'approved', 're_submitted']);
 
             if ($industry_name) {
                 $query->whereHas('unit', function ($q) use ($industry_name) {
@@ -574,7 +569,7 @@ class InspectionController extends Controller
                 ->where('inspector', $user->id)
                 ->where(function ($q) {
                     $q->where('department_type', 'joint')
-                        ->orWhereIn('status', ['approved', 'completed','Date Confirmed']);
+                        ->orWhereIn('status', ['approved', 'completed', 'Date Confirmed']);
                 });
 
             if ($industry_name) {
