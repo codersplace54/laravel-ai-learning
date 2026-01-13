@@ -16,7 +16,7 @@ class DepartmentController extends Controller
         try {
 
 
-           // $per_page = $request->input('per_page', 10);
+            // $per_page = $request->input('per_page', 10);
 
             $departments = Department::all();
 
@@ -52,12 +52,14 @@ class DepartmentController extends Controller
                 [
                     'name' => 'required|string|unique:departments,name|min:2|max:255',
                     'details' => 'nullable|string',
+                    'is_inspection_dept' => 'nullable|in:yes,no',
                 ],
                 [
                     'name.required' => 'The department name is required.',
                     'name.unique' => 'This department name is already taken. Please use another name.',
                     'name.max' => 'The department name cannot exceed 255 characters.',
                     'name.min' => 'The department name must be at least 2 characters.',
+                    'is_inspection_dept.in' => 'Invalid inspection department value.',
                 ]
             );
 
@@ -66,6 +68,7 @@ class DepartmentController extends Controller
             $department = Department::create([
                 'name' => $request->name,
                 'details' => $request->details,
+                'is_inspection_dept' => $request->is_inspection_dept ?? 'no',
                 'created_by' => $admin->email_id
             ]);
 
@@ -151,6 +154,7 @@ class DepartmentController extends Controller
                     'id' => 'required|exists:departments,id',
                     'name' => 'required|string|unique:departments,name,' . $request->input('id') . '|min:2|max:255',
                     'details' => 'nullable|string',
+                    'is_inspection_dept' => 'nullable|in:yes,no',
                 ],
                 [
                     'id.required' => 'Id is required.',
@@ -159,6 +163,7 @@ class DepartmentController extends Controller
                     'name.unique' => 'This department name is already taken. Please use another name.',
                     'name.max' => 'The department name cannot exceed 255 characters.',
                     'name.min' => 'The department name must be at least 2 characters.',
+                    'is_inspection_dept.in' => 'Invalid inspection department value.',
                 ]
             );
 
@@ -169,6 +174,7 @@ class DepartmentController extends Controller
             $department->update([
                 'name' => $request->name,
                 'details' => $request->details,
+                'is_inspection_dept' => $request->is_inspection_dept ?? 'no',
                 'updated_by' => $admin->email_id
             ]);
 

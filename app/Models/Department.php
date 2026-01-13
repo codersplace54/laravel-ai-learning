@@ -18,6 +18,7 @@ class Department extends Model
         'id',
         'name',
         'details',
+        'is_inspection_dept',
         'created_at',
         'updated_at',
         'created_by',
