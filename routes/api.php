@@ -356,11 +356,11 @@ Route::post('user/third-party/return', [UserServiceApplicationController::class,
 Route::post('/third-party/status/update', [UserServiceApplicationController::class, 'update_third_party_status_log']);
 
 Route::prefix('kya')->group(function () {
-    Route::get('/sectors', [KyaController::class, 'get_sectors']);
-    Route::get('/risk-categories', [KyaController::class, 'get_risk_categories']);
-    Route::get('/industry-sectors', [KyaController::class, 'get_industry_sectors']);
-    Route::get('/questions', [KyaController::class, 'get_questions']);
-    Route::get('/approval-details', [KyaController::class, 'get_approval_details']);
+    Route::post('/sectors', [KyaController::class, 'get_sectors']);
+    Route::post('/risk-categories', [KyaController::class, 'get_risk_categories']);
+    Route::post('/industry-sectors', [KyaController::class, 'get_industry_sectors']);
+    Route::post('/questions', [KyaController::class, 'get_questions']);
+    Route::post('/approval-details', [KyaController::class, 'get_approval_details']);
 });
 
 Route::post('migration-notice', [MigrationPlanController::class, 'migration_notice']);
