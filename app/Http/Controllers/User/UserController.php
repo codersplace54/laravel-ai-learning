@@ -220,15 +220,21 @@ class UserController extends Controller
     {
         try {
 
+            $user = User::findOrFail($request->id);
 
             $rules = [
                 'id' => 'required|exists:users,id',
                 'email_id' => 'required|email|unique:users,email_id,' . $request->id,
                 'mobile_no' => 'required|string|max:15',
-                'whatsapp_no' => 'required|string|max:15',
-                'pan' => 'required_if:user_type,individual|string|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/|unique:users,pan,' . $request->id,
+                'whatsapp_no' => 'nullable|string|max:15',
                 'otp_code' => 'required_if:user_type,individual|string|size:6',
             ];
+
+            if ($request->pan && $request->pan !== $user->pan) {
+                $rules['pan'] = 'required_if:user_type,individual|string|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/|unique:users,pan';
+            } elseif ($request->pan) {
+                $rules['pan'] = 'required_if:user_type,individual|string|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/';
+            }
 
             if ($request->name_of_enterprise !== null) {
                 $rules['name_of_enterprise'] = 'nullable|string|max:255';
@@ -308,9 +314,6 @@ class UserController extends Controller
             ]);
 
             DB::beginTransaction();
-
-
-            $user = User::findOrFail($request->id);
 
             if ($user->user_type === "individual") {
                 $now = Carbon::now();

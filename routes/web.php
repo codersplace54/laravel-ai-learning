@@ -43,4 +43,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('application-data-correction', [ApplicationDataCorrectionController::class, 'correction_form'])->name('correction.form');
     Route::post('update-partnership-application-data', [ApplicationDataCorrectionController::class, 'update_partnership_application_data'])->name('correction.partnership_application');
     Route::post('update-partnership-partner-data', [ApplicationDataCorrectionController::class, 'update_partnership_partner_data'])->name('correction.partnership_partner');
+    Route::post('correct-all-file-paths', [ApplicationDataCorrectionController::class, 'correct_all_file_paths'])->name('correction.all_file_paths');
+    Route::post('normalize-to-relative-paths', [ApplicationDataCorrectionController::class, 'normalize_to_relative_paths'])->name('correction.normalize_paths');
+    Route::post('fix-partner-dates', [ApplicationDataCorrectionController::class, 'fix_partner_dates'])->name('correction.fix_partner_dates');
 });

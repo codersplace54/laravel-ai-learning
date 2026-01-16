@@ -19,9 +19,16 @@
             <div class="alert alert-success">
                 <strong>{{ session('success') }}</strong>
                 <ul class="mb-0 mt-2">
-                    <li>Files Processed: {{ session('files_processed', 0) }}</li>
+                    @if(session('files_processed'))
+                        <li>Files Processed: {{ session('files_processed', 0) }}</li>
+                    @endif
+                    @if(session('total_checked'))
+                        <li>Total Records Checked: {{ session('total_checked', 0) }}</li>
+                    @endif
                     <li>Records Updated: {{ session('updated_count', 0) }}</li>
-                    <li>Records Skipped: {{ session('skipped_count', 0) }}</li>
+                    @if(session('skipped_count'))
+                        <li>Records Skipped: {{ session('skipped_count', 0) }}</li>
+                    @endif
                 </ul>
             </div>
 
@@ -40,6 +47,57 @@
         @if (session('error'))
             <div class="alert alert-danger">{{ session('error') }}</div>
         @endif
+
+        <div class="row">
+            <div class="col-12 mb-4">
+                <div class="card shadow-sm border-warning">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">Correct All File Paths (Bulk Operation)</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Update application paths.</p>
+                        <form action="{{ route('admin.correction.all_file_paths') }}" method="POST" onsubmit="return confirm('This will update all file paths. Continue?');">
+                            @csrf
+                            <button type="submit" class="btn btn-warning w-100">Correct All File Paths</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12 mb-4">
+                <div class="card shadow-sm border-info">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Normalize All Paths to Relative Format</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Convert to: <code>storage/sites/default/files/filename.jpg</code></p>
+                        <form action="{{ route('admin.correction.normalize_paths') }}" method="POST" onsubmit="return confirm('Normalize all paths?');">
+                            @csrf
+                            <button type="submit" class="btn btn-info w-100">Normalize All Paths</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12 mb-4">
+                <div class="card shadow-sm border-danger">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">Fix Partner Dates (Excel Serial Numbers)</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Converts Excel date numbers (35051, 45034) to proper dates (Y-m-d format)</p>
+                        <form action="{{ route('admin.correction.fix_partner_dates') }}" method="POST" onsubmit="return confirm('Fix all partner dates?');">
+                            @csrf
+                            <button type="submit" class="btn btn-danger w-100">Fix Partner Dates</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <div class="row">
             <div class="col-md-6 mb-4">
