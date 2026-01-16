@@ -3,12 +3,13 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Service\PaymentController;
+use App\Http\Controllers\Admin\ApplicationDataCorrectionController;
 
 Route::get('/', function () {
     return view('welcome');
 });
 
-Route::post('new/user/payment-callback', [PaymentController::class, 'payment_callback']);
+Route::post('/user/payment-callback', [PaymentController::class, 'payment_callback']);
 
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('import-society-members', [ImportController::class, 'import_society_members_form'])->name('admin.import.society_members_form');
@@ -38,4 +39,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
     Route::get('import-profession-tax-certificate', [ImportController::class, 'import_profession_tax_certificate_form'])->name('import.profession_tax_certificate.form');
     Route::post('import-profession-tax-certificate', [ImportController::class, 'import_profession_tax_certificate'])->name('import.profession_tax_certificate');
+
+    Route::get('application-data-correction', [ApplicationDataCorrectionController::class, 'correction_form'])->name('correction.form');
+    Route::post('update-partnership-application-data', [ApplicationDataCorrectionController::class, 'update_partnership_application_data'])->name('correction.partnership_application');
+    Route::post('update-partnership-partner-data', [ApplicationDataCorrectionController::class, 'update_partnership_partner_data'])->name('correction.partnership_partner');
 });

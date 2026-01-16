@@ -43,6 +43,7 @@ use App\Http\Controllers\Service\PaymentController;
 use App\Http\Controllers\Service\FeedbackController;
 use App\Http\Controllers\PanVerificationController;
 use App\Http\Controllers\Service\AppealController;
+use App\Http\Controllers\Admin\ActivityLogController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -192,6 +193,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('mark-application-paid', [UserServiceApplicationController::class, 'mark_application_paid']);
 
         Route::post('get-total-applications-by-admin', [DashboardController::class, 'get_total_applications_by_admin']);
+
+        Route::get('activity-logs', [ActivityLogController::class, 'activity_logs']);
+        Route::get('activity-logs/{activity}', [ActivityLogController::class, 'activity_log_details']);
+
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
