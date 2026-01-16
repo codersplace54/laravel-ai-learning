@@ -87,7 +87,8 @@ class PaymentController extends Controller
             $egrasUserId = 'finswgt';
             $valid_upto = Carbon::today()->format('d/m/Y');
 
-            $return_url = request()->getSchemeAndHttpHost() . '/new/user/payment-callback';
+            $return_url = url('/user/payment-callback');
+
             $secret_key = config('egras.secret_key');
 
             $hash_parts = [
@@ -203,12 +204,12 @@ class PaymentController extends Controller
 
             if ($generated_hash !== $hash) {
                 if (!$order_id) {
-                    $msg = 'Hash verification failed';
-                    Log::info($msg);
-                    return redirect()->away(
-                        $frontendurl . '?status=failed&message=' . urlencode($msg)
-                    );
-                }
+                $msg = 'Hash verification failed';
+                Log::info($msg);
+                return redirect()->away(
+                    $frontendurl . '?status=failed&message=' . urlencode($msg)
+                );
+            }
             }
 
             $payment = PaymentOrder::where('id', $order_id)
@@ -230,7 +231,7 @@ class PaymentController extends Controller
                 'gateway_order_id'  => $order_id,
                 'transaction_id'    => $CIN,
                 'GRN_number'        => $grn,
-                'payment_datetime'  => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime),
+                'payment_datetime' => Carbon::createFromFormat('d-m-Y H:i:s', $trandatetime),
                 'gateway_response'  => json_encode($request->all()),
                 'updated_at' => now()
             ]);
@@ -270,7 +271,7 @@ class PaymentController extends Controller
                         'status'           => $status,
                         'GRN_number'       => $grn,
                         'payment_transId'  => $CIN,
-                        'payment_time'     => Carbon::createFromFormat('d/m/Y H:i:s', $trandatetime),
+                        'payment_datetime' => Carbon::createFromFormat('d-m-Y H:i:s', $trandatetime),
                         'updated_at'       => now(),
                     ]);
 
