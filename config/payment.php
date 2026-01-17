@@ -1,5 +1,5 @@
 <?php
 
 return [
-    'frontendurl' => env('FRONTEND_URL'),
+    'frontendurl' => env('APP_FRONTEND_PAYMENT_STATUS_URL'),
 ];
