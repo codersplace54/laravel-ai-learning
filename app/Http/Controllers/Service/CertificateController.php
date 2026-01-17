@@ -759,7 +759,7 @@ class CertificateController extends Controller
         
         $sections = ServiceQuestionnaire::where('service_id', $application->service_id)
             ->where('is_section', 'yes')
-            ->where('question_type', '!=', 'file')
+            ->where('is_required', 'yes')
             ->distinct()
             ->pluck('section_name')
             ->filter()
@@ -801,13 +801,21 @@ class CertificateController extends Controller
         }
 
         $questions = ServiceQuestionnaire::whereIn('id', $question_ids)
+            ->where('question_type', '!=', 'file')
+            ->where('is_required', 'yes')
             ->get(['id', 'question_label'])
             ->keyBy('id');
+
+        $valid_question_ids = array_intersect($question_ids, $questions->keys()->toArray());
+
+        if (empty($valid_question_ids)) {
+            return '';
+        }
 
         $html = '<table style="width: 100%; border-collapse: collapse; margin: 10px 0; table-layout: fixed;">';
         
         $html .= '<thead><tr>';
-        foreach ($question_ids as $qid) {
+        foreach ($valid_question_ids as $qid) {
             $label = $questions[$qid]->question_label ?? "Question {$qid}";
             $html .= '<th style="border: 1px solid #000; padding: 4px; background-color: #f5f5f5; font-size: 12px; word-wrap: break-word;">' . e($label) . '</th>';
         }
@@ -817,7 +825,7 @@ class CertificateController extends Controller
         foreach ($section_data as $row) {
             if (is_array($row)) {
                 $html .= '<tr>';
-                foreach ($question_ids as $qid) {
+                foreach ($valid_question_ids as $qid) {
                     $value = $row[$qid] ?? '';
                     $html .= '<td style="border: 1px solid #000; padding: 4px; font-size: 11px; word-wrap: break-word; overflow-wrap: break-word;">' . e($value) . '</td>';
                 }
