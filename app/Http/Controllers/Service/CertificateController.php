@@ -152,7 +152,8 @@ class CertificateController extends Controller
                 'qr_code',
                 'field_1',
                 'field_2',
-                'application_data.n'
+                'application_data.n',
+                'table_section'
             ];
 
             return response()->json([
@@ -280,9 +281,9 @@ class CertificateController extends Controller
             }
 
             $filled = preg_replace_callback(
-                '/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/',
-                function ($m) use ($data) {
-                    $key = $m[1];
+                '/\{\{\s*([A-Za-z0-9_.\s]+)\s*\}\}/',
+                function ($m) use ($data, $application) {
+                    $key = trim($m[1]);
                     $val = $data[$key] ?? '';
 
                     if ($key === 'qr_code') {
@@ -296,6 +297,17 @@ class CertificateController extends Controller
                             . 'alt="QR Code" '
                             . 'width="120" height="120" '
                             . 'style="display:inline-block; vertical-align:middle;" />';
+                    }
+
+                    if (strpos($key, 'application_data.') === 0) {
+                        $section_name = substr($key, strlen('application_data.'));
+                        if (!is_numeric($section_name)) {
+                            return $this->generate_section_table($application, $section_name);
+                        }
+                    }
+
+                    if ($key === 'table_section') {
+                        return $this->generate_all_sections($application);
                     }
 
                     return is_scalar($val) ? (string) $val : '';
@@ -738,6 +750,83 @@ class CertificateController extends Controller
             'field_1'              => $request->field_1 ?? null,
             'field_2'              => $request->field_2 ?? null,
         ];
+    }
+
+    private function generate_all_sections(UserServiceApplication $application): string
+    {
+        $application_data_raw = json_decode($application->application_data, true) ?? [];
+        $html = '';
+        
+        $sections = ServiceQuestionnaire::where('service_id', $application->service_id)
+            ->where('is_section', 'yes')
+            ->where('question_type', '!=', 'file')
+            ->distinct()
+            ->pluck('section_name')
+            ->filter()
+            ->toArray();
+        
+        foreach ($sections as $section_name) {
+            if (isset($application_data_raw[$section_name]) && is_array($application_data_raw[$section_name])) {
+                $html .= '<h4>' . e($section_name) . '</h4>';
+                $html .= $this->generate_section_table($application, $section_name);
+            }
+        }
+        
+        return $html;
+    }
+
+    private function generate_section_table(UserServiceApplication $application, string $section_name): string
+    {
+        $application_data_raw = json_decode($application->application_data, true) ?? [];
+        
+        if (!isset($application_data_raw[$section_name]) || !is_array($application_data_raw[$section_name])) {
+            return '';
+        }
+
+        $section_data = $application_data_raw[$section_name];
+        if (empty($section_data)) {
+            return '';
+        }
+
+        $question_ids = [];
+        foreach ($section_data as $row) {
+            if (is_array($row)) {
+                $question_ids = array_merge($question_ids, array_keys($row));
+            }
+        }
+        $question_ids = array_unique(array_filter($question_ids, 'is_numeric'));
+
+        if (empty($question_ids)) {
+            return '';
+        }
+
+        $questions = ServiceQuestionnaire::whereIn('id', $question_ids)
+            ->get(['id', 'question_label'])
+            ->keyBy('id');
+
+        $html = '<table style="width: 100%; border-collapse: collapse; margin: 10px 0; table-layout: fixed;">';
+        
+        $html .= '<thead><tr>';
+        foreach ($question_ids as $qid) {
+            $label = $questions[$qid]->question_label ?? "Question {$qid}";
+            $html .= '<th style="border: 1px solid #000; padding: 4px; background-color: #f5f5f5; font-size: 12px; word-wrap: break-word;">' . e($label) . '</th>';
+        }
+        $html .= '</tr></thead>';
+        
+        $html .= '<tbody>';
+        foreach ($section_data as $row) {
+            if (is_array($row)) {
+                $html .= '<tr>';
+                foreach ($question_ids as $qid) {
+                    $value = $row[$qid] ?? '';
+                    $html .= '<td style="border: 1px solid #000; padding: 4px; font-size: 11px; word-wrap: break-word; overflow-wrap: break-word;">' . e($value) . '</td>';
+                }
+                $html .= '</tr>';
+            }
+        }
+        $html .= '</tbody></table>';
+
+        return $html;
     }
 
 }
