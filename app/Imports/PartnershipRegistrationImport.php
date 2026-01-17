@@ -383,7 +383,23 @@ class PartnershipRegistrationImport implements ToCollection, WithHeadingRow
                 continue;
             }
 
-            $excel_answer = is_string($excel_answer) ? trim($excel_answer) : (string) $excel_answer;
+            // Handle date columns (117 and 322)
+            if (in_array($question_id, [117, 322])) {
+                if (is_numeric($excel_answer)) {
+                    $excel_answer = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($excel_answer)->format('Y-m-d');
+                } elseif (is_string($excel_answer)) {
+                    $excel_answer = trim($excel_answer);
+                    if ($excel_answer !== '') {
+                        try {
+                            $excel_answer = Carbon::createFromFormat('d-m-Y', $excel_answer)->format('Y-m-d');
+                        } catch (\Exception $e) {
+                            // Keep original if parsing fails
+                        }
+                    }
+                }
+            } else {
+                $excel_answer = is_string($excel_answer) ? trim($excel_answer) : (string) $excel_answer;
+            }
 
             if ($excel_answer === '') {
                 continue;
