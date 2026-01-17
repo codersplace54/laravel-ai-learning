@@ -152,7 +152,8 @@ class CertificateController extends Controller
                 'qr_code',
                 'field_1',
                 'field_2',
-                'application_data.n'
+                'application_data.n',
+                'table_section'
             ];
 
             return response()->json([
@@ -280,9 +281,9 @@ class CertificateController extends Controller
             }
 
             $filled = preg_replace_callback(
-                '/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/',
-                function ($m) use ($data) {
-                    $key = $m[1];
+                '/\{\{\s*([A-Za-z0-9_.\s]+)\s*\}\}/',
+                function ($m) use ($data, $application) {
+                    $key = trim($m[1]);
                     $val = $data[$key] ?? '';
 
                     if ($key === 'qr_code') {
@@ -296,6 +297,17 @@ class CertificateController extends Controller
                             . 'alt="QR Code" '
                             . 'width="120" height="120" '
                             . 'style="display:inline-block; vertical-align:middle;" />';
+                    }
+
+                    if (strpos($key, 'application_data.') === 0) {
+                        $section_name = substr($key, strlen('application_data.'));
+                        if (!is_numeric($section_name)) {
+                            return $this->generate_section_table($application, $section_name);
+                        }
+                    }
+
+                    if ($key === 'table_section') {
+                        return $this->generate_all_sections($application);
                     }
 
                     return is_scalar($val) ? (string) $val : '';
@@ -740,8 +752,6 @@ class CertificateController extends Controller
         ];
     }
 
-<<<<<<< Updated upstream
-=======
     private function generate_all_sections(UserServiceApplication $application): string
     {
         $application_data_raw = json_decode($application->application_data, true) ?? [];
@@ -827,5 +837,4 @@ class CertificateController extends Controller
         return $html;
     }
 
->>>>>>> Stashed changes
 }
