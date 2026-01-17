@@ -51,7 +51,26 @@ class PartnershipPartnerImport implements ToCollection, WithHeadingRow
                     continue;
                 }
 
-                $value = trim((string) $row[$column]);
+                $value = $row[$column];
+                
+                // Handle date columns
+                if (in_array($column, ['field_psps_dob', 'field_psps_date_of_joining'])) {
+                    if (is_numeric($value)) {
+                        $value = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($value)->format('Y-m-d');
+                    } elseif (is_string($value)) {
+                        $value = trim($value);
+                        if ($value !== '') {
+                            try {
+                                $value = Carbon::createFromFormat('d-m-Y', $value)->format('Y-m-d');
+                            } catch (\Exception $e) {
+                                // Keep original if parsing fails
+                            }
+                        }
+                    }
+                } else {
+                    $value = trim((string) $value);
+                }
+                
                 if ($value === '') {
                     continue;
                 }

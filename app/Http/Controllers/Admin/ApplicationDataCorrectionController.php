@@ -193,6 +193,160 @@ class ApplicationDataCorrectionController extends Controller
         ]);
     }
 
+    public function update_partnership_application_noc_certificate(Request $request)
+    {
+        $request->validate([
+            'files' => 'required|array',
+            'files.*' => 'required|file|mimes:xlsx,xls,csv',
+        ]);
+
+        $files = $request->file('files');
+        $total_updated = 0;
+        $total_skipped = 0;
+        $all_skipped_rows = [];
+        $batch_updates = [];
+        $batch_size = 100;
+
+        foreach ($files as $file) {
+            $data = Excel::toArray(null, $file);
+            $rows = $data[0] ?? [];
+            
+            if (empty($rows)) {
+                continue;
+            }
+            
+            $headers = array_shift($rows);
+            $nid_index = array_search('nid', $headers);
+            $field_certificate_index = array_search('field_certificate', $headers);
+            
+            if ($nid_index === false || $field_certificate_index === false) {
+                $all_skipped_rows[] = [
+                    'file' => $file->getClientOriginalName(),
+                    'reason' => 'Missing required columns (nid or field_certificate)'
+                ];
+                continue;
+            }
+            
+            foreach ($rows as $index => $row) {
+                $nid = $row[$nid_index] ?? null;
+                $field_certificate = $row[$field_certificate_index] ?? null;
+                
+                if (empty($nid) || empty($field_certificate)) {
+                    $total_skipped++;
+                    $all_skipped_rows[] = [
+                        'row' => $index + 2,
+                        'nid' => $nid,
+                        'reason' => 'Missing nid or field_certificate'
+                    ];
+                    continue;
+                }
+                
+                $filename = basename($field_certificate);
+                $noc_certificate_url = "https://swaagatbackend.tripura.gov.in/new/storage/sites/default/files/{$filename}";
+                
+                $batch_updates[] = [
+                    'nid' => $nid,
+                    'noc_certificate' => $noc_certificate_url,
+                    'row' => $index + 2
+                ];
+                
+                if (count($batch_updates) >= $batch_size) {
+                    $updated = $this->execute_noc_batch_update($batch_updates);
+                    $total_updated += $updated['updated'];
+                    $total_skipped += $updated['skipped'];
+                    $all_skipped_rows = array_merge($all_skipped_rows, $updated['skipped_rows']);
+                    $batch_updates = [];
+                }
+            }
+        }
+        
+        if (!empty($batch_updates)) {
+            $updated = $this->execute_noc_batch_update($batch_updates);
+            $total_updated += $updated['updated'];
+            $total_skipped += $updated['skipped'];
+            $all_skipped_rows = array_merge($all_skipped_rows, $updated['skipped_rows']);
+        }
+
+        return back()->with([
+            'success' => 'Partnership NOC certificates updated successfully',
+            'files_processed' => count($files),
+            'updated_count' => $total_updated,
+            'skipped_count' => $total_skipped,
+            'skipped_rows' => $all_skipped_rows,
+        ]);
+    }
+    
+    private function execute_noc_batch_update($batch_updates)
+    {
+        if (empty($batch_updates)) {
+            return ['updated' => 0, 'skipped' => 0, 'skipped_rows' => []];
+        }
+        
+        $nids = array_column($batch_updates, 'nid');
+        $existing_apps = DB::table('user_service_applications')
+            ->whereIn('old_id', $nids)
+            ->pluck('id', 'old_id')
+            ->toArray();
+        
+        $updates_batch = [];
+        $skipped_rows = [];
+        
+        foreach ($batch_updates as $update) {
+            if (!isset($existing_apps[$update['nid']])) {
+                $skipped_rows[] = [
+                    'row' => $update['row'],
+                    'nid' => $update['nid'],
+                    'reason' => 'Application not found'
+                ];
+                continue;
+            }
+            
+            $updates_batch[] = [
+                'id' => $existing_apps[$update['nid']],
+                'noc_certificate' => $update['noc_certificate']
+            ];
+        }
+        
+        if (!empty($updates_batch)) {
+            $this->execute_noc_sql_batch_update($updates_batch);
+        }
+        
+        return [
+            'updated' => count($updates_batch),
+            'skipped' => count($skipped_rows),
+            'skipped_rows' => $skipped_rows
+        ];
+    }
+    
+    private function execute_noc_sql_batch_update($updates_batch)
+    {
+        if (empty($updates_batch)) {
+            return;
+        }
+        
+        $now = now()->format('Y-m-d H:i:s');
+        $ids = [];
+        $noc_cases = [];
+        
+        foreach ($updates_batch as $update) {
+            $id = $update['id'];
+            $ids[] = $id;
+            $noc = addslashes($update['noc_certificate']);
+            $noc_cases[] = "WHEN {$id} THEN '{$noc}'";
+        }
+        
+        $ids_list = implode(',', $ids);
+        $noc_case_sql = implode(' ', $noc_cases);
+        
+        DB::statement("
+            UPDATE user_service_applications
+            SET 
+                NOC_certificate = CASE id {$noc_case_sql} END,
+                updated_at = '{$now}'
+            WHERE id IN ({$ids_list})
+        ");
+    }
+
     public function fix_partner_dates(Request $request)
     {
         set_time_limit(0);
@@ -213,39 +367,55 @@ class ApplicationDataCorrectionController extends Controller
                 continue;
             }
             
-            $partner_section = $application_data['Partner Details'] ?? null;
-            
-            if (!is_array($partner_section) || empty($partner_section)) {
-                continue;
-            }
-            
             $need_update = false;
             
-            foreach ($partner_section as $index => $partner) {
-                if (!is_array($partner)) {
+            // Fix dates in main application data
+            foreach ($application_data as $key => $value) {
+                if (is_array($value)) {
                     continue;
                 }
                 
-                // Fix DOB (question ID 1108)
-                if (isset($partner['1108']) && is_numeric($partner['1108'])) {
-                    $excel_date = (int) $partner['1108'];
+                // Fix question 117 and 322
+                if (($key === '117' || $key === '322') && is_numeric($value)) {
+                    $excel_date = (int) $value;
                     $fixed_date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($excel_date)->format('Y-m-d');
-                    $partner_section[$index]['1108'] = $fixed_date;
+                    $application_data[$key] = $fixed_date;
                     $need_update = true;
                 }
+            }
+            
+            // Fix dates in Partner Details section
+            $partner_section = $application_data['Partner Details'] ?? null;
+            
+            if (is_array($partner_section) && !empty($partner_section)) {
+                foreach ($partner_section as $index => $partner) {
+                    if (!is_array($partner)) {
+                        continue;
+                    }
+                    
+                    // Fix DOB (question ID 1108)
+                    if (isset($partner['1108']) && is_numeric($partner['1108'])) {
+                        $excel_date = (int) $partner['1108'];
+                        $fixed_date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($excel_date)->format('Y-m-d');
+                        $partner_section[$index]['1108'] = $fixed_date;
+                        $need_update = true;
+                    }
+                    
+                    // Fix Date of Joining (question ID 1109)
+                    if (isset($partner['1109']) && is_numeric($partner['1109'])) {
+                        $excel_date = (int) $partner['1109'];
+                        $fixed_date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($excel_date)->format('Y-m-d');
+                        $partner_section[$index]['1109'] = $fixed_date;
+                        $need_update = true;
+                    }
+                }
                 
-                // Fix Date of Joining (question ID 1109)
-                if (isset($partner['1109']) && is_numeric($partner['1109'])) {
-                    $excel_date = (int) $partner['1109'];
-                    $fixed_date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($excel_date)->format('Y-m-d');
-                    $partner_section[$index]['1109'] = $fixed_date;
-                    $need_update = true;
+                if ($need_update) {
+                    $application_data['Partner Details'] = $partner_section;
                 }
             }
             
             if ($need_update) {
-                $application_data['Partner Details'] = $partner_section;
-                
                 $updates_batch[] = [
                     'id' => $app->id,
                     'application_data' => json_encode($application_data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),

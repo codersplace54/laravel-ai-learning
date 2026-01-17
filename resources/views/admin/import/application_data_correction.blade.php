@@ -49,50 +49,31 @@
         @endif
 
         <div class="row">
-            <div class="col-12 mb-4">
+            <div class="col-md-6 mb-4">
                 <div class="card shadow-sm border-warning">
                     <div class="card-header bg-warning text-dark">
-                        <h5 class="mb-0">Correct All File Paths (Bulk Operation)</h5>
+                        <h5 class="mb-0">Correct Imported File Paths</h5>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted">Update application paths.</p>
+                        <p class="text-muted small mb-3">Fix file paths from old import data to proper URLs</p>
                         <form action="{{ route('admin.correction.all_file_paths') }}" method="POST" onsubmit="return confirm('This will update all file paths. Continue?');">
                             @csrf
-                            <button type="submit" class="btn btn-warning w-100">Correct All File Paths</button>
+                            <button type="submit" class="btn btn-warning w-100">Correct Imported File Paths</button>
                         </form>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="row">
-            <div class="col-12 mb-4">
+            <div class="col-md-6 mb-4">
                 <div class="card shadow-sm border-info">
                     <div class="card-header bg-info text-white">
-                        <h5 class="mb-0">Normalize All Paths to Relative Format</h5>
+                        <h5 class="mb-0">Remove Base URL from Files</h5>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted">Convert to: <code>storage/sites/default/files/filename.jpg</code></p>
+                        <p class="text-muted small mb-3">Convert to: <code>storage/sites/default/files/filename.jpg</code></p>
                         <form action="{{ route('admin.correction.normalize_paths') }}" method="POST" onsubmit="return confirm('Normalize all paths?');">
                             @csrf
-                            <button type="submit" class="btn btn-info w-100">Normalize All Paths</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row">
-            <div class="col-12 mb-4">
-                <div class="card shadow-sm border-danger">
-                    <div class="card-header bg-danger text-white">
-                        <h5 class="mb-0">Fix Partner Dates (Excel Serial Numbers)</h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted">Converts Excel date numbers (35051, 45034) to proper dates (Y-m-d format)</p>
-                        <form action="{{ route('admin.correction.fix_partner_dates') }}" method="POST" onsubmit="return confirm('Fix all partner dates?');">
-                            @csrf
-                            <button type="submit" class="btn btn-danger w-100">Fix Partner Dates</button>
+                            <button type="submit" class="btn btn-info w-100">Remove Base URL from Files</button>
                         </form>
                     </div>
                 </div>
@@ -120,6 +101,23 @@
             </div>
 
             <div class="col-md-6 mb-4">
+                <div class="card shadow-sm border-danger">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">Fix Partner Dates (Excel Serial Numbers)</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">Converts Excel date numbers (35051, 45034) to proper dates (Y-m-d format)</p>
+                        <form action="{{ route('admin.correction.fix_partner_dates') }}" method="POST" onsubmit="return confirm('Fix all partner dates?');">
+                            @csrf
+                            <button type="submit" class="btn btn-danger w-100">Fix Partner Dates</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-4">
                 <div class="card shadow-sm">
                     <div class="card-header bg-success text-white">
                         <h5 class="mb-0">Update Partnership Partner Data</h5>
@@ -133,6 +131,25 @@
                                 <small class="text-muted">Allowed: .xlsx, .xls, .csv</small>
                             </div>
                             <button type="submit" class="btn btn-success w-100">Update Partner Data</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0">Update Partnership Application NOC Certificate</h5>
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ route('admin.correction.partnership_application_noc_certificate') }}" method="POST" enctype="multipart/form-data">
+                            @csrf
+                            <div class="mb-3">
+                                <label for="noc_files" class="form-label">Upload Excel Files</label>
+                                <input type="file" name="files[]" id="noc_files" class="form-control" multiple required>
+                                <small class="text-muted">Excel with nid & field_certificate columns</small>
+                            </div>
+                            <button type="submit" class="btn btn-secondary w-100">Update Partnership NOC Certificates</button>
                         </form>
                     </div>
                 </div>
