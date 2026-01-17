@@ -121,9 +121,9 @@ class ProfessionTaxCertificateImport implements ToCollection, WithHeadingRow
                 continue;
             }
 
-            foreach ($this->build_assignments_for_application($application) as $a) {
-                $assignment_rows[] = $a;
-            }
+            // foreach ($this->build_assignments_for_application($application) as $a) {
+            //     $assignment_rows[] = $a;
+            // }
 
             foreach ($this->build_history_for_application($application) as $h) {
                 $history_rows[] = $h;
@@ -223,10 +223,8 @@ class ProfessionTaxCertificateImport implements ToCollection, WithHeadingRow
             $path = parse_url($noc_certificate, PHP_URL_PATH);
             $file_name = $path ? basename($path) : null;
 
-            if ($file_name && $user_id) {
-                $corrected_noc_certificate = "uploads/{$user_id}/application/{$file_name}";
-            } elseif ($file_name) {
-                $corrected_noc_certificate = $file_name;
+            if ($file_name) {
+                $corrected_noc_certificate = "https://swaagatbackend.tripura.gov.in/new/storage/sites/default/files/{$file_name}";
             } else {
                 $corrected_noc_certificate = $noc_certificate;
             }
