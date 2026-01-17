@@ -740,4 +740,92 @@ class CertificateController extends Controller
         ];
     }
 
+<<<<<<< Updated upstream
+=======
+    private function generate_all_sections(UserServiceApplication $application): string
+    {
+        $application_data_raw = json_decode($application->application_data, true) ?? [];
+        $html = '';
+        
+        $sections = ServiceQuestionnaire::where('service_id', $application->service_id)
+            ->where('is_section', 'yes')
+            ->where('is_required', 'yes')
+            ->distinct()
+            ->pluck('section_name')
+            ->filter()
+            ->toArray();
+        
+        foreach ($sections as $section_name) {
+            if (isset($application_data_raw[$section_name]) && is_array($application_data_raw[$section_name])) {
+                $html .= '<h4>' . e($section_name) . '</h4>';
+                $html .= $this->generate_section_table($application, $section_name);
+            }
+        }
+        
+        return $html;
+    }
+
+    private function generate_section_table(UserServiceApplication $application, string $section_name): string
+    {
+        $application_data_raw = json_decode($application->application_data, true) ?? [];
+        
+        if (!isset($application_data_raw[$section_name]) || !is_array($application_data_raw[$section_name])) {
+            return '';
+        }
+
+        $section_data = $application_data_raw[$section_name];
+        if (empty($section_data)) {
+            return '';
+        }
+
+        $question_ids = [];
+        foreach ($section_data as $row) {
+            if (is_array($row)) {
+                $question_ids = array_merge($question_ids, array_keys($row));
+            }
+        }
+        $question_ids = array_unique(array_filter($question_ids, 'is_numeric'));
+
+        if (empty($question_ids)) {
+            return '';
+        }
+
+        $questions = ServiceQuestionnaire::whereIn('id', $question_ids)
+            ->where('question_type', '!=', 'file')
+            ->where('is_required', 'yes')
+            ->get(['id', 'question_label'])
+            ->keyBy('id');
+
+        $valid_question_ids = array_intersect($question_ids, $questions->keys()->toArray());
+
+        if (empty($valid_question_ids)) {
+            return '';
+        }
+
+        $html = '<table style="width: 100%; border-collapse: collapse; margin: 10px 0; table-layout: fixed;">';
+        
+        $html .= '<thead><tr>';
+        foreach ($valid_question_ids as $qid) {
+            $label = $questions[$qid]->question_label ?? "Question {$qid}";
+            $html .= '<th style="border: 1px solid #000; padding: 4px; background-color: #f5f5f5; font-size: 12px; word-wrap: break-word;">' . e($label) . '</th>';
+        }
+        $html .= '</tr></thead>';
+        
+        $html .= '<tbody>';
+        foreach ($section_data as $row) {
+            if (is_array($row)) {
+                $html .= '<tr>';
+                foreach ($valid_question_ids as $qid) {
+                    $value = $row[$qid] ?? '';
+                    $html .= '<td style="border: 1px solid #000; padding: 4px; font-size: 11px; word-wrap: break-word; overflow-wrap: break-word;">' . e($value) . '</td>';
+                }
+                $html .= '</tr>';
+            }
+        }
+        $html .= '</tbody></table>';
+
+        return $html;
+    }
+
+>>>>>>> Stashed changes
 }
