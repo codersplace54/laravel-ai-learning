@@ -119,9 +119,14 @@ class ActivityLogController extends Controller
         ]);
     }
 
-    public function activity_log_details(Activity $activity)
+    public function activity_log_details(Request $request)
     {
-        $activity->load(['causer', 'subject']);
+        $validated = $request->validate([
+            'id' => 'required|integer|exists:activity_log,id'
+        ]);
+
+
+        $activity = Activity::where('id',$request->id)->with(['causer', 'subject'])->first();
 
         return response()->json([
             'status' => 1,
@@ -136,12 +141,12 @@ class ActivityLogController extends Controller
 
                 'action_by' => [
                     'id' => $activity->causer_id,
-                    'type' => $activity->causer_type,
+                    'type' => class_basename($activity->causer_type),
                     'name' => $this->display_user_name($activity->causer),
                 ],
                 'for_whom' => [
                     'id' => $activity->subject_id,
-                    'type' => $activity->subject_type,
+                    'type' => class_basename($activity->subject_type),
                     'name' => $this->display_user_name($activity->subject),
                 ],
 
@@ -170,6 +175,6 @@ class ActivityLogController extends Controller
             ?? $model->name_of_enterprise
             ?? $model->name
             ?? $model->email_id
-            ?? (string) ($model->id ?? null);
+            ?? ($model->id ?? null);
     }
 }
