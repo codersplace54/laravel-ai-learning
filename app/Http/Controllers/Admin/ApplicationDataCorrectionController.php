@@ -548,12 +548,17 @@ class ApplicationDataCorrectionController extends Controller
     {
         if (str_contains($path, 'https://swaagatbackend.tripura.gov.in')) {
             $filename = basename($path);
-            return "storage/sites/default/files/{$filename}";
+            return "sites/default/files/{$filename}";
         }
         
         if (str_starts_with($path, 'uploads/')) {
             $filename = basename($path);
-            return "storage/sites/default/files/{$filename}";
+            return "sites/default/files/{$filename}";
+        }
+        
+        if (str_starts_with($path, 'storage/sites/default/files/')) {
+            $filename = basename($path);
+            return "sites/default/files/{$filename}";
         }
         
         return $path;

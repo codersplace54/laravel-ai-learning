@@ -194,8 +194,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('get-total-applications-by-admin', [DashboardController::class, 'get_total_applications_by_admin']);
 
-        Route::get('activity-logs', [ActivityLogController::class, 'activity_logs']);
-        Route::get('activity-logs/{activity}', [ActivityLogController::class, 'activity_log_details']);
+        Route::post('activity-logs', [ActivityLogController::class, 'activity_logs']);
+        Route::post('activity-log-details', [ActivityLogController::class, 'activity_log_details']);
 
     });
 

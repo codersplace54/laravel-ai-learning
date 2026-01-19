@@ -529,6 +529,8 @@ class UserServiceApplicationController extends Controller
             return;
         }
 
+        $all_app_data = $request->input('application_data', []);
+
         $rules = [];
         $existing_application = null;
 
@@ -542,8 +544,11 @@ class UserServiceApplicationController extends Controller
             $has_file_upload = $request->hasFile($field_key);
 
             if (!$existing_value && !$has_file_upload) {
-                $all_app_data = $request->input('application_data', []);
                 $existing_value = $this->find_nested_value($all_app_data, $question->id);
+                
+                if (!$existing_value) {
+                    $has_file_upload = $this->has_nested_file_upload($request, $question->id);
+                }
             }
 
             $is_existing_file = is_string($existing_value) && (
@@ -560,7 +565,7 @@ class UserServiceApplicationController extends Controller
                 $has_existing_file = $this->find_nested_value($app_data, $question->id) !== null;
             }
 
-            if ($is_existing_file || (!$has_file_upload && $has_existing_file)) {
+            if ($is_existing_file || $has_file_upload || (!$has_file_upload && $has_existing_file)) {
                 continue;
             }
 
@@ -604,6 +609,33 @@ class UserServiceApplicationController extends Controller
         }
 
         return null;
+    }
+
+    private function has_nested_file_upload($request, $question_id)
+    {
+        $files = $request->file('application_data', []);
+        return $this->find_nested_file($files, $question_id);
+    }
+
+    private function find_nested_file($files, $question_id)
+    {
+        if (!is_array($files)) {
+            return false;
+        }
+
+        foreach ($files as $key => $value) {
+            if ($key == $question_id && $value !== null) {
+                return true;
+            }
+            if (is_array($value)) {
+                $result = $this->find_nested_file($value, $question_id);
+                if ($result) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
 
@@ -1272,7 +1304,7 @@ class UserServiceApplicationController extends Controller
                     'already_rated' => $service->my_feedback ? true : false,
                     'rating' => $service->my_feedback->satisfaction ?? null,
                     'is_certificate' => $service->NOC_certificate ? true : false,
-                    'is_certificate' => $service->NOC_application_date,
+                    
                     'appeal_for' => $appeal_for
                 ];
             }

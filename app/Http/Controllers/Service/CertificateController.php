@@ -667,13 +667,13 @@ class CertificateController extends Controller
 
             $path = $application->NOC_certificate;
             
-            if (!$path || !Storage::disk('public')->exists($path)) {
-                return response()->json(['status' => 0, 'message' => 'Certificate not generated for this application.'], 404);
-            }
+            // if (!$path || !Storage::disk('public')->exists($path)) {
+            //     return response()->json(['status' => 0, 'message' => 'Certificate not generated for this application.'], 404);
+            // }
             return response()->json([
                 'status' => 1,
                 'message' => 'PDF file is available.',
-                'download_url' => asset(Storage::url($path)),
+                'download_url' => !empty($path) ? asset(Storage::url($path)) : null,
             ]);
         } catch (\Exception $e) {
 
