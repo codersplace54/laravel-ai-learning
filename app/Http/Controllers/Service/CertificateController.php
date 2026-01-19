@@ -280,6 +280,9 @@ class CertificateController extends Controller
                 }
             }
 
+            // Process section_table placeholders first
+            $template = $this->process_section_table_placeholders($template, $application);
+
             $filled = preg_replace_callback(
                 '/\{\{\s*([A-Za-z0-9_.\s]+)\s*\}\}/',
                 function ($m) use ($data, $application) {
@@ -749,7 +752,80 @@ class CertificateController extends Controller
             'qr_code'              => $qr_data_uri,
             'field_1'              => $request->field_1 ?? null,
             'field_2'              => $request->field_2 ?? null,
-        ];
+        ] + $this->generate_section_table_placeholders($application);
+    }
+
+    private function generate_section_table_placeholders(UserServiceApplication $application): array
+    {
+        return [];
+    }
+
+    private function process_section_table_placeholders(string $template, UserServiceApplication $application): string
+    {
+        return preg_replace_callback('/\{\{\s*table_section\.([0-9,]+)\s*\}\}/', function($matches) use ($application) {
+            $question_ids = array_map('trim', explode(',', $matches[1]));
+            return $this->generate_table_for_questions($application, $question_ids);
+        }, $template);
+    }
+
+    private function generate_table_for_questions(UserServiceApplication $application, array $question_ids): string
+    {
+        $application_data_raw = json_decode($application->application_data, true) ?? [];
+        
+        // Find which section contains these questions
+        $target_section = null;
+        foreach ($application_data_raw as $section_name => $section_data) {
+            if (is_array($section_data) && !empty($section_data)) {
+                $section_question_ids = [];
+                foreach ($section_data as $row) {
+                    if (is_array($row)) {
+                        $section_question_ids = array_merge($section_question_ids, array_keys($row));
+                    }
+                }
+                if (array_intersect($question_ids, $section_question_ids)) {
+                    $target_section = $section_name;
+                    break;
+                }
+            }
+        }
+        
+        if (!$target_section || !isset($application_data_raw[$target_section])) {
+            return '';
+        }
+
+        $section_data = $application_data_raw[$target_section];
+        $questions = ServiceQuestionnaire::whereIn('id', $question_ids)
+            ->get(['id', 'question_label'])
+            ->keyBy('id');
+
+        $valid_question_ids = array_intersect($question_ids, $questions->keys()->toArray());
+        if (empty($valid_question_ids)) {
+            return '';
+        }
+
+        $html = '<table style="width: 100%; border-collapse: collapse; margin: 10px 0; table-layout: fixed;">';
+        
+        $html .= '<thead><tr>';
+        foreach ($valid_question_ids as $qid) {
+            $label = $questions[$qid]->question_label ?? "Question {$qid}";
+            $html .= '<th style="border: 1px solid #000; padding: 4px; background-color: #f5f5f5; font-size: 12px; word-wrap: break-word;">' . e($label) . '</th>';
+        }
+        $html .= '</tr></thead>';
+        
+        $html .= '<tbody>';
+        foreach ($section_data as $row) {
+            if (is_array($row)) {
+                $html .= '<tr>';
+                foreach ($valid_question_ids as $qid) {
+                    $value = $row[$qid] ?? '';
+                    $html .= '<td style="border: 1px solid #000; padding: 4px; font-size: 11px; word-wrap: break-word; overflow-wrap: break-word;">' . e($value) . '</td>';
+                }
+                $html .= '</tr>';
+            }
+        }
+        $html .= '</tbody></table>';
+
+        return $html;
     }
 
     private function generate_all_sections(UserServiceApplication $application): string

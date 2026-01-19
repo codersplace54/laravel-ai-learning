@@ -222,6 +222,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('update-payment', [PaymentController::class, 'update_payment']);
         Route::post('user-service-applications-by-payment-status', [PaymentController::class, 'user_service_applications_by_payment_status']);
+        Route::post('check-payment-status', [PaymentController::class, 'check_payment_status']);
+        Route::post('check-all-pending-payments', [PaymentController::class, 'check_all_pending_payments']);
 
         Route::post('existing-license-store', [ExistingLicenseController::class, 'existing_license_store']);
         Route::post('existing-license-update', [ExistingLicenseController::class, 'existing_license_update']);
