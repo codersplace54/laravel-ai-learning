@@ -10,13 +10,13 @@ return [
     |
     */
 
-    'user_id' => env('PAN_USER_ID', 'V0024301'),
+    'user_id' => env('PAN_USER_ID', 'V0304801'),
     
-    'api_url' => env('PAN_API_URL', 'https://121.240.36.237/TIN/PanInquiryAPIBackEnd'),
+    'api_url' => env('PAN_API_URL', 'https://opvapi.egov.proteantech.in/TIN/PanInquiryAPIBackEnd'),
     
-    'pfx_path' => env('PAN_PFX_PATH', storage_path('certificates/VerasysSubCA2022.pfx')),
+    'pfx_path' => env('PAN_PFX_PATH') ?: storage_path('certificates/ilogitron_dsc.pfx'),
     
-    'pfx_password' => env('PAN_PFX_PASSWORD', 'abc1234'),
+    'pfx_password' => env('PAN_PFX_PASSWORD', '12345678'),
     
     'version' => env('PAN_VERSION', '4'),
     
