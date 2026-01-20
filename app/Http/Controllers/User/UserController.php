@@ -950,4 +950,78 @@ class UserController extends Controller
             ], 500);
         }
     }
+
+    public function get_duplicate_pan_accounts(Request $request)
+    {
+        try {
+            $user = Auth::user();
+
+            $duplicate_accounts = User::where('pan', $user->pan)
+                ->where('status', 'active')
+                ->where('user_type', 'individual')
+                ->select('id', 'name_of_enterprise', 'authorized_person_name', 'email_id', 'mobile_no', 'user_name', 'status', 'created_at')
+                ->get();
+
+            if ($duplicate_accounts->count() <= 1) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No duplicate accounts found.'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Dear User, you have following accounts. Please choose which one you want to keep active and remaining will be de-activated.',
+                'accounts' => $duplicate_accounts
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to get duplicate accounts.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function choose_active_account(Request $request)
+    {
+        try {
+            $request->validate([
+                'selected_account_id' => 'required|exists:users,id'
+            ]);
+
+            $user = Auth::user();
+
+            DB::beginTransaction();
+
+            $selected_account = User::where('id',$request->selected_account_id)->first();
+            
+            if ($selected_account->pan !== $user->pan) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Invalid account selection.'
+                ], 422);
+            }
+
+            User::where('pan', $user->pan)
+                ->where('id', '!=', $request->selected_account_id)
+                ->update(['status' => 'blocked']);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Account activated successfully. Other accounts have been deactivated.',
+                'active_account' => $selected_account
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to activate account.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

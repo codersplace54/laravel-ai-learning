@@ -47,16 +47,34 @@ class PanVerificationController extends Controller
 
             $parsed_response = $this->pan_service->parse_response($response);
 
+            if ($parsed_response['success'] && !empty($parsed_response['data'])) {
+                $pan_data = $parsed_response['data'][0];
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'PAN verification completed successfully',
+                    'pan' => $pan_data['pan'],
+                    'pan_status' => $pan_data['pan_status'],
+                    'pan_status_description' => $pan_data['pan_status_description'],
+                    'name_match' => $pan_data['name_match'] === 'Y',
+                    'father_name_match' => $pan_data['father_name_match'] === 'Y',
+                    'dob_match' => $pan_data['dob_match'] === 'Y',
+                    'seeding_status' => $pan_data['seeding_status'],
+                    'is_valid' => $pan_data['pan_status'] === 'E',
+                    'response_code' => $parsed_response['response_code']
+                ]);
+            }
+
             return response()->json([
-                'success' => true,
-                'message' => 'PAN verification completed',
-                'data' => $parsed_response
-            ]);
+                'success' => false,
+                'message' => $parsed_response['message'] ?? 'PAN verification failed',
+                'response_code' => $parsed_response['response_code'] ?? null
+            ], 400);
 
         } catch (Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'PAN verification failed',
+                'message' => 'PAN verification service unavailable',
                 'error' => $e->getMessage()
             ], 500);
         }
