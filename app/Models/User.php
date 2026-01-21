@@ -39,6 +39,8 @@ class User extends Authenticatable implements JWTSubject
         'old_id',
         'whatsapp_no',
         'password_reset_required',
+        'is_pan_verified',
+        'dob'
     ];
 
     protected $hidden = [
