@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use App\Services\PanVerificationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
 use Exception;
+use Illuminate\Support\Facades\Auth;
 
 class PanVerificationController extends Controller
 {
@@ -24,17 +26,26 @@ class PanVerificationController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'pan' => 'required|string|size:10|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
-                'name' => 'required|string|max:85',
+                'pan'         => 'required|string|size:10|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
+                'name'        => 'required|string|max:85',
                 'father_name' => 'nullable|string|max:75',
-                'dob' => 'required|string|regex:/^\d{2}\/\d{2}\/\d{4}$/'
+                'dob'         => 'required|string|regex:/^\d{2}\/\d{2}\/\d{4}$/'
             ]);
 
             if ($validator->fails()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
-                    'errors' => $validator->errors()
+                    'errors'  => $validator->errors()
+                ], 422);
+            }
+
+            $pan = strtoupper(trim($request->pan));
+
+            if (User::where('pan', $pan)->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This PAN is already registered.',
                 ], 422);
             }
 
@@ -47,38 +58,61 @@ class PanVerificationController extends Controller
 
             $parsed_response = $this->pan_service->parse_response($response);
 
-            if ($parsed_response['success'] && !empty($parsed_response['data'])) {
-                $pan_data = $parsed_response['data'][0];
-                
-                return response()->json([
-                    'success' => true,
-                    'message' => 'PAN verification completed successfully',
-                    'pan' => $pan_data['pan'],
-                    'pan_status' => $pan_data['pan_status'],
-                    'pan_status_description' => $pan_data['pan_status_description'],
-                    'name_match' => $pan_data['name_match'] === 'Y',
-                    'father_name_match' => $pan_data['father_name_match'] === 'Y',
-                    'dob_match' => $pan_data['dob_match'] === 'Y',
-                    'seeding_status' => $pan_data['seeding_status'],
-                    'is_valid' => $pan_data['pan_status'] === 'E',
-                    'response_code' => $parsed_response['response_code']
+            $pan_data = $parsed_response['data'][0] ?? null;
+
+            $is_pan_verified = (
+                ($parsed_response['response_code'] ?? null) === '1'
+                && !empty($pan_data)
+                && ($pan_data['pan_status'] ?? null) === 'E'
+            );
+
+            $pan_token = null;
+            if ($is_pan_verified) {
+                $pan_token = encrypt([
+                    'verified'  => true,
+                    'pan'       => strtoupper($pan_data['pan'] ?? $request->input('pan')),
+                    'issued_at' => now()->timestamp,
                 ]);
             }
 
+            // for pen verification in update profile
+            $user = Auth::user();
+            if ($user) {
+                $user->update(['is_pan_verified' => $is_pan_verified]);
+            }
+
+            if (!empty($pan_data)) {
+                return response()->json([
+                    'success'                 => true,
+                    'message'                 => 'PAN verification completed successfully',
+                    'pan'                     => $pan_data['pan'] ?? null,
+                    'pan_status'              => $pan_data['pan_status'] ?? null,
+                    'pan_status_description'  => $pan_data['pan_status_description'] ?? null,
+                    'name_match'              => ($pan_data['name_match'] ?? null) === 'Y',
+                    'father_name_match'       => ($pan_data['father_name_match'] ?? null) === 'Y',
+                    'dob_match'               => ($pan_data['dob_match'] ?? null) === 'Y',
+                    'seeding_status'          => $pan_data['seeding_status'] ?? null,
+                    'is_valid'                => $is_pan_verified,
+                    'pan_token'               => $pan_token,
+                    'expires_in'              => $pan_token ? 900 : null,
+                    'response_code'           => $parsed_response['response_code'] ?? null,
+                ], 200);
+            }
+
             return response()->json([
-                'success' => false,
-                'message' => $parsed_response['message'] ?? 'PAN verification failed',
+                'success'       => false,
+                'message'       => $parsed_response['message'] ?? 'PAN verification failed',
                 'response_code' => $parsed_response['response_code'] ?? null
             ], 400);
-
         } catch (Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'PAN verification service unavailable',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage()
             ], 500);
         }
     }
+
 
     /**
      * Verify multiple PANs (batch verification)
@@ -131,7 +165,6 @@ class PanVerificationController extends Controller
                 'message' => 'Batch PAN verification completed',
                 'data' => $results
             ]);
-
         } catch (Exception $e) {
             return response()->json([
                 'success' => false,

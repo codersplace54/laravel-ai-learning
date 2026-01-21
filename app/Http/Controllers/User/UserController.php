@@ -17,6 +17,7 @@ use App\Models\Otp;
 use App\Services\SmsService;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\DepartmentUsersExport;
+use Illuminate\Contracts\Encryption\DecryptException;
 
 class UserController extends Controller
 {
@@ -49,9 +50,10 @@ class UserController extends Controller
                     'designation'      => 'nullable|string',
                     'is_active'      => 'nullable|integer',
                     'inspector'      => 'nullable|string|in:yes,no',
+                    'dob' => 'nullable|date',
+                    'pan_token' => 'required_if:user_type,individual|string',
 
                     'locations' => 'nullable|array|min:1',
-
                     'locations.*.district_id' => 'nullable|integer|exists:tripura_master_data,district_code',
                     'locations.*.subdivision_id' => 'nullable|integer|exists:tripura_master_data,sub_lgd_code',
                     'locations.*.block_id' => 'nullable|integer',
@@ -89,25 +91,38 @@ class UserController extends Controller
                     'hierarchy_level.required' => 'The hierarchy level is required.',
                     'hierarchy_level.in'       => 'The hierarchy level must be one of: block, subdivision1, subdivision2, subdivision3, district1, district2, district3, state1, state2, or state3.',
                     'is_active.integer'        => 'The status must be a valid number (0 or 1).',
+                    'dob.date' => 'Date of birth/establishment should be a valid date.',
+                    'pan_token.required_if' => 'PAN verification is required before registration.',
                 ]
             );
-
-
-            DB::beginTransaction();
 
             if ($request->user_type === 'individual') {
 
                 $user_otp_exist = Otp::where('mobile_no', $request->mobile_no)->first();
-
                 if (!$user_otp_exist || $user_otp_exist->is_verified == 0) {
-                    return response()->json([
-                        'status'  => 0,
-                        'message' => 'Please verify your mobile number with OTP before registering.',
-                    ], 422);
+                    return response()->json(['status' => 0, 'message' => 'Please verify your mobile number with OTP before registering.'], 422);
                 }
 
-                $user_otp_exist->delete();
+                try {
+                    $pan_data = decrypt($request->pan_token);
+                } catch (DecryptException $e) {
+                    return response()->json(['status' => 0, 'message' => 'PAN verification token is invalid or expired.'], 422);
+                }
+
+                if (
+                    empty($pan_data['verified']) ||
+                    $pan_data['verified'] !== true ||
+                    now()->timestamp - ($pan_data['issued_at'] ?? 0) > 900
+                ) {
+                    return response()->json(['status' => 0, 'message' => 'PAN verification expired or invalid.'], 422);
+                }
+
+                if (strtoupper($request->pan) !== strtoupper($pan_data['pan'] ?? '')) {
+                    return response()->json(['status' => 0, 'message' => 'PAN does not match verified PAN.'], 422);
+                }
             }
+
+            DB::beginTransaction();
 
             if ($request->user_type == "department") {
                 $admin = Auth::user();
@@ -134,6 +149,8 @@ class UserController extends Controller
                 'password' => Hash::make($request->password),
                 'status' => 'active',
                 'is_mobile_verified' => $request->user_type === 'individual' ? 1 : 0,
+                'dob' => $request->dob,
+                'is_pan_verified' => $request->user_type === 'individual' ? 1 : 0,
             ]);
 
             if ($user->user_type == "department") {
@@ -275,6 +292,10 @@ class UserController extends Controller
                 $rules['locations.*.block_id'] = 'nullable|integer';
             }
 
+            if ($request->dob !== null) {
+                $rules['dob'] = 'nullable|date';
+            }
+
 
             $request->validate($rules, [
                 'id.required' => 'User ID is required.',
@@ -305,6 +326,7 @@ class UserController extends Controller
                 'pan.required_if' => 'PAN is required.',
                 'pan.regex' => 'The PAN number must be in valid format (e.g., ABCDE1234F).',
                 'pan.unique' => 'This PAN number is already registered.',
+                'dob.date' => 'Date of birth/establishment should be a valid date.',
             ]);
 
             DB::beginTransaction();
@@ -385,6 +407,9 @@ class UserController extends Controller
             }
             if ($request->password !== null) {
                 $update_data['password'] = Hash::make($request->password);
+            }
+            if ($request->dob !== null) {
+                $update_data['dob'] = $request->dob;
             }
 
             $user->update($update_data);
@@ -611,7 +636,8 @@ class UserController extends Controller
                 'hierarchy_level' => $user->department_user->hierarchy_level ?? null,
                 'designation'     => $user->department_user->designation     ?? null,
                 'inspector'     => $user->department_user->inspector         ?? null,
-
+                'is_pan_verified' => (bool) $user->is_pan_verified,
+                'dob' => $user->dob
 
             ];
 
@@ -956,6 +982,13 @@ class UserController extends Controller
         try {
             $user = Auth::user();
 
+            if (empty($user->pan)) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'PAN is not available for this user.'
+                ], 400);
+            }
+
             $duplicate_accounts = User::where('pan', $user->pan)
                 ->where('status', 'active')
                 ->where('user_type', 'individual')
@@ -994,8 +1027,8 @@ class UserController extends Controller
 
             DB::beginTransaction();
 
-            $selected_account = User::where('id',$request->selected_account_id)->first();
-            
+            $selected_account = User::where('id', $request->selected_account_id)->first();
+
             if ($selected_account->pan !== $user->pan) {
                 return response()->json([
                     'status' => 0,
@@ -1023,5 +1056,4 @@ class UserController extends Controller
             ], 500);
         }
     }
-
 }
