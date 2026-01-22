@@ -31,6 +31,8 @@ class EnterpriseDetail extends Model
         'authorized_representative_email_id',
         'authorized_representative_alternate_mobile_no',
         'authorized_representative_phone_no',
+        'authorized_representative_gstNumber',
+        'authorized_representative_cin_number',
         'proposal_for',
         'proposed_date_of_commissioning',
         'created_at',
