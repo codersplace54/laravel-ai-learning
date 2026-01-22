@@ -42,13 +42,6 @@ class PanVerificationController extends Controller
 
             $pan = strtoupper(trim($request->pan));
 
-            if (User::where('pan', $pan)->exists()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This PAN is already registered.',
-                ], 422);
-            }
-
             $response = $this->pan_service->verify_single_pan(
                 $request->input('pan'),
                 $request->input('name'),

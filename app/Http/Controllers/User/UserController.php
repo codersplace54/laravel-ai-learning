@@ -18,6 +18,7 @@ use App\Services\SmsService;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\DepartmentUsersExport;
 use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
@@ -145,7 +146,7 @@ class UserController extends Controller
                 'registered_enterprise_address' => $request->registered_enterprise_address,
                 'registered_enterprise_city' => $request->registered_enterprise_city,
                 'user_type' => $request->user_type,
-                'pan' => $request->pan,
+                'pan' => strtoupper(trim($request->pan)),
                 'password' => Hash::make($request->password),
                 'status' => 'active',
                 'is_mobile_verified' => $request->user_type === 'individual' ? 1 : 0,
@@ -238,14 +239,25 @@ class UserController extends Controller
         try {
 
             $user = User::findOrFail($request->id);
+
             $rules = [
                 'id' => 'required|exists:users,id',
                 'email_id' => 'required|email|unique:users,email_id,' . $request->id,
                 'mobile_no' => 'required|string|max:15',
                 'whatsapp_no' => 'nullable|string|max:15',
-                'pan' => 'required_if:user_type,individual|string|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/|unique:users,pan,' . $request->id,
                 'otp_code' => 'required_if:user_type,individual|string|size:6',
             ];
+
+            $current_pan = $user->pan;
+            $incoming_pan = strtoupper(trim($request->pan));
+
+            $pan_rules = ['required_if:user_type,individual','string','size:10','regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/'];
+
+            if($request->has('pan') && $incoming_pan !== $current_pan){
+                $pan_rules[] = Rule::unique('users', 'pan')->ignore($user->id);
+            }
+
+            $rules['pan'] = $pan_rules;
 
             if ($request->name_of_enterprise !== null) {
                 $rules['name_of_enterprise'] = 'nullable|string|max:255';
@@ -332,7 +344,6 @@ class UserController extends Controller
             DB::beginTransaction();
 
             if ($user->user_type === "individual") {
-                $now = Carbon::now();
 
                 $otp = Otp::where('mobile_no', $user->mobile_no)
                     ->where('code', $request->otp_code)
@@ -345,8 +356,6 @@ class UserController extends Controller
                         'message' => 'Invalid OTP. Please enter the correct OTP and try again.',
                     ], 422);
                 }
-
-
 
                 if ($otp->is_verified !== 1) {
                     DB::rollBack();
