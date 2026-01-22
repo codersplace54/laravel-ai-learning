@@ -18,7 +18,7 @@ return new class extends Migration
         foreach ($users as $user) {
             DB::table('user_units')->insert([
                 'user_id'       => $user->id,
-                'unit_name'     => $user->name_of_enterprise,
+                'unit_name'      => $user->name_of_enterprise ?? 'default unit',
                 'district_id'   => $user->district_id,
                 'subdivision_id' => $user->subdivision_id,
                 'ulb_id'        => $user->ulb_id,
