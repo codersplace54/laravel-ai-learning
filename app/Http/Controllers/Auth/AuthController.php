@@ -37,11 +37,29 @@ class AuthController extends Controller
             $password   = $request->password;
 
             $token = null;
+            $user  = null;
+
 
             $token = JWTAuth::attempt(['user_name' => $identifier, 'password' => $password]);
 
-            if (! $token) {
-                $token = JWTAuth::attempt(['pan' => strtoupper($identifier), 'password' => $password]);
+            // Duplicate pan users handling
+            if (!$token) {
+                $pan = strtoupper(trim($identifier));
+
+                if (preg_match('/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/', $pan)) {
+
+                    $users = User::where('pan', $pan)
+                        ->where('status', '!=', 'blocked')
+                        ->orderByDesc('id')
+                        ->get();
+
+                    foreach ($users as $user) {
+                        if (Hash::check($password, $user->password)) {
+                            $token = JWTAuth::fromUser($user);
+                            break;
+                        }
+                    }
+                }
             }
 
             if (! $token) {
@@ -407,7 +425,7 @@ class AuthController extends Controller
             if (preg_match('/[A-Za-z]/', $phone_or_pan)) {
 
                 $pan_no = strtoupper($phone_or_pan);
-                $user = User::where('pan', $pan_no)->first();
+                $user = User::where('pan', $pan_no)->where('status', 'active')->first();
 
                 if (! $user) {
                     return response()->json([
@@ -516,7 +534,7 @@ class AuthController extends Controller
             if (preg_match('/[A-Za-z]/', $phone_or_pan)) {
 
                 $pan_no = strtoupper($phone_or_pan);
-                $user = User::where('pan', $pan_no)->first();
+                $user = User::where('pan', $pan_no)->where('status', 'active')->first();
 
                 if (! $user) {
                     return response()->json([
@@ -598,7 +616,7 @@ class AuthController extends Controller
 
             if (preg_match('/[A-Za-z]/', $phone_or_pan)) {
                 $pan_no = strtoupper($phone_or_pan);
-                $user = User::where('pan', $pan_no)->first();
+                $user = User::where('pan', $pan_no)->where('status', 'active')->first();
 
                 if (! $user) {
                     return response()->json([
@@ -856,7 +874,7 @@ class AuthController extends Controller
             ], 500);
         }
     }
-    
+
     public function return_to_admin(Request $request)
     {
 
@@ -915,7 +933,7 @@ class AuthController extends Controller
                 'status' => 0,
                 'message' => 'Failed to return to admin',
                 'error' => $e->getMessage()
-                 ], 500);
+            ], 500);
         }
     }
 
