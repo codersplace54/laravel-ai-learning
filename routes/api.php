@@ -391,5 +391,4 @@ Route::post('entity_locker-initiate', [EntityLockerController::class, 'initiate_
 Route::get('entity_locker', [EntityLockerController::class, 'handle_callback']);
 Route::post('entity_locker-documents', [EntityLockerController::class, 'user_documents']);
 
-
 Route::post('/deploy-backend-latest-code-in-server', [DeployController::class, 'deploy']);
