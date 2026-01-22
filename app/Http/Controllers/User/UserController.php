@@ -430,8 +430,11 @@ class UserController extends Controller
             if ($request->password !== null) {
                 $update_data['password'] = Hash::make($request->password);
             }
+
             if ($request->dob !== null) {
-                $update_data['dob'] = $request->dob;
+                $update_data['dob'] = Carbon::parse($request->dob)
+                    ->setTimezone('Asia/Kolkata')
+                    ->toDateString();
             }
 
             $user->update($update_data);
