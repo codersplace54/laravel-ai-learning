@@ -53,11 +53,24 @@ class PanVerificationController extends Controller
 
             $pan_data = $parsed_response['data'][0] ?? null;
 
+            $name_ok   = !empty($pan_data) && (($pan_data['name_match'] ?? null) === 'Y');
+            $dob_ok    = !empty($pan_data) && (($pan_data['dob_match'] ?? null) === 'Y');
+
+            $mismatches = [];
+            if (! $name_ok) $mismatches[] = 'Name is not matching';
+            if (! $dob_ok)  $mismatches[] = 'DOB is not matching';
+
             $is_pan_verified = (
                 ($parsed_response['response_code'] ?? null) === '1'
                 && !empty($pan_data)
                 && ($pan_data['pan_status'] ?? null) === 'E'
+                && $name_ok
+                && $dob_ok
             );
+
+            $fail_message = !empty($mismatches)
+                ? implode(', ', $mismatches)
+                : ($pan_data['pan_status_description'] ?? ($parsed_response['message'] ?? 'PAN verification failed'));
 
             $pan_token = null;
             if ($is_pan_verified) {
@@ -76,8 +89,10 @@ class PanVerificationController extends Controller
 
             if (!empty($pan_data)) {
                 return response()->json([
-                    'success'                 => true,
-                    'message'                 => 'PAN verification completed successfully',
+                    'success' => $is_pan_verified,
+                    'message' => $is_pan_verified
+                        ? 'PAN verification completed successfully'
+                        : $fail_message,
                     'pan'                     => $pan_data['pan'] ?? null,
                     'pan_status'              => $pan_data['pan_status'] ?? null,
                     'pan_status_description'  => $pan_data['pan_status_description'] ?? null,
@@ -89,7 +104,7 @@ class PanVerificationController extends Controller
                     'pan_token'               => $pan_token,
                     'expires_in'              => $pan_token ? 900 : null,
                     'response_code'           => $parsed_response['response_code'] ?? null,
-                ], 200);
+                ], $is_pan_verified ? 200 : 422);
             }
 
             return response()->json([
