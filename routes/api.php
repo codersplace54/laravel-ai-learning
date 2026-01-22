@@ -44,6 +44,7 @@ use App\Http\Controllers\Service\FeedbackController;
 use App\Http\Controllers\PanVerificationController;
 use App\Http\Controllers\Service\AppealController;
 use App\Http\Controllers\Admin\ActivityLogController;
+use app\Http\Controllers\DeployController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -389,3 +390,6 @@ Route::post('/external-send-otp-sms', [AuthController::class, 'external_send_otp
 Route::post('entity_locker-initiate', [EntityLockerController::class, 'initiate_auth']);
 Route::get('entity_locker', [EntityLockerController::class, 'handle_callback']);
 Route::post('entity_locker-documents', [EntityLockerController::class, 'user_documents']);
+
+
+Route::post('/deploy-backend-latest-code-in-server', [DeployController::class, 'deploy']);
