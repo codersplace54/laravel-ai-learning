@@ -36,6 +36,8 @@ class EnterpriseDetailController extends Controller
                         'authorized_representative_email_id' => 'nullable|email|max:255',
                         'authorized_representative_alternate_mobile_no' => 'nullable|string|max:10',
                         'authorized_representative_phone_no' => 'nullable|string|max:20',
+                        'authorized_representative_gstNumber' => 'nullable|string',
+                        'authorized_representative_cin_number' => 'nullable|string',
 
                         'proposal_for' => 'required|in:New Unit,Existing Unit',
                         'proposed_date_of_commissioning' => 'required|date',
@@ -146,6 +148,8 @@ class EnterpriseDetailController extends Controller
                     'authorized_representative_email_id' => $request->authorized_representative_email_id,
                     'authorized_representative_alternate_mobile_no' => $request->authorized_representative_alternate_mobile_no,
                     'authorized_representative_phone_no' => $request->authorized_representative_phone_no,
+                    'authorized_representative_gstNumber' => $request->authorized_representative_gstNumber,
+                    'authorized_representative_cin_number' => $request->authorized_representative_cin_number,
 
                     'proposal_for' => $request->proposal_for,
                     'proposed_date_of_commissioning' => $request->proposed_date_of_commissioning,
@@ -181,6 +185,8 @@ class EnterpriseDetailController extends Controller
                     'authorized_representative_email_id' => $request->authorized_representative_email_id,
                     'authorized_representative_alternate_mobile_no' => $request->authorized_representative_alternate_mobile_no,
                     'authorized_representative_phone_no' => $request->authorized_representative_phone_no,
+                    'authorized_representative_gstNumber' => $request->authorized_representative_gstNumber,
+                    'authorized_representative_cin_number' => $request->authorized_representative_cin_number,
 
                     'proposal_for' => $request->proposal_for,
                     'proposed_date_of_commissioning' => $request->proposed_date_of_commissioning,
