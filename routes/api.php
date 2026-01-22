@@ -254,6 +254,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('service-feedback-list', [FeedbackController::class, 'service_feedback_list']);
 
     Route::post('user-appeal-store', [AppealController::class, 'user_appeal_store']);
+
+    Route::post('user-unit-store', [UserController::class, 'user_unit_store']);
+    Route::post('get-user-unit-list', [UserController::class, 'get_user_unit_list']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
