@@ -264,9 +264,9 @@ class UserController extends Controller
             $current_pan = $user->pan;
             $incoming_pan = strtoupper(trim($request->pan));
 
-            $pan_rules = ['required_if:user_type,individual','string','size:10','regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/'];
+            $pan_rules = ['required_if:user_type,individual', 'string', 'size:10', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/'];
 
-            if($request->has('pan') && $incoming_pan !== $current_pan){
+            if ($request->has('pan') && $incoming_pan !== $current_pan) {
                 $pan_rules[] = Rule::unique('users', 'pan')->ignore($user->id);
             }
 
@@ -1030,6 +1030,9 @@ class UserController extends Controller
 
             $request->validate([
                 'unit_name'      => 'required|string|max:255',
+                'address'        => 'nullable|string',
+                'phone'          => 'nullable|string',
+                'type'           => 'nullable|in:rural,urban',
                 'district_id'    => 'required|integer|exists:tripura_master_data,district_code',
                 'subdivision_id' => 'nullable|integer|exists:tripura_master_data,sub_lgd_code',
                 'ulb_id'         => 'nullable|integer|exists:tripura_master_data,ulb_lgd_code',
@@ -1049,6 +1052,9 @@ class UserController extends Controller
             $unit = UserUnit::create([
                 'user_id'        => $user->id,
                 'unit_name'      => $request->unit_name,
+                'address'        => $request->address,
+                'phone'          => $request->phone,
+                'type'           => $request->type,
                 'district_id'    => $request->district_id,
                 'subdivision_id' => $request->subdivision_id,
                 'ulb_id'         => $request->ulb_id,
@@ -1084,6 +1090,86 @@ class UserController extends Controller
         }
     }
 
+    public function user_unit_update(Request $request)
+    {
+
+
+        try {
+
+            $request->validate([
+                'unit_id'        => 'required|integer|exists:user_units,id',
+                'unit_name'      => 'required|string|max:255',
+                'address'        => 'nullable|string|max:500',
+                'phone'          => 'nullable|string|max:20',
+                'type'           => 'nullable|in:rural,urban',
+                'district_id'    => 'required|integer|exists:tripura_master_data,district_code',
+                'subdivision_id' => 'nullable|integer|exists:tripura_master_data,sub_lgd_code',
+                'ulb_id'         => 'nullable|integer|exists:tripura_master_data,ulb_lgd_code',
+                'ward_id'        => 'nullable|integer|exists:tripura_master_data,gp_vc_ward_lgd_code',
+            ]);
+
+            $user = Auth::user();
+
+            if ($user->user_type !== 'individual') {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Only individual users can update units.',
+                ], 403);
+            }
+
+            DB::beginTransaction();
+
+            $unit = UserUnit::where('id', $request->unit_id)
+                ->where('user_id', $user->id)
+                ->first();
+
+            if (!$unit) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Unit not found or unauthorized access.',
+                ], 404);
+            }
+
+            $unit->update([
+                'unit_name'      => $request->unit_name,
+                'address'        => $request->address,
+                'phone'          => $request->phone,
+                'type'           => $request->type,
+                'district_id'    => $request->district_id,
+                'subdivision_id' => $request->subdivision_id,
+                'ulb_id'         => $request->ulb_id,
+                'ward_id'        => $request->ward_id,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Unit updated successfully.',
+                'data'    => $unit,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Failed to update unit.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
     public function get_user_unit_list()
     {
 
@@ -1112,6 +1198,9 @@ class UserController extends Controller
                     return [
                         'id' => $unit->id,
                         'unit_name' => $unit->unit_name,
+                        'address' => $unit->address,
+                        'phone' => $unit->phone,
+                        'type' => $unit->type ?? null,
                         'district_code' => $unit->district_id,
                         'district_name' => $unit->district->district_name ?? null,
                         'subdivision_code' => $unit->subdivision_id,

@@ -11,6 +11,9 @@ class UserUnit extends Model
     protected $fillable = [
         'user_id',
         'unit_name',
+        'address',
+        'phone',
+        'type',
         'district_id',
         'subdivision_id',
         'ulb_id',
