@@ -52,7 +52,7 @@ class UserController extends Controller
                     'designation'      => 'nullable|string',
                     'is_active'      => 'nullable|integer',
                     'inspector'      => 'nullable|string|in:yes,no',
-                    'dob' => 'nullable|date',
+                    'dob' => 'nullable|date_format:Y-m-d',
                     'pan_token' => 'required_if:user_type,individual|string',
 
                     'locations' => 'nullable|array|min:1',
@@ -93,7 +93,7 @@ class UserController extends Controller
                     'hierarchy_level.required' => 'The hierarchy level is required.',
                     'hierarchy_level.in'       => 'The hierarchy level must be one of: block, subdivision1, subdivision2, subdivision3, district1, district2, district3, state1, state2, or state3.',
                     'is_active.integer'        => 'The status must be a valid number (0 or 1).',
-                    'dob.date' => 'Date of birth/establishment should be a valid date.',
+                    'dob.date_format' => 'DOB must be in YYYY-MM-DD format.',
                     'pan_token.required_if' => 'PAN verification is required before registration.',
                 ]
             );
@@ -174,6 +174,18 @@ class UserController extends Controller
                         'updated_by' => null
                     ]);
                 }
+
+                // Log department user creation
+                // activity('admin_user_management')
+                //     ->performedOn($user)
+                //     ->causedBy($admin)
+                //     ->withProperties([
+                //         'action' => 'department_user_created',
+                //         'department_id' => $request->department_id,
+                //         'hierarchy_level' => $request->hierarchy_level,
+                //         'designation' => $request->designation
+                //     ])
+                //     ->log('Admin created department user');
             }
 
             $now = Carbon::now();
@@ -318,7 +330,7 @@ class UserController extends Controller
             }
 
             if ($request->dob !== null) {
-                $rules['dob'] = 'nullable|date';
+                $rules['dob'] = 'nullable|date_format:Y-m-d';
             }
 
 
@@ -351,7 +363,7 @@ class UserController extends Controller
                 'pan.required_if' => 'PAN is required.',
                 'pan.regex' => 'The PAN number must be in valid format (e.g., ABCDE1234F).',
                 'pan.unique' => 'This PAN number is already registered.',
-                'dob.date' => 'Date of birth/establishment should be a valid date.',
+                'dob.date_format' => 'DOB must be in YYYY-MM-DD format.',
             ]);
 
             DB::beginTransaction();
@@ -493,6 +505,18 @@ class UserController extends Controller
                         'inspector' =>  $request->inspector ?? "no"
                     ]);
                 }
+
+                // Log department user profile update
+                // activity('admin_user_management')
+                //     ->performedOn($user)
+                //     ->causedBy($auth_user)
+                //     ->withProperties([
+                //         'action' => 'department_user_updated',
+                //         'department_id' => $request->department_id,
+                //         'hierarchy_level' => $request->hierarchy_level,
+                //         'designation' => $request->designation
+                //     ])
+                //     ->log('Admin updated department user profile');
             }
 
             $locations = $user->department_user_location->map(function ($loc) {
