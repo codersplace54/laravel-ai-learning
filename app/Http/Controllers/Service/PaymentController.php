@@ -17,9 +17,11 @@ use App\Models\UserServiceApplication;
 use App\Models\User;
 use App\Models\ApplicationWorkflowHistory;
 use App\Services\SmsService;
+use App\Traits\LogsActivity;
 
 class PaymentController extends Controller
 {
+    use LogsActivity;
 
     public function update_payment(Request $request)
     {
@@ -158,6 +160,15 @@ class PaymentController extends Controller
         } catch (\Exception $e) {
 
             DB::rollBack();
+            
+            // Log payment initiation error
+            $user = Auth::user();
+            if ($user) {
+                $this->logActivity('Payment initiation failed', null, $user, [
+                    'error_message' => $e->getMessage(),
+                    'error_line' => $e->getLine()
+                ]);
+            }
 
             return response()->json([
                 'status' => 0,
@@ -195,6 +206,10 @@ class PaymentController extends Controller
             $payment_datetime = $dt ? Carbon::createFromFormat('d/m/Y H:i:s', $dt) : null;
 
             if (!$order_id) {
+                $this->logActivity('Payment callback failed - Order ID not found', null, null, [
+                    'callback_data' => $request->all()
+                ]);
+                
                 $msg = 'Order ID not found';
                 Log::info($msg);
                 return redirect()->away(
@@ -207,13 +222,17 @@ class PaymentController extends Controller
 
 
             if ($generated_hash !== $hash) {
-                if (!$order_id) {
-                    $msg = 'Hash verification failed';
-                    Log::info($msg);
-                    return redirect()->away(
-                        $frontendurl . '?status=failed&message=' . urlencode($msg)
-                    );
-                }
+                $this->logActivity('Payment callback failed - Hash verification failed', null, null, [
+                    'order_id' => $order_id,
+                    'expected_hash' => $generated_hash,
+                    'received_hash' => $hash
+                ]);
+                
+                $msg = 'Hash verification failed';
+                Log::info($msg);
+                return redirect()->away(
+                    $frontendurl . '?status=failed&message=' . urlencode($msg)
+                );
             }
 
             $payment = PaymentOrder::where('id', $order_id)
@@ -221,6 +240,11 @@ class PaymentController extends Controller
                 ->first();
 
             if (!$payment) {
+                $this->logActivity('Payment callback failed - Already processed or invalid order', null, null, [
+                    'order_id' => $order_id,
+                    'callback_status' => $status
+                ]);
+                
                 $msg = 'Already processed or invalid order';
                 Log::info($msg);
                 return redirect()->away(
@@ -245,6 +269,11 @@ class PaymentController extends Controller
                 $ids = json_decode($payment->application_id, true);
 
                 if (!is_array($ids) || count($ids) === 0) {
+                    $this->logActivity('Payment callback failed - Invalid application IDs', null, null, [
+                        'order_id' => $order_id,
+                        'application_ids' => $ids
+                    ]);
+                    
                     $msg = 'Invalid application IDs';
                     Log::info($msg);
                     return redirect()->away(
@@ -279,6 +308,12 @@ class PaymentController extends Controller
                         'updated_at'       => now(),
                     ]);
 
+                    // Log payment success
+                    $this->logActivity('Payment completed successfully', $application, User::find($application->user_id), [
+                        'grn_number' => $grn,
+                        'transaction_id' => $CIN,
+                    ]);
+
                     $user = User::find($application->user_id);
 
                     $sms = SmsService::buildSmsMessage('application_payment', [
@@ -307,6 +342,18 @@ class PaymentController extends Controller
                         . '&message=' . urlencode($msg)
                 );
             } else {
+                // Log payment failure
+                $ids = json_decode($payment->application_id, true);
+                $application = UserServiceApplication::whereIn('id', $ids)->first();
+
+                $user = $application?->user;
+
+                $this->logActivity('Payment failed', null, $user, [
+                    'application_ids' => $ids,
+                    'failure_reason' => $status,
+                ]);
+
+
                 $msg = 'Payment failed with status: ' . $status;
                 Log::info($msg);
                 return redirect()->away(
@@ -320,6 +367,13 @@ class PaymentController extends Controller
         } catch (\Exception $e) {
 
             DB::rollBack();
+            
+            // Log payment callback error
+            $this->logActivity('Payment callback processing failed', null, null, [
+                'error_message' => $e->getMessage(),
+                'error_line' => $e->getLine(),
+                'order_id' => $order_id ?? 'unknown'
+            ]);
 
             $msg = 'Exception: ' . $e->getMessage();
             Log::info($msg);
@@ -331,80 +385,7 @@ class PaymentController extends Controller
         }
     }
 
-    // public function payment_common_process(PaymentOrder $payment)
-    // {
-
-    //     DB::beginTransaction();
-
-    //     try {
-
-
-    //         $application = UserServiceApplication::find($payment->application_id)->first();
-
-    //         $user = $application->user_id;
-
-    //         if ($application->renewal && $application->renewalYear) {
-    //             $application->NOC_expiry_date = Carbon::parse($application->PreviousNOCexpiryDate)
-    //                 ->addYears($application->renewalYear);
-    //         }
-
-    //         $application->NSW_license_status = 1;
-    //         $application->NOC_application_date = now();
-    //         $application->NOC_generationDate = now();
-
-    //         // Generate PDF
-    //         $pdfOptions = new Options();
-    //         $pdfOptions->set('defaultFont', 'sans-serif');
-    //         $pdfOptions->set('isRemoteEnabled', true);
-    //         $dompdf = new Dompdf($pdfOptions);
-
-    //         $pdfHtml = view('pdf.noc_receipt', ['application' => $application])->render();
-    //         $dompdf->loadHtml($pdfHtml);
-    //         $dompdf->setPaper('A4', 'portrait');
-    //         $dompdf->render();
-
-    //         $pdfPath = 'noc_' . $application->id . '_' . time() . '.pdf';
-    //         Storage::put($pdfPath, $dompdf->output());
-    //         $application->field_noc_certificate = $pdfPath;
-
-    //         UserServiceApplication::where('id', $payment->application_id)
-    //             ->update([
-    //                 'NSW_license_status' => 1,
-    //                 'NOC_application_date' => now(),
-    //                 'NOC_generationDate' => now(),
-    //                 'NOC_certificate' => $pdfPath
-    //             ]);
-
-    //         // Insert workflow history
-    //         // ApplicationWorkflowHistory::create([
-    //         //     'application_id' => $application->id,
-    //         //     'service_id' => $application->service_id ?? null,
-    //         //     'step_number' => 1, // set dynamically if needed
-    //         //     'step_type' => null, // type column not needed
-    //         //     'department_id' => $application->department_id ?? null,
-    //         //     'hierarchy_level' => 1, // adjust if needed
-    //         //     'action_taken_by' => $user->id ?? null,
-    //         //     'action_taken_at' => Carbon::now(),
-    //         //     'status' => $application->status,
-    //         //     'remarks' => 'Payment processed successfully',
-    //         //     'status_file' => $application->field_noc_certificate ?? null,
-    //         //     'source' => 'payment',
-    //         // ]);
-
-
-    //         DB::commit();
-    //     } catch (\Exception $e) {
-
-    //         DB::rollBack();
-
-    //         return response()->json([
-    //             'status' => 0,
-    //             'message' => 'Something went wrong.',
-    //             'error' => $e->getMessage(),
-    //         ], 500);
-    //     }
-    // }
-
+    
     public function generate_encryption_key($grn)
     {
         $sum = 0;
