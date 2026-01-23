@@ -279,7 +279,7 @@ class UserServiceApplicationController extends Controller
 
                     $user_service_application->application_data = json_encode($application_data);
 
-                    if ((float) $total_fee === 0.0) {
+                    if ((float) $total_fee === 0.0 && $request->save_data != 1 && $user_service_application->status != "draft") {
                         $status = 're_submitted';
                     }
 
@@ -2371,6 +2371,17 @@ class UserServiceApplicationController extends Controller
                 'paid_amount'    => $final_paid_amount,
                 'status'         => $status,
             ]);
+
+            // Log admin payment marking
+            // activity('admin_payment')
+            //     ->performedOn($application)
+            //     ->causedBy(Auth::user())
+            //     ->withProperties([
+            //         'grn_number' => $request->GRN_number,
+            //         'payment_amount' => $final_paid_amount,
+            //         'comments' => $request->comments
+            //     ])
+            //     ->log('Admin marked application as paid');
 
             PaymentOrder::create([
                 'application_id'    => json_encode([(int) $request->application_id]),
