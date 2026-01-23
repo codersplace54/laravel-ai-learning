@@ -17,6 +17,7 @@ use App\Models\ServiceApprovalFlow;
 use App\Models\ServiceQuestionnaire;
 use App\Models\UserServiceApplication;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use App\Models\Clearance;
 
 class CertificateController extends Controller
 {
@@ -351,7 +352,7 @@ class CertificateController extends Controller
                 $filename = $application->applicationId . '.pdf';
                 $path     = "uploads/{$user->id}/application/{$filename}";
                 Storage::disk('public')->put($path, $pdf->output());
-                
+
                 $meta = $this->resolve_license_meta($application, $request);
 
                 $update_data = [
@@ -365,6 +366,7 @@ class CertificateController extends Controller
                 ];
 
                 $application->update($update_data);
+                $clearance_response = $this->store_clearance($application);
 
 
                 $application->NOC_certificate = asset('storage/' . $application->NOC_certificate);
@@ -421,7 +423,7 @@ class CertificateController extends Controller
         $template = str_replace("\xC2\xA0", ' ', $template);
         $template = str_replace('&quot;', '"', $template);
         $template = str_replace('&lt;', '<', $template);
-        $template = str_replace('&gt;', '>', $template); 
+        $template = str_replace('&gt;', '>', $template);
         $template = preg_replace('/\{\{\s*\}\}/', '', $template); // remove {{}} if any
         $template = '<style>@page { margin: 18mm 18mm 18mm 18mm; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #000; padding: 8px; text-align: left; }</style>' . $template;
 
@@ -669,7 +671,7 @@ class CertificateController extends Controller
             $application = UserServiceApplication::where('id', $request->application_id)->first();
 
             $path = $application->NOC_certificate;
-            
+
             // if (!$path || !Storage::disk('public')->exists($path)) {
             //     return response()->json(['status' => 0, 'message' => 'Certificate not generated for this application.'], 404);
             // }
@@ -762,7 +764,7 @@ class CertificateController extends Controller
 
     private function process_section_table_placeholders(string $template, UserServiceApplication $application): string
     {
-        return preg_replace_callback('/\{\{\s*table_section\.([0-9,]+)\s*\}\}/', function($matches) use ($application) {
+        return preg_replace_callback('/\{\{\s*table_section\.([0-9,]+)\s*\}\}/', function ($matches) use ($application) {
             $question_ids = array_map('trim', explode(',', $matches[1]));
             return $this->generate_table_for_questions($application, $question_ids);
         }, $template);
@@ -771,7 +773,7 @@ class CertificateController extends Controller
     private function generate_table_for_questions(UserServiceApplication $application, array $question_ids): string
     {
         $application_data_raw = json_decode($application->application_data, true) ?? [];
-        
+
         // Find which section contains these questions
         $target_section = null;
         foreach ($application_data_raw as $section_name => $section_data) {
@@ -788,7 +790,7 @@ class CertificateController extends Controller
                 }
             }
         }
-        
+
         if (!$target_section || !isset($application_data_raw[$target_section])) {
             return '';
         }
@@ -804,14 +806,14 @@ class CertificateController extends Controller
         }
 
         $html = '<table style="width: 100%; border-collapse: collapse; margin: 10px 0; table-layout: fixed;">';
-        
+
         $html .= '<thead><tr>';
         foreach ($valid_question_ids as $qid) {
             $label = $questions[$qid]->question_label ?? "Question {$qid}";
             $html .= '<th style="border: 1px solid #000; padding: 4px; background-color: #f5f5f5; font-size: 12px; word-wrap: break-word;">' . e($label) . '</th>';
         }
         $html .= '</tr></thead>';
-        
+
         $html .= '<tbody>';
         foreach ($section_data as $row) {
             if (is_array($row)) {
@@ -832,7 +834,7 @@ class CertificateController extends Controller
     {
         $application_data_raw = json_decode($application->application_data, true) ?? [];
         $html = '';
-        
+
         $sections = ServiceQuestionnaire::where('service_id', $application->service_id)
             ->where('is_section', 'yes')
             ->where('is_required', 'yes')
@@ -840,21 +842,21 @@ class CertificateController extends Controller
             ->pluck('section_name')
             ->filter()
             ->toArray();
-        
+
         foreach ($sections as $section_name) {
             if (isset($application_data_raw[$section_name]) && is_array($application_data_raw[$section_name])) {
                 $html .= '<h4>' . e($section_name) . '</h4>';
                 $html .= $this->generate_section_table($application, $section_name);
             }
         }
-        
+
         return $html;
     }
 
     private function generate_section_table(UserServiceApplication $application, string $section_name): string
     {
         $application_data_raw = json_decode($application->application_data, true) ?? [];
-        
+
         if (!isset($application_data_raw[$section_name]) || !is_array($application_data_raw[$section_name])) {
             return '';
         }
@@ -889,14 +891,14 @@ class CertificateController extends Controller
         }
 
         $html = '<table style="width: 100%; border-collapse: collapse; margin: 10px 0; table-layout: fixed;">';
-        
+
         $html .= '<thead><tr>';
         foreach ($valid_question_ids as $qid) {
             $label = $questions[$qid]->question_label ?? "Question {$qid}";
             $html .= '<th style="border: 1px solid #000; padding: 4px; background-color: #f5f5f5; font-size: 12px; word-wrap: break-word;">' . e($label) . '</th>';
         }
         $html .= '</tr></thead>';
-        
+
         $html .= '<tbody>';
         foreach ($section_data as $row) {
             if (is_array($row)) {
@@ -913,4 +915,63 @@ class CertificateController extends Controller
         return $html;
     }
 
+    protected function store_clearance($application)
+    {
+
+        try {
+
+            DB::beginTransaction();
+
+            $clearance = Clearance::where('user_id', $application->user_id)
+                ->where('service_id', $application->service_id)
+                ->where('application_id', $application->id)
+                ->first();
+
+            $department_id = ServiceMaster::where('id', $application->service_id)->value('department_id');
+
+            if ($clearance) {
+
+                $clearance->update([
+                    'licence_number'     => $application->license_id,
+                    'licence_date'       => $application->NOC_generationDate,
+                    'department_id'      =>  $department_id,
+                    'licence_valid_till' => $application->NOC_expiry_date,
+                    'status'             => 'active',
+                ]);
+
+                $message = 'Clearance updated successfully.';
+            } else {
+
+                $clearance = Clearance::create([
+                    'user_id'            => $application->user_id,
+                    'application_id'     => $application->id,
+                    'service_id'         => $application->service_id,
+                    'department_id'      => $department_id,
+                    'licence_number'     => $application->license_id,
+                    'licence_date'       => $application->NOC_generationDate,
+                    'licence_valid_till' => $application->NOC_expiry_date,
+                    'status'             => 'active',
+                ]);
+
+                $message = 'Clearance created successfully.';
+            }
+
+            DB::commit();
+
+            return [
+                'status'  => 1,
+                'message' => $message,
+                'data'    => $clearance
+            ];
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return [
+                'status'  => 0,
+                'message' => 'Failed to save clearance.',
+                'error'   => $e->getMessage(),
+            ];
+        }
+    }
 }
