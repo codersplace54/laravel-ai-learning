@@ -18,9 +18,12 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use App\Services\SmsService;
 use App\Services\ExternalSmsService;
+use App\Traits\LogsActivity;
+use Spatie\Activitylog\Facades\LogActivity;
 
 class AuthController extends Controller
 {
+    use LogsActivity;
 
     public function login(Request $request)
     {
@@ -67,6 +70,18 @@ class AuthController extends Controller
             }
 
             if (!$token) {
+                // Log failed login attempt
+                $user = User::where('user_name', $identifier)
+                    ->orWhere('pan', strtoupper(trim($identifier)))
+                    ->orWhere('bin', $identifier)
+                    ->first();
+                
+                if ($user) {
+                    $this->logActivity($user->user_name . " failed to login due to invalid password.", $user, null);
+                } else {
+                    $this->logActivity("Failed login attempt with invalid identifier: $identifier", null, null);
+                }
+                
                 return response()->json([
                     'status' => 0,
                     'message' => 'Invalid credentials'
@@ -76,6 +91,9 @@ class AuthController extends Controller
             $user = JWTAuth::setToken($token)->toUser();
 
             if ($user->status == "blocked") {
+                // Log blocked user access attempt
+                $this->logActivity($user->user_name . " tried to login blocked account.", $user, null);
+                    
                 JWTAuth::invalidate($token);
 
                 return response()->json([
@@ -142,6 +160,9 @@ class AuthController extends Controller
                     $data['hierarchy'] = $department_user->hierarchy_level;
                 }
             }
+
+            // Log successful login activity
+            $this->logActivity($user->user_name . " logged in successfully.", $user, $user);
 
             return response()->json([
                 'status' => 1,
@@ -659,6 +680,9 @@ class AuthController extends Controller
 
             $otp_row->delete();
 
+            // Log password reset success
+            $this->logActivity($user->user_name . " changed password successfully.", $user, null);
+
             $old_tokens = JWTToken::where('user_id', $user->id)->get();
             foreach ($old_tokens as $row) {
                 try {
@@ -853,6 +877,9 @@ class AuthController extends Controller
                     $data['hierarchy'] = $department_user->hierarchy_level;
                 }
             }
+
+            // Log admin login
+            $this->logActivity("{$admin->user_name} logged in as {$user->user_name}", $user, $admin);
 
             return response()->json([
                 'status' => 1,
