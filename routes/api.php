@@ -45,6 +45,7 @@ use App\Http\Controllers\PanVerificationController;
 use App\Http\Controllers\Service\AppealController;
 use App\Http\Controllers\Admin\ActivityLogController;
 use app\Http\Controllers\DeployController;
+use App\Http\Controllers\Service\ClearanceController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -209,6 +210,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('service-fee-rule-view', [ServiceFeeRuleController::class, 'service_fee_rule_view']);
     Route::post('service-approval-flow-view', [ServiceApprovalFlowController::class, 'service_approval_flow_view']);
     Route::post('renewal-fee-rule-view', [RenewalFeeRuleController::class, 'renewal_fee_rule_view']);
+    Route::post('get-approved-services', [ClearanceController::class, 'get_approved_services']);
 
     Route::prefix('user')->group(function () {
 
@@ -259,6 +261,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('user-unit-store', [UserController::class, 'user_unit_store']);
     Route::post('user-unit-update', [UserController::class, 'user_unit_update']);
     Route::post('get-user-unit-list', [UserController::class, 'get_user_unit_list']);
+
+    Route::post('fetch-licence-numbers', [ClearanceController::class, 'fetch_licence_numbers']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
