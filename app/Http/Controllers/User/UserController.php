@@ -52,7 +52,7 @@ class UserController extends Controller
                     'designation'      => 'nullable|string',
                     'is_active'      => 'nullable|integer',
                     'inspector'      => 'nullable|string|in:yes,no',
-                    'dob' => 'nullable|date_format:Y-m-d',
+                    'dob' => 'nullable|date_format:d/m/Y',
                     'pan_token' => 'required_if:user_type,individual|string',
 
                     'locations' => 'nullable|array|min:1',
@@ -93,7 +93,7 @@ class UserController extends Controller
                     'hierarchy_level.required' => 'The hierarchy level is required.',
                     'hierarchy_level.in'       => 'The hierarchy level must be one of: block, subdivision1, subdivision2, subdivision3, district1, district2, district3, state1, state2, or state3.',
                     'is_active.integer'        => 'The status must be a valid number (0 or 1).',
-                    'dob.date_format' => 'DOB must be in YYYY-MM-DD format.',
+                    'dob.date_format' => 'DOB must be in DD/MM/YYYY format.',
                     'pan_token.required_if' => 'PAN verification is required before registration.',
                 ]
             );
@@ -151,7 +151,7 @@ class UserController extends Controller
                 'password' => Hash::make($request->password),
                 'status' => 'active',
                 'is_mobile_verified' => $request->user_type === 'individual' ? 1 : 0,
-                'dob' => $request->dob,
+                'dob' => $request->dob ? Carbon::createFromFormat('d/m/Y', $request->dob)->format('Y-m-d') : null,
                 'is_pan_verified' => $request->user_type === 'individual' ? 1 : 0,
             ]);
 
@@ -330,7 +330,7 @@ class UserController extends Controller
             }
 
             if ($request->dob !== null) {
-                $rules['dob'] = 'nullable|date_format:Y-m-d';
+                $rules['dob'] = 'nullable|date_format:d/m/Y';
             }
 
 
@@ -363,7 +363,7 @@ class UserController extends Controller
                 'pan.required_if' => 'PAN is required.',
                 'pan.regex' => 'The PAN number must be in valid format (e.g., ABCDE1234F).',
                 'pan.unique' => 'This PAN number is already registered.',
-                'dob.date_format' => 'DOB must be in YYYY-MM-DD format.',
+                'dob.date_format' => 'DOB must be in DD/MM/YYYY format.',
             ]);
 
             DB::beginTransaction();
@@ -444,9 +444,7 @@ class UserController extends Controller
             }
 
             if ($request->dob !== null) {
-                $update_data['dob'] = Carbon::parse($request->dob)
-                    ->setTimezone('Asia/Kolkata')
-                    ->toDateString();
+                $update_data['dob'] = Carbon::createFromFormat('d/m/Y', $request->dob)->format('Y-m-d');
             }
 
             $user->update($update_data);
