@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Auth;
 
 trait LogsActivity
 {
-    protected function logActivity(string $message, $subject = null, $causer = null, array $additionalProperties = [])
+    protected function logActivity(string $message, $subject = null, $causer = null, array $additionalProperties = [], string $event = null)
     {
         $causer = $causer ?? Auth::user();
         $request = request();
@@ -21,6 +21,10 @@ trait LogsActivity
         
         if ($subject !== null) {
             $activity->performedOn($subject);
+        }
+        
+        if ($event !== null) {
+            $activity->event($event);
         }
         
         $activity->causedBy($causer)

@@ -167,7 +167,7 @@ class PaymentController extends Controller
                 $this->logActivity('Payment initiation failed', null, $user, [
                     'error_message' => $e->getMessage(),
                     'error_line' => $e->getLine()
-                ]);
+                ], 'Payment Initiation Failed');
             }
 
             return response()->json([
@@ -208,7 +208,7 @@ class PaymentController extends Controller
             if (!$order_id) {
                 $this->logActivity('Payment callback failed - Order ID not found', null, null, [
                     'callback_data' => $request->all()
-                ]);
+                ], 'Payment Callback Failed');
                 
                 $msg = 'Order ID not found';
                 Log::info($msg);
@@ -226,7 +226,7 @@ class PaymentController extends Controller
                     'order_id' => $order_id,
                     'expected_hash' => $generated_hash,
                     'received_hash' => $hash
-                ]);
+                ], 'Payment Verification Failed');
                 
                 $msg = 'Hash verification failed';
                 Log::info($msg);
@@ -243,7 +243,7 @@ class PaymentController extends Controller
                 $this->logActivity('Payment callback failed - Already processed or invalid order', null, null, [
                     'order_id' => $order_id,
                     'callback_status' => $status
-                ]);
+                ], 'Payment Order Invalid');
                 
                 $msg = 'Already processed or invalid order';
                 Log::info($msg);
@@ -272,7 +272,7 @@ class PaymentController extends Controller
                     $this->logActivity('Payment callback failed - Invalid application IDs', null, null, [
                         'order_id' => $order_id,
                         'application_ids' => $ids
-                    ]);
+                    ], 'Payment Data Invalid');
                     
                     $msg = 'Invalid application IDs';
                     Log::info($msg);
@@ -312,7 +312,7 @@ class PaymentController extends Controller
                     $this->logActivity('Payment completed successfully', $application, User::find($application->user_id), [
                         'grn_number' => $grn,
                         'transaction_id' => $CIN,
-                    ]);
+                    ], 'Payment Success');
 
                     $user = User::find($application->user_id);
 
@@ -351,7 +351,7 @@ class PaymentController extends Controller
                 $this->logActivity('Payment failed', null, $user, [
                     'application_ids' => $ids,
                     'failure_reason' => $status,
-                ]);
+                ], 'Payment Failed');
 
 
                 $msg = 'Payment failed with status: ' . $status;
@@ -373,7 +373,7 @@ class PaymentController extends Controller
                 'error_message' => $e->getMessage(),
                 'error_line' => $e->getLine(),
                 'order_id' => $order_id ?? 'unknown'
-            ]);
+            ], 'Payment Processing Failed');
 
             $msg = 'Exception: ' . $e->getMessage();
             Log::info($msg);
