@@ -20,7 +20,7 @@ class PaymentStatusCron extends Command
         
         $orders = PaymentOrder::where('payment_status', 'initiated')
             ->where('payment_amount', '>', 0)
-            // ->where('created_at', '>=', Carbon::now()->subDays(3))  // Uncomment after first run
+            ->where('created_at', '>=', Carbon::now()->subDays(3)) 
             ->orderBy('id', 'desc')
             ->limit(200)
             ->get();

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\PanVerificationService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
@@ -41,8 +42,10 @@ class PanVerificationController extends Controller
             }
 
             $pan = strtoupper(trim($request->pan));
+            $formatted_dob = Carbon::createFromFormat('d/m/Y', $request->input('dob'))->format('Y-m-d');
 
             if (!app()->environment('production')) {
+                
                 $pan_token = encrypt([
                     'verified'  => true,
                     'pan'       => $pan,
@@ -51,7 +54,12 @@ class PanVerificationController extends Controller
 
                 $user = Auth::user();
                 if ($user) {
-                    $user->update(['is_pan_verified' => 1]);
+                    $user->update([
+                        'is_pan_verified' => 1,
+                        'pan' => $request->input('pan'),
+                        'name_of_enterprise' => $request->input('name'),
+                        'dob' => $formatted_dob
+                    ]);
                 }
 
                 return response()->json([
@@ -112,8 +120,15 @@ class PanVerificationController extends Controller
 
             // for pan verification in update profile
             $user = Auth::user();
+            
             if ($user) {
-                $user->update(['is_pan_verified' => $is_pan_verified ? 1 : 0]);
+                $update_data = ['is_pan_verified' => $is_pan_verified ? 1 : 0];
+                if ($is_pan_verified) {
+                    $update_data['pan'] = $request->input('pan');
+                    $update_data['name_of_enterprise'] = $request->input('name');
+                    $update_data['dob'] = $formatted_dob;
+                }
+                $user->update($update_data);
             }
 
             if (!empty($pan_data)) {
@@ -142,6 +157,7 @@ class PanVerificationController extends Controller
                 'response_code' => $parsed_response['response_code'] ?? null
             ], 400);
         } catch (Exception $e) {
+
             return response()->json([
                 'success' => false,
                 'message' => 'PAN verification service unavailable',
