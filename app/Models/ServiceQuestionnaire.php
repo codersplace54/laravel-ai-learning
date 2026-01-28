@@ -9,6 +9,7 @@ class ServiceQuestionnaire extends Model
     protected $fillable = [
         'id',
         'service_id',
+        'approved_services',
         'question_label',
         'condition_label',
         'question_type',

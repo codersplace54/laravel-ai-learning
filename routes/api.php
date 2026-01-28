@@ -263,6 +263,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('get-user-unit-list', [UserController::class, 'get_user_unit_list']);
 
     Route::post('fetch-licence-numbers', [ClearanceController::class, 'fetch_licence_numbers']);
+    Route::post('fetch-user-clearances', [ClearanceController::class, 'fetch_user_clearances']);
+    Route::post('fetch-clearance-details', [ClearanceController::class, 'fetch_clearance_details']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
