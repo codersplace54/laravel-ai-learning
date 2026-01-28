@@ -40,6 +40,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('import-profession-tax-certificate', [ImportController::class, 'import_profession_tax_certificate_form'])->name('import.profession_tax_certificate.form');
     Route::post('import-profession-tax-certificate', [ImportController::class, 'import_profession_tax_certificate'])->name('import.profession_tax_certificate');
 
+    Route::get('import-legal-metrology', [ImportController::class, 'import_legal_metrology_form'])->name('import.legal_metrology.form');
+    Route::post('import-legal-metrology', [ImportController::class, 'import_legal_metrology'])->name('import.legal_metrology');
+
     Route::get('application-data-correction', [ApplicationDataCorrectionController::class, 'correction_form'])->name('correction.form');
     Route::post('update-partnership-application-data', [ApplicationDataCorrectionController::class, 'update_partnership_application_data'])->name('correction.partnership_application');
     Route::post('update-partnership-partner-data', [ApplicationDataCorrectionController::class, 'update_partnership_partner_data'])->name('correction.partnership_partner');
