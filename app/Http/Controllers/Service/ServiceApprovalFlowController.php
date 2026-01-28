@@ -198,7 +198,7 @@ class ServiceApprovalFlowController extends Controller
                     'step_number' => $flow->step_number,
                     'step_type' => $flow->step_type,
                     'department_id' => $flow->department_id,
-                    'department_name' => $flow->department->name,
+                    'department_name' => $flow->department->name ?? null,
                     'hierarchy_level' => $flow->hierarchy_level,
                     'created_by' => $flow->created_by,
                     'updated_by' => $flow->updated_by,

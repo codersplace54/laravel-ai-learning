@@ -31,6 +31,8 @@ class ServiceQuestionnaireController extends Controller
             $request->validate([
                 'questionnaires' => 'required|array',
                 'questionnaires.*.service_id' => 'required|integer|exists:service_masters,id',
+                'questionnaires.*.approved_services' => 'nullable|string',
+                'questionnaires.*.approved_services.*' => 'integer|exists:service_masters,id',
                 'questionnaires.*.question_label' => 'required|string',
                 'questionnaires.*.condition_label' => 'nullable',
                 'questionnaires.*.question_type' => 'required|string',
@@ -77,6 +79,7 @@ class ServiceQuestionnaireController extends Controller
                 foreach ($conditionLabels as $label) {
                     $service_questionnaire[] = ServiceQuestionnaire::create([
                         'service_id' => $questionnaire['service_id'],
+                        'approved_services' => $questionnaire['approved_services'] ?? null,
                         'question_label' => $questionnaire['question_label'],
                         'condition_label' => $label,
                         'question_type' => $questionnaire['question_type'],
@@ -146,6 +149,8 @@ class ServiceQuestionnaireController extends Controller
                 'questionnaires' => 'required|array',
                 'questionnaires.*.id' => 'required|integer|exists:service_questionnaires,id',
                 'questionnaires.*.service_id' => 'required|integer|exists:service_masters,id',
+                'questionnaires.*.approved_services' => 'nullable|string',
+                'questionnaires.*.approved_services.*' => 'integer|exists:service_masters,id',
                 'questionnaires.*.question_label' => 'required|string',
                 'questionnaires.*.question_type' => 'required|string',
                 'questionnaires.*.is_required' => 'required|in:yes,no',
@@ -186,6 +191,7 @@ class ServiceQuestionnaireController extends Controller
 
                 $service_question->update([
                     'service_id' => $questionnaire['service_id'],
+                    'approved_services' => $questionnaire['approved_services'] ?? null,
                     'question_label' => $questionnaire['question_label'],
                     'question_type' => $questionnaire['question_type'],
                     'is_required' => $questionnaire['is_required'],
