@@ -48,6 +48,28 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
                 37458 => 28,
                 37459 => 32,
                 37460 => 34,
+                13562 => 30,
+                35490 => 39,
+                19499 => 40,
+                61686 => 42,
+                29943 => 43,
+                28436 => 52,
+                30085 => 53,
+                13943 => 54,
+                13945 => 55,
+                13944 => 56,
+                13639 => 16,
+                13946 => 19,
+                13947 => 23,
+                13953 => 24,
+                13954 => 25,
+                29310 => 29,
+                29311 => 31,
+                29312 => 33,
+                29313 => 35,
+                29314 => 36,
+                36197 => 37,
+                52636 => 38,
             ],
             'payment_status_mapping' => [
                 'unpaid' => 'pending',
@@ -129,7 +151,7 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
         }
 
         $service_id = $this->config['service_id_mapping'][$noc_master_id] ?? null;
-        
+
         if ($service_id === null) {
             $this->skipped_rows[] = [
                 'noc_master_id' => $noc_master_id,
@@ -184,7 +206,7 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
         if (!empty($noc_cert_url_raw)) {
             $path = parse_url($noc_cert_url_raw, PHP_URL_PATH);
             $file_name = $path ? basename($path) : null;
-            
+
             if ($file_name) {
                 $noc_certificate = sprintf($this->config['file_path_format'], $file_name);
             }
@@ -227,7 +249,7 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
             ->pluck('old_id')
             ->toArray();
 
-        $new_applications = array_filter($service_applications_batch, function($app) use ($existing_old_ids) {
+        $new_applications = array_filter($service_applications_batch, function ($app) use ($existing_old_ids) {
             return !in_array($app['old_id'], $existing_old_ids);
         });
 
@@ -372,7 +394,7 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
             return [];
         }
 
-        $action_time = in_array($app_status, ['approved', 'rejected', 'noc_issued'], true) 
+        $action_time = in_array($app_status, ['approved', 'rejected', 'noc_issued'], true)
             ? ($app_row['NOC_generationDate'] ?? null)
             : ($app_row['application_date'] ?? null);
 

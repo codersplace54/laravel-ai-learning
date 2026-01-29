@@ -363,6 +363,7 @@ class CertificateController extends Controller
                     'NOC_application_date' => $meta['registration_date'],
                     'NOC_expiry_date'      => $meta['valid_upto'],
                     'final_fee'            => $meta['fee_paid'],
+                    'NOC_mode'             => "online"
                 ];
 
                 $application->update($update_data);
@@ -686,6 +687,58 @@ class CertificateController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong while fetching pdf.',
                 'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function upload_offline_certificate(Request $request)
+    {
+        $request->validate([
+            'application_id' => 'required|integer|exists:user_service_applications,id',
+            'certificate_file' => 'required|file|mimes:pdf,png,jpg,jpeg,webp|max:25600',
+            'license_id' => 'required|string',
+            'noc_generation_date' => 'required|date',
+            'noc_expiry_date' => 'required|date'
+        ]);
+
+        try{
+
+            $application = UserServiceApplication::where('id', $request->application_id)->first();
+
+            if($application->NOC_certificate){
+                Storage::disk('public')->delete($application->NOC_certificate);
+            }
+            
+            $file = $request->file('certificate_file');
+            $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+            
+            $license_file = $file->storeAs("uploads/{$application->user_id}/application", $filename, 'public');
+            
+            $application->update([
+                'NOC_certificate' => $license_file,
+                'NOC_generationDate' => $request->noc_generation_date,
+                'NOC_expiry_date' => $request->noc_expiry_date,
+                'license_id' => $request->license_id,
+                'NOC_mode' => "offline",
+            ]);
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Certificate uploaded successfully.',
+                'data' => [
+                    'certificate_url' => asset('storage/' . $license_file),
+                    'NOC_generationDate' => $application->NOC_generationDate,
+                    'NOC_expiry_date' => $application->NOC_expiry_date,
+                    'NOC_mode' => $application->NOC_mode,
+                    'license_id' => $application->license_id,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while uploading certificate.',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

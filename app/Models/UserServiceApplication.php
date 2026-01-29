@@ -61,6 +61,7 @@ class UserServiceApplication extends Model
         'external_remarks',
         'is_third_party',
         'license_id',
+        'NOC_mode',
     ];
 
     protected $casts = [

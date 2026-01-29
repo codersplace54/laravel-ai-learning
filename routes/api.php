@@ -225,6 +225,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-user-applications-per-service', [UserServiceApplicationController::class, 'get_user_applications_per_service']);
         Route::post('/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
         Route::post('calculate-fee', [UserServiceApplicationController::class, 'calculate_fee']);
+        Route::post('calculate-industrial-estate-amounts', [UserServiceApplicationController::class, 'calculate_industrial_estate_amounts']);
 
         Route::post('update-payment', [PaymentController::class, 'update_payment']);
         Route::post('user-service-applications-by-payment-status', [PaymentController::class, 'user_service_applications_by_payment_status']);
@@ -303,6 +304,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('certificate-variables-list',  [CertificateController::class, 'certificate_variables_list']);
         Route::post('user-certificate-view',  [CertificateController::class, 'user_certificate_view']);
         Route::post('user-certificate-generate',  [CertificateController::class, 'user_certificate_generate']);
+        Route::post('upload-offline-certificate',  [CertificateController::class, 'upload_offline_certificate']);
 
         Route::post('/get-department-users', [UserController::class, 'get_department_users']);
         Route::post('/get-user-caf-unit_details', [UnitDetailController::class, 'get_user_caf_unit_details']);

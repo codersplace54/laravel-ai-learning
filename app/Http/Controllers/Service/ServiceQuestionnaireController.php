@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Service;
 
 use App\Http\Controllers\Controller;
+use App\Models\IndustrialEstate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -369,11 +370,19 @@ class ServiceQuestionnaireController extends Controller
                 $qid = $service->id;
                 $service->children_id = $children_map[$qid] ?? [];
             }
+
+            // For land allotment service
+            $industrial_estates = null;
+            if($request->service_id == 64){
+                $industrial_estates = IndustrialEstate::get();
+            }
+
             return response()->json([
                 'status' => 1,
                 'message' => 'Service questionnaires fetched successfully.',
                 'data' => $service_questionnaires,
-                'service_name' => $service_name
+                'service_name' => $service_name,
+                'industrial_estates' => $industrial_estates
             ]);
         } catch (\Exception $e) {
 
