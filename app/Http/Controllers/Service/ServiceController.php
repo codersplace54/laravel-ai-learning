@@ -457,7 +457,7 @@ class ServiceController extends Controller
 
             $request->validate([
                 'department_id'   => 'required|integer|exists:departments,id',
-                'status'          => 'nullable|in:submitted,under_review,approved,rejected,saved,extra_payment,re_submitted,send_back',
+                'status'          => 'nullable|in:submitted,under_review,approved,rejected,saved,extra_payment,re_submitted,send_back,noc_issued',
                 'service_id'      => 'nullable|integer|exists:service_masters,id',
                 'applicant_name'  => 'nullable|string',
                 'applicant_phone' => 'nullable|string',
@@ -685,6 +685,8 @@ class ServiceController extends Controller
                 'is_finally_approved'  => $is_finally_approved,
                 'history_data'    => $history_data,
                 'is_certificate_generated'    => $application->NOC_certificate ? true : false,
+                'NOC_mode' => $application->NOC_mode,
+                'certificate_file' => $application->NOC_certificate ? asset('storage/' . $application->NOC_certificate) : null,
                 'created_at'    => $application->created_at,
                 'updated_at'    => $application->updated_at,
             ];

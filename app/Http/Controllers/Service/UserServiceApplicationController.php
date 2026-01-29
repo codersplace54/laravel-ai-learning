@@ -27,7 +27,7 @@ use Illuminate\Http\UploadedFile;
 use App\Services\ApplicationDataFormatter;
 use App\Services\SmsService;
 use App\Models\Department;
-
+use App\Models\IndustrialEstate;
 
 class UserServiceApplicationController extends Controller
 {
@@ -3238,6 +3238,109 @@ class UserServiceApplicationController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong.',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function calculate_industrial_estate_amounts(Request $request)
+    {
+        try {
+
+            $validated = $request->validate([
+                'industrial_estate_id' => 'required|integer|exists:industrial_estates,id',
+                'requested_land_area'  => 'nullable|numeric|min:0',
+                'requested_shed_area'  => 'nullable|numeric|min:0',
+            ]);
+
+            $industrial_estate_id = (int) $validated['industrial_estate_id'];
+            $requested_land_area  = (float) ($validated['requested_land_area'] ?? 0);
+            $requested_shed_area  = (float) ($validated['requested_shed_area'] ?? 0);
+
+            $estate = IndustrialEstate::findOrFail($industrial_estate_id);
+
+            $available_land_area = (float) ($estate->available_land ?? 0);
+            $available_shed_area = (float) ($estate->available_shed ?? 0);
+
+            if ($requested_land_area > $available_land_area) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Requested land area cannot be greater than available land area.',
+                    'data' => [
+                        'available_land_area' => $available_land_area,
+                        'available_land_unit' => $estate->available_land_unit,
+                    ],
+                ], 422);
+            }
+
+            if ($requested_shed_area > $available_shed_area) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Requested shed area cannot be greater than available shed area.',
+                    'data' => [
+                        'available_shed_area' => $available_shed_area,
+                        'available_shed_unit' => $estate->available_shed_unit,
+                    ],
+                ], 422);
+            }
+
+            $land_advance_months = 12;
+            $shed_advance_months = 6;
+            $gst_rate = 0.18;
+
+            $land_area = max(0, $requested_land_area);
+            $shed_area = max(0, $requested_shed_area);
+
+            $land_premium_rate = (float) ($estate->land_premium ?? 0);
+            $shed_premium_rate = (float) ($estate->shed_premium ?? 0);
+            $land_rent_rate    = (float) ($estate->land_rent ?? 0);
+            $shed_rent_rate    = (float) ($estate->shed_rent ?? 0);
+
+            $land_premium_amount = $land_premium_rate * $land_area;
+            $shed_premium_amount = $shed_premium_rate * $shed_area;
+            $total_non_refundable_lease_amount = $land_premium_amount + $shed_premium_amount;
+
+            $advance_land_rent_amount = $land_rent_rate * $land_area * $land_advance_months;
+            $advance_shed_rent_amount = $shed_rent_rate * $shed_area * $shed_advance_months;
+            $total_advance_lease_rent_amount = $advance_land_rent_amount + $advance_shed_rent_amount;
+
+            // GST only on advance rent
+            $gst_amount = $total_advance_lease_rent_amount * $gst_rate;
+
+            $total_payable_amount = $total_non_refundable_lease_amount + $total_advance_lease_rent_amount + $gst_amount;
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Calculation fetched successfully.',
+                'data' => [
+                    'land_premium_amount' => round($land_premium_amount, 2),
+                    'shed_premium_amount' => round($shed_premium_amount, 2),
+                    'total_non_refundable_lease_amount' => round($total_non_refundable_lease_amount, 2),
+
+                    'advance_land_rent_amount' => round($advance_land_rent_amount, 2),
+                    'advance_shed_rent_amount' => round($advance_shed_rent_amount, 2),
+                    'total_advance_lease_rent_amount' => round($total_advance_lease_rent_amount, 2),
+
+                    'gst_amount' => round($gst_amount, 2),
+                    'total_payable_amount' => round($total_payable_amount, 2),
+
+                    'meta' => [
+                        'land_advance_months' => $land_advance_months,
+                        'shed_advance_months' => $shed_advance_months,
+                        'gst_rate' => $gst_rate,
+                    ],
+                ],
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong.',
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
