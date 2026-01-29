@@ -94,32 +94,53 @@ class UserImport
             return;
         }
 
-        $inserted = DB::table('users')->insertOrIgnore($chunk_rows);
+        // Check for existing records before inserting
+        $mobile_nos = array_column($chunk_rows, 'mobile_no');
+        $email_ids = array_column($chunk_rows, 'email_id');
+        $old_ids = array_column($chunk_rows, 'old_id');
 
-        $this->imported_count += (int) $inserted;
+        $existing_records = DB::table('users')
+            ->where(function($query) use ($mobile_nos, $email_ids, $old_ids) {
+                $query->whereIn('mobile_no', $mobile_nos)
+                      ->orWhereIn('email_id', $email_ids)
+                      ->orWhereIn('old_id', $old_ids);
+            })
+            ->select('mobile_no', 'email_id', 'old_id')
+            ->get();
 
-        $skipped_in_db = count($chunk_rows) - (int) $inserted;
-        if ($skipped_in_db > 0) {
-            // DB skip can happen due to unique indexes (mobile/email/old_id etc.)
-            $this->skipped_count += $skipped_in_db;
+        $existing_mobiles = $existing_records->pluck('mobile_no')->toArray();
+        $existing_emails = $existing_records->pluck('email_id')->toArray();
+        $existing_old_ids = $existing_records->pluck('old_id')->toArray();
 
-            $unique_values = [];
-            foreach ($chunk_rows as $row) {
-                $unique_values[] = [
-                    'mobile_no' => $row['mobile_no'] ?? null,
-                    'email_id' => $row['email_id'] ?? null,
-                    'old_id' => $row['old_id'] ?? null,
-                ];
+        $new_rows = [];
+        foreach ($chunk_rows as $row) {
+            $duplicate_reason = null;
+            
+            if (in_array($row['mobile_no'], $existing_mobiles)) {
+                $duplicate_reason = 'duplicate_mobile';
+            } elseif (in_array($row['email_id'], $existing_emails)) {
+                $duplicate_reason = 'duplicate_email';
+            } elseif (in_array($row['old_id'], $existing_old_ids)) {
+                $duplicate_reason = 'duplicate_old_id';
             }
 
-            $this->skipped_rows[] = [
-                'row_index' => $index,
-                'uid'       => null,
-                'mobile_no' => null,
-                'reason'    => 'insert_or_ignore_skipped_due_to_db_unique',
-                'unique_values' => $unique_values,
-                'count'     => $skipped_in_db,
-            ];
+            if ($duplicate_reason) {
+                $this->skipped_count++;
+                $this->skipped_rows[] = [
+                    'row_index' => null,
+                    'uid' => $row['old_id'],
+                    'mobile_no' => $row['mobile_no'],
+                    'email_id' => $row['email_id'],
+                    'reason' => $duplicate_reason,
+                ];
+            } else {
+                $new_rows[] = $row;
+            }
+        }
+
+        if (!empty($new_rows)) {
+            $inserted = DB::table('users')->insert($new_rows);
+            $this->imported_count += count($new_rows);
         }
     }
 
@@ -133,7 +154,7 @@ class UserImport
                 'row'        => $row_index,
                 'old_id'     => $this->get_field_first_value($user_row, 'uid'),
                 'role'       => $role_key ?: null,
-                'reason_key' => 'role_not_industrial',
+                'reason_key' => 'role_not_individual',
                 'reason'     => 'Skipped because role is not industrial',
             ];
             return null;
@@ -145,7 +166,7 @@ class UserImport
         $email_id               = $this->get_field_first_value($user_row, 'mail');
         $mobile_no              = $this->get_field_first_value($user_row, 'field_mobile');
         $user_name              = $this->get_field_first_value($user_row, 'name');
-        $user_type              = "industrial";
+        $user_type              = "individual";
 
         $missing_fields = [];
 
@@ -195,7 +216,7 @@ class UserImport
 
         $pan = $this->get_field_first_value($user_row, 'field_pan');
 
-        if (($pan === null || trim((string) $pan) === '') && $user_type !== "industrial") {
+        if (($pan === null || trim((string) $pan) === '') && $user_type !== "individual") {
 
             $this->skipped_count++;
             $this->skipped_rows[] = [
@@ -214,7 +235,7 @@ class UserImport
 
         $status_value       = $this->get_field_first_value($user_row, 'status');
         $status             = 'active';
-        $is_mobile_verified = 1;
+        $is_mobile_verified = 0;
 
         if ($status_value === false || $status_value === 0 || $status_value === '0') {
             $status             = 'blocked';
@@ -245,9 +266,10 @@ class UserImport
             'registered_enterprise_address' => $registered_enterprise_address,
             'registered_enterprise_city'    => $registered_enterprise_city,
             'business_activity'             => $business_activity,
-            'user_type'                     => $user_type,
+            'user_type'                     => "individual",
             'status'                        => $status,
             'password'                      => $this->default_password_hash,
+            'password_reset_required'       => 1,
             'created_at'                    => $created_at ?: now(),
             'updated_at'                    => $updated_at ?: now(),
         ];
