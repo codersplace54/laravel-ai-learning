@@ -46,6 +46,7 @@ use App\Http\Controllers\Service\AppealController;
 use App\Http\Controllers\Admin\ActivityLogController;
 use app\Http\Controllers\DeployController;
 use App\Http\Controllers\Service\ClearanceController;
+use App\Http\Controllers\TestingFacilityCapabilityController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -398,3 +399,7 @@ Route::get('entity_locker', [EntityLockerController::class, 'handle_callback']);
 Route::post('entity_locker-documents', [EntityLockerController::class, 'user_documents']);
 
 Route::post('/deploy-backend-latest-code-in-server', [DeployController::class, 'deploy']);
+
+Route::post('get-testing-facility-capabilities', [TestingFacilityCapabilityController::class, 'get_testing_facility_capabilities']);
+Route::post('get-testing-facilities', [TestingFacilityCapabilityController::class, 'get_testing_facilities']);
+Route::post('get-fssai-lab-equipment', [TestingFacilityCapabilityController::class, 'get_fssai_lab_equipment']);
