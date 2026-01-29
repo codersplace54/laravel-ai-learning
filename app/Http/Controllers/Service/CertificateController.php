@@ -366,7 +366,7 @@ class CertificateController extends Controller
                 ];
 
                 $application->update($update_data);
-                $clearance_response = $this->store_clearance($application);
+               // $clearance_response = $this->store_clearance($application);
 
 
                 $application->NOC_certificate = asset('storage/' . $application->NOC_certificate);
@@ -915,63 +915,63 @@ class CertificateController extends Controller
         return $html;
     }
 
-    protected function store_clearance($application)
-    {
+    // protected function store_clearance($application)
+    // {
 
-        try {
+    //     try {
 
-            DB::beginTransaction();
+    //         DB::beginTransaction();
 
-            $clearance = Clearance::where('user_id', $application->user_id)
-                ->where('service_id', $application->service_id)
-                ->where('application_id', $application->id)
-                ->first();
+    //         $clearance = Clearance::where('user_id', $application->user_id)
+    //             ->where('service_id', $application->service_id)
+    //             ->where('application_id', $application->id)
+    //             ->first();
 
-            $department_id = ServiceMaster::where('id', $application->service_id)->value('department_id');
+    //         $department_id = ServiceMaster::where('id', $application->service_id)->value('department_id');
 
-            if ($clearance) {
+    //         if ($clearance) {
 
-                $clearance->update([
-                    'licence_number'     => $application->license_id,
-                    'licence_date'       => $application->NOC_generationDate,
-                    'department_id'      =>  $department_id,
-                    'licence_valid_till' => $application->NOC_expiry_date,
-                    'status'             => 'active',
-                ]);
+    //             $clearance->update([
+    //                 'licence_number'     => $application->license_id,
+    //                 'licence_date'       => $application->NOC_generationDate,
+    //                 'department_id'      =>  $department_id,
+    //                 'licence_valid_till' => $application->NOC_expiry_date,
+    //                 'status'             => 'active',
+    //             ]);
 
-                $message = 'Clearance updated successfully.';
-            } else {
+    //             $message = 'Clearance updated successfully.';
+    //         } else {
 
-                $clearance = Clearance::create([
-                    'user_id'            => $application->user_id,
-                    'application_id'     => $application->id,
-                    'service_id'         => $application->service_id,
-                    'department_id'      => $department_id,
-                    'licence_number'     => $application->license_id,
-                    'licence_date'       => $application->NOC_generationDate,
-                    'licence_valid_till' => $application->NOC_expiry_date,
-                    'status'             => 'active',
-                ]);
+    //             $clearance = Clearance::create([
+    //                 'user_id'            => $application->user_id,
+    //                 'application_id'     => $application->id,
+    //                 'service_id'         => $application->service_id,
+    //                 'department_id'      => $department_id,
+    //                 'licence_number'     => $application->license_id,
+    //                 'licence_date'       => $application->NOC_generationDate,
+    //                 'licence_valid_till' => $application->NOC_expiry_date,
+    //                 'status'             => 'active',
+    //             ]);
 
-                $message = 'Clearance created successfully.';
-            }
+    //             $message = 'Clearance created successfully.';
+    //         }
 
-            DB::commit();
+    //         DB::commit();
 
-            return [
-                'status'  => 1,
-                'message' => $message,
-                'data'    => $clearance
-            ];
-        } catch (\Exception $e) {
+    //         return [
+    //             'status'  => 1,
+    //             'message' => $message,
+    //             'data'    => $clearance
+    //         ];
+    //     } catch (\Exception $e) {
 
-            DB::rollBack();
+    //         DB::rollBack();
 
-            return [
-                'status'  => 0,
-                'message' => 'Failed to save clearance.',
-                'error'   => $e->getMessage(),
-            ];
-        }
-    }
+    //         return [
+    //             'status'  => 0,
+    //             'message' => 'Failed to save clearance.',
+    //             'error'   => $e->getMessage(),
+    //         ];
+    //     }
+    // }
 }
