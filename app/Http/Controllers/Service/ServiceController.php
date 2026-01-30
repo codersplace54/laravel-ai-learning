@@ -1114,7 +1114,7 @@ class ServiceController extends Controller
                 ->where('status', 'pending')
                 ->where('hierarchy_level', $hierarchy_level)
                 ->whereHas('application', function ($q) use ($department_id) {
-                    $q->where('payment_status', 'paid')
+                    $q->whereIn('payment_status', ['paid', 'success'])
                         ->where('department_id', $department_id);
                 });
 
