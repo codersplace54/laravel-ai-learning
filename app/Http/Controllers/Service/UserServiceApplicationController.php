@@ -372,7 +372,7 @@ class UserServiceApplicationController extends Controller
                     }
 
                     $message = $status === 'draft' ? 'Application saved as draft successfully.' : 'Application updated successfully.';
-                    
+
                     return response()->json([
                         'status'  => 1,
                         'message' => $message,
@@ -468,7 +468,7 @@ class UserServiceApplicationController extends Controller
 
 
                     $message = $status === 'draft' ? 'Application saved as draft successfully.' : 'Application created successfully.';
-                    
+
                     return response()->json([
                         'status'  => 1,
                         'message' => $message,
@@ -545,7 +545,7 @@ class UserServiceApplicationController extends Controller
 
             if (!$existing_value && !$has_file_upload) {
                 $existing_value = $this->find_nested_value($all_app_data, $question->id);
-                
+
                 if (!$existing_value) {
                     $has_file_upload = $this->has_nested_file_upload($request, $question->id);
                 }
@@ -1277,8 +1277,7 @@ class UserServiceApplicationController extends Controller
                         $appeal_for = 'in_progress';
                     } elseif ($appeal->status === 'rejected') {
                         $appeal_for = 'rejected';
-                    }
-                    elseif ($appeal->status === 'approved') {
+                    } elseif ($appeal->status === 'approved') {
                         $appeal_for = 'your appeal request approved';
                     }
                 }
@@ -1304,7 +1303,7 @@ class UserServiceApplicationController extends Controller
                     'already_rated' => $service->my_feedback ? true : false,
                     'rating' => $service->my_feedback->satisfaction ?? null,
                     'is_certificate' => $service->NOC_certificate ? true : false,
-                    
+
                     'appeal_for' => $appeal_for
                 ];
             }
@@ -2348,7 +2347,7 @@ class UserServiceApplicationController extends Controller
 
             $application = UserServiceApplication::where('id', $request->application_id)->first();
 
-            if ($application->payment_status === 'paid') {
+            if (in_array($application->payment_status, ['paid', 'success'])) {
                 return response()->json([
                     'status' => 0,
                     'message' => 'This application is already marked as paid.',

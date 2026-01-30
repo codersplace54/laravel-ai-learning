@@ -160,7 +160,7 @@ class PaymentController extends Controller
         } catch (\Exception $e) {
 
             DB::rollBack();
-            
+
             // Log payment initiation error
             $user = Auth::user();
             if ($user) {
@@ -209,7 +209,7 @@ class PaymentController extends Controller
                 $this->logActivity('Payment callback failed - Order ID not found', null, null, [
                     'callback_data' => $request->all()
                 ], 'Payment Callback Failed');
-                
+
                 $msg = 'Order ID not found';
                 Log::info($msg);
                 return redirect()->away(
@@ -227,7 +227,7 @@ class PaymentController extends Controller
                     'expected_hash' => $generated_hash,
                     'received_hash' => $hash
                 ], 'Payment Verification Failed');
-                
+
                 $msg = 'Hash verification failed';
                 Log::info($msg);
                 return redirect()->away(
@@ -244,7 +244,7 @@ class PaymentController extends Controller
                     'order_id' => $order_id,
                     'callback_status' => $status
                 ], 'Payment Order Invalid');
-                
+
                 $msg = 'Already processed or invalid order';
                 Log::info($msg);
                 return redirect()->away(
@@ -273,7 +273,7 @@ class PaymentController extends Controller
                         'order_id' => $order_id,
                         'application_ids' => $ids
                     ], 'Payment Data Invalid');
-                    
+
                     $msg = 'Invalid application IDs';
                     Log::info($msg);
                     return redirect()->away(
@@ -367,7 +367,7 @@ class PaymentController extends Controller
         } catch (\Exception $e) {
 
             DB::rollBack();
-            
+
             // Log payment callback error
             $this->logActivity('Payment callback processing failed', null, null, [
                 'error_message' => $e->getMessage(),
@@ -385,7 +385,7 @@ class PaymentController extends Controller
         }
     }
 
-    
+
     public function generate_encryption_key($grn)
     {
         $sum = 0;
@@ -403,7 +403,7 @@ class PaymentController extends Controller
         try {
 
             $request->validate([
-                'payment_status' => 'required|string|in:pending,paid',
+                'payment_status' => 'required|string|in:pending,paid,success',
             ]);
 
             if (!Auth::check()) {
@@ -590,8 +590,8 @@ class PaymentController extends Controller
             $soap_url = "https://www.egras.tripura.gov.in/Grn_status.asmx?op=GetGrnDetails_identity";
 
             $soap_request = '<?xml version="1.0" encoding="utf-8"?>
-                <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-                               xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+                <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                               xmlns:xsd="http://www.w3.org/2001/XMLSchema"
                                xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
                     <soap:Body>
                         <GetGrnDetails_identity xmlns="http://tempuri.org/">
