@@ -695,27 +695,30 @@ class CertificateController extends Controller
     {
         $request->validate([
             'application_id' => 'required|integer|exists:user_service_applications,id',
-            'certificate_file' => 'required|file|mimes:pdf,png,jpg,jpeg,webp|max:25600',
+            'certificate_file' => 'nullable|file|mimes:pdf,png,jpg,jpeg,webp|max:25600',
             'license_id' => 'required|string',
             'noc_generation_date' => 'required|date',
             'noc_expiry_date' => 'required|date'
         ]);
 
-        try{
+        try {
 
             $application = UserServiceApplication::where('id', $request->application_id)->first();
 
-            if($application->NOC_certificate){
+            if ($application->NOC_certificate) {
                 Storage::disk('public')->delete($application->NOC_certificate);
             }
-            
+
             $file = $request->file('certificate_file');
-            $filename = uniqid() . '.' . $file->getClientOriginalExtension();
-            
-            $license_file = $file->storeAs("uploads/{$application->user_id}/application", $filename, 'public');
-            
+            if ($file) {
+
+
+                $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+
+                $certificate_file_path = $file->storeAs("uploads/{$application->user_id}/application", $filename, 'public');
+            }
             $application->update([
-                'NOC_certificate' => $license_file,
+                'NOC_certificate' => $request->certificate_file ?  $certificate_file_path : $application->NOC_certificate,
                 'NOC_generationDate' => $request->noc_generation_date,
                 'NOC_expiry_date' => $request->noc_expiry_date,
                 'license_id' => $request->license_id,
@@ -726,14 +729,13 @@ class CertificateController extends Controller
                 'status' => 1,
                 'message' => 'Certificate uploaded successfully.',
                 'data' => [
-                    'certificate_url' => asset('storage/' . $license_file),
+                    'certificate_url' => asset('storage/' . $application->NOC_certificate),
                     'NOC_generationDate' => $application->NOC_generationDate,
                     'NOC_expiry_date' => $application->NOC_expiry_date,
                     'NOC_mode' => $application->NOC_mode,
                     'license_id' => $application->license_id,
                 ]
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 0,
