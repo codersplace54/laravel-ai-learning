@@ -20,9 +20,12 @@ use App\Exports\DepartmentUsersExport;
 use App\Models\UserUnit;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Validation\Rule;
+use App\Traits\LogsActivity;
 
 class UserController extends Controller
 {
+    use LogsActivity;
+
     public function register(Request $request)
     {
 
