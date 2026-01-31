@@ -16,12 +16,6 @@ class TestingFacilityCapabilityController extends Controller
 
         try {
 
-            if (!Auth::check()) {
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'Unauthenticated user.',
-                ], 401);
-            }
 
             $capabilities = TestingFacilityCapability::orderBy('created_at', 'desc')->get();
 
@@ -64,12 +58,6 @@ class TestingFacilityCapabilityController extends Controller
 
         try {
 
-            if (!Auth::check()) {
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'Unauthenticated user.',
-                ], 401);
-            }
 
             $facilities = TestingFacility::orderBy('id', 'desc')->get();
 
@@ -124,12 +112,6 @@ class TestingFacilityCapabilityController extends Controller
 
         try {
 
-            if (!Auth::check()) {
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'Unauthenticated user.',
-                ], 401);
-            }
 
             $equipment = FssaiLabEquipment::orderBy('created_at', 'desc')->get();
 
