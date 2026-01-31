@@ -28,9 +28,13 @@ use App\Services\ApplicationDataFormatter;
 use App\Services\SmsService;
 use App\Models\Department;
 use App\Models\IndustrialEstate;
+use App\Models\User;
+use App\Traits\LogsActivity;
 
 class UserServiceApplicationController extends Controller
 {
+    use LogsActivity;
+    
     public function user_service_application_store(Request $request)
     {
         try {
@@ -2374,17 +2378,6 @@ class UserServiceApplicationController extends Controller
                 'status'         => $status,
             ]);
 
-            // Log admin payment marking
-            // activity('admin_payment')
-            //     ->performedOn($application)
-            //     ->causedBy(Auth::user())
-            //     ->withProperties([
-            //         'grn_number' => $request->GRN_number,
-            //         'payment_amount' => $final_paid_amount,
-            //         'comments' => $request->comments
-            //     ])
-            //     ->log('Admin marked application as paid');
-
             PaymentOrder::create([
                 'application_id'    => json_encode([(int) $request->application_id]),
                 'user_id'           => $application->user_id,
@@ -2396,6 +2389,12 @@ class UserServiceApplicationController extends Controller
                 'gateway_response'  => null,
                 'updated_at' => now()
             ]);
+
+            $admin = Auth::user();
+            // Log payment mark
+            $this->logActivity($admin->user_name . ' marked the application as paid', $application, User::find($application->user_id), [
+                'grn_number' => $application->GRN_number,
+            ], 'Admin marked paid');
 
             return response()->json([
                 'status' => 1,

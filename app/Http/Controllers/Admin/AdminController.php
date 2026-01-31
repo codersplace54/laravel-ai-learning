@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\DepartmentUsersExport;
@@ -282,6 +283,68 @@ class AdminController extends Controller
                 'status' => 0,
                 'message' => 'Something went wrong while updating status.',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function update_user_profile(Request $request)
+    {
+        try {
+            $request->validate([
+                'user_id' => 'required|exists:users,id',
+                'mobile_no' => 'nullable|string|max:15|unique:users,mobile_no,' . $request->user_id,
+                'new_password' => 'nullable|string|min:6',
+            ], [
+                'user_id.required' => 'User ID is required.',
+                'user_id.exists' => 'User not found.',
+                'mobile_no.required' => 'Mobile number is required.',
+                'mobile_no.unique' => 'This mobile number is already registered.',
+                'new_password.min' => 'Password must be at least 6 characters.',
+            ]);
+
+            $admin = Auth::user();
+            if (!$admin || $admin->user_type !== 'admin') {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Only admin can update these details.'
+                ], 403);
+            }
+
+            $user = User::where('id', $request->user_id)->first();
+
+            if (!in_array($user->user_type, ['department', 'individual'])) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'You can only update user type department or individual.'
+                ], 403);
+            }
+
+            $user->update([
+                'mobile_no' => $request->mobile_no,
+                'password' => Hash::make($request->new_password)
+            ]);
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Data updated successfully.',
+                'data' => [
+                    'user_id' => $user->id,
+                    'mobile_no' => $user->mobile_no
+                ]
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to update data.',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

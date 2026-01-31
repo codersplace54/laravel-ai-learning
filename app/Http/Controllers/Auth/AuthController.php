@@ -69,11 +69,16 @@ class AuthController extends Controller
                 $token = JWTAuth::attempt(['bin' => $identifier, 'password' => $password]);
             }
 
+            if (! $token) {
+                $token = JWTAuth::attempt(['mobile_no' => $identifier, 'password' => $password]);
+            }
+
             if (!$token) {
                 // Log failed login attempt
                 $user = User::where('user_name', $identifier)
                     ->orWhere('pan', strtoupper(trim($identifier)))
                     ->orWhere('bin', $identifier)
+                    ->orWhere('mobile_no', $identifier)
                     ->first();
 
                 if ($user) {

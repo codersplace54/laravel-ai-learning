@@ -186,6 +186,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('fetch-all-department-users', [AdminController::class, 'fetch_all_department_users']);
         Route::post('get-department-user-details', [UserController::class, 'get_department_user_details']);
         Route::post('update-user-status/{user_id}', [AdminController::class, 'update_user_status']);
+        Route::post('update-user-profile', [AdminController::class, 'update_user_profile']);
 
         Route::post('existing-license-update-status', [ExistingLicenseController::class, 'existing_license_update_status']);
         Route::post('existing-license-view', [ExistingLicenseController::class, 'existing_license_view']);
