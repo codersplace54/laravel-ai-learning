@@ -233,6 +233,7 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
             'license_id' => $noc_cert_number ?: null,
             'NOC_letter_date' => $noc_app_date,
             'NOC_generationDate' => $noc_generation,
+            'NOC_mode' => $noc_mode,
         ];
     }
 

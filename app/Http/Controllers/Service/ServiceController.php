@@ -640,6 +640,20 @@ class ServiceController extends Controller
                 ];
             }
 
+            $license_details = [
+                'NOC_generationDate' => $application->NOC_generationDate,
+                'NOC_expiry_date' => $application->NOC_expiry_date,
+                'license_id' => $application->license_id,
+                'NOC_mode' => $application->NOC_mode,
+                'NOC_certificate' => $application->NOC_certificate ? asset('storage/' . $application->NOC_certificate) : null,
+            ];
+
+            $is_land_allotment = $application->service_id == 64;
+            $land_allotment_details = [ 
+                'is_land_allotment' => $is_land_allotment ,
+                'land_allotment_estimate_amount' => $is_land_allotment ? $application->applied_fee : null,
+                'land_allotment_approved_amount' => $is_land_allotment ? $application->total_fee : null
+            ];
 
             $response = [
                 'application_id'  => $application->id,
@@ -685,10 +699,10 @@ class ServiceController extends Controller
                 'is_finally_approved'  => $is_finally_approved,
                 'history_data'    => $history_data,
                 'is_certificate_generated'    => $application->NOC_certificate ? true : false,
-                'NOC_mode' => $application->NOC_mode,
-                'certificate_file' => $application->NOC_certificate ? asset('storage/' . $application->NOC_certificate) : null,
                 'created_at'    => $application->created_at,
                 'updated_at'    => $application->updated_at,
+                'license_details' => $license_details,
+                'land_allotment_details' => $land_allotment_details,
             ];
 
             return response()->json([
@@ -793,6 +807,13 @@ class ServiceController extends Controller
 
                 $max_step = ServiceApprovalFlow::where('service_id', $application->service_id)
                     ->max('step_number');
+
+                if($application->service_id == 64){
+                    $application -> update ([
+                        'total_fee' => $request -> land_allotment_approved_amount,
+                        'payment_status' => 'pending'
+                    ]);
+                }
 
                 if ($current_step->step_number == $max_step) {
                     $application->update([

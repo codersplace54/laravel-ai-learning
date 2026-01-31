@@ -88,6 +88,7 @@ class UserServiceApplicationController extends Controller
                     'external_remarks'   => 'nullable|string',
                     'is_third_party'   => 'nullable|integer|in:0,1',
                     'removed_question_ids'   => 'nullable|array',
+                    'land_allotment_estimate_amount' => 'required_if:service_id,64',
                 ]);
 
                 $this->validate_questionnaire_file_inputs($request);
@@ -296,7 +297,7 @@ class UserServiceApplicationController extends Controller
                         'application_date'      => $request->application_date ?? now(),
                         'status'                => $status,
                         'application_data'      => $user_service_application->application_data,
-                        'applied_fee'           => $request->applied_fee,
+                        // 'applied_fee'           => $request->applied_fee,
                         'approved_fee'          => $request->approved_fee,
                         'payment_status'        => $payment_status,
                         'remarks'               => $request->remarks,
@@ -323,6 +324,7 @@ class UserServiceApplicationController extends Controller
                         'current_step_number'   => $approval_flow->step_number ?? 0,
                         'max_processing_date'   => $has_approval_flow ? $max_processing_date : null,
                         'paid_amount'           => $paid_amount,
+                        'applied_fee'           => $request->land_allotment_estimate_amount ?? null,
                     ]);
 
                     if ($request->status != 'draft' && $has_approval_flow) {
@@ -398,7 +400,7 @@ class UserServiceApplicationController extends Controller
                         'application_date'      => $request->application_date ?? now(),
                         'status'                => $status,
                         'application_data'      => json_encode($application_data ?: null),
-                        'applied_fee'           => $request->applied_fee,
+                        // 'applied_fee'           => $request->applied_fee,
                         'approved_fee'          => $request->approved_fee,
                         'payment_status'        => $payment_status,
                         'remarks'               => $request->remarks,
@@ -424,6 +426,7 @@ class UserServiceApplicationController extends Controller
                         'current_step_number'   => $approval_flow->step_number ?? 0,
                         'max_processing_date'   => $has_approval_flow ? $max_processing_date : null,
                         'paid_amount'           => $paid_amount,
+                        'applied_fee'           => $request->land_allotment_estimate_amount ?? null,
                     ]);
 
                     if ($user_service_application->status !== "draft") {
