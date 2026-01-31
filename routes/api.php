@@ -405,3 +405,6 @@ Route::post('/deploy-backend-latest-code-in-server', [DeployController::class, '
 Route::post('get-testing-facility-capabilities', [TestingFacilityCapabilityController::class, 'get_testing_facility_capabilities']);
 Route::post('get-testing-facilities', [TestingFacilityCapabilityController::class, 'get_testing_facilities']);
 Route::post('get-fssai-lab-equipment', [TestingFacilityCapabilityController::class, 'get_fssai_lab_equipment']);
+
+Route::post('get-department-wise-static-count', [DashboardController::class, 'get_department_wise_static_count']);
+Route::post('get-overall-static-count', [DashboardController::class, 'get_overall_static_count']);
