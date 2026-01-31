@@ -17,7 +17,7 @@ class TestingFacilityCapabilityController extends Controller
         try {
 
 
-            $capabilities = TestingFacilityCapability::orderBy('created_at', 'desc')->get();
+            $capabilities = TestingFacilityCapability::orderBy('created_at', 'asc')->get();
 
             if ($capabilities->isEmpty()) {
                 return response()->json([
@@ -59,7 +59,7 @@ class TestingFacilityCapabilityController extends Controller
         try {
 
 
-            $facilities = TestingFacility::orderBy('id', 'desc')->get();
+            $facilities = TestingFacility::orderBy('id', 'asc')->get();
 
             if ($facilities->isEmpty()) {
                 return response()->json([
@@ -113,7 +113,7 @@ class TestingFacilityCapabilityController extends Controller
         try {
 
 
-            $equipment = FssaiLabEquipment::orderBy('created_at', 'desc')->get();
+            $equipment = FssaiLabEquipment::orderBy('created_at', 'asc')->get();
 
             if ($equipment->isEmpty()) {
                 return response()->json([
