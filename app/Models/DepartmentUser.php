@@ -7,7 +7,6 @@ use App\Models\Concerns\LogsModelActivity;
 
 class DepartmentUser extends Model
 {
-    use LogsModelActivity;
     protected $fillable = [
         'id',
         'user_id',

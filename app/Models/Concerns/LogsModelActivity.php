@@ -10,6 +10,16 @@ trait LogsModelActivity
 {
     use LogsActivity;
 
+    protected $customDescription = null;
+    protected $customEventName = null;
+
+    public function logAs($description, $eventName = null)
+    {
+        $this->customDescription = $description;
+        $this->customEventName = $eventName;
+        return $this;
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
@@ -31,6 +41,16 @@ trait LogsModelActivity
                 'method' => request()->method(),
                 'user_agent' => request()->userAgent(),
             ]);
+
+            if ($this->customDescription) {
+                $activity->description = $this->customDescription;
+                $this->customDescription = null;
+            }
+
+            if ($this->customEventName) {
+                $activity->event = $this->customEventName;
+                $this->customEventName = null;
+            }
         } catch (\Throwable $e) {
             
         }

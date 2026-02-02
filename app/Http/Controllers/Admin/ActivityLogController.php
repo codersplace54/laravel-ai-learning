@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogController extends Controller
@@ -165,6 +166,31 @@ class ActivityLogController extends Controller
             'deleted' => 'Delete',
             default => ucfirst($event),
         };
+    }
+
+    public function activity_log_filters()
+    {
+        $actions = Cache::remember('activity_log_actions', 3600, function () {
+            return Activity::distinct()->pluck('event')->filter()->sort()->values();
+        });
+
+        $modules = Cache::remember('activity_log_modules', 3600, function () {
+            return Activity::distinct()->pluck('subject_type')
+                ->filter()
+                ->map(fn($type) => class_basename($type))
+                ->unique()
+                ->sort()
+                ->values();
+        });
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Filter options fetched',
+            'data' => [
+                'actions' => $actions,
+                'modules' => $modules,
+            ],
+        ]);
     }
 
     private function display_user_name($model): ?string

@@ -202,6 +202,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('activity-logs', [ActivityLogController::class, 'activity_logs']);
         Route::post('activity-log-details', [ActivityLogController::class, 'activity_log_details']);
+        Route::post('activity-log-filters', [ActivityLogController::class, 'activity_log_filters']);
 
     });
 
@@ -232,6 +233,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('user-service-applications-by-payment-status', [PaymentController::class, 'user_service_applications_by_payment_status']);
         Route::post('check-payment-status', [PaymentController::class, 'check_payment_status']);
         Route::post('check-all-pending-payments', [PaymentController::class, 'check_all_pending_payments']);
+        Route::post('get-grn-status', [PaymentController::class, 'get_grn_status']);
 
         Route::post('existing-license-store', [ExistingLicenseController::class, 'existing_license_store']);
         Route::post('existing-license-update', [ExistingLicenseController::class, 'existing_license_update']);

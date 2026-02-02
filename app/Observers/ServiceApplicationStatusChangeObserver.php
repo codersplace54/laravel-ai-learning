@@ -7,6 +7,23 @@ use Illuminate\Support\Facades\Auth;
 
 class ServiceApplicationStatusChangeObserver
 {
+    public function created(UserServiceApplication $application)
+    {
+        if ($application->status !== 'draft') {
+            $user = $application->user;
+            $service = $application->service;
+            
+            activity('application_created')
+                ->causedBy($user)
+                ->performedOn($application)
+                ->withProperties([
+                    'application_id' => $application->applicationId,
+                    'service_title_or_description' => $service->service_title_or_description ?? 'Unknown Service',
+                ])
+                ->log($user->user_name . ' applied for ' . ($service->service_title_or_description ?? 'Unknown Service') . ' application');
+        }
+    }
+
     public function updating(UserServiceApplication $application)
     {
         if ($application->isDirty('status')) {
@@ -15,17 +32,18 @@ class ServiceApplicationStatusChangeObserver
             
             $user = Auth::user();
             $context = $this->get_context();
-            
+            $appKey = $application->getKey();
             activity('status_change')
                 ->causedBy($user)
                 ->performedOn($application)
+                ->event('Application status changed')
                 ->withProperties([
                     'old_status' => $old_status,
                     'new_status' => $new_status,
                     'context' => $context,
-                    'application_id' => $application->applicationId,
+                    'application_id' => $appKey,
                 ])
-                ->log("Status changed from '{$old_status}' to '{$new_status}'");
+                ->log(($user->user_name ?? 'System') . ' changed ' . ($application->user->user_name ?? 'Unknown User') . "'s application status from '{$old_status}' to '{$new_status}'");
         }
     }
 
