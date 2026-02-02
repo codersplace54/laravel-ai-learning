@@ -21,10 +21,11 @@ use App\Models\UserUnit;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Validation\Rule;
 use App\Traits\LogsActivity;
+use App\Models\Concerns\LogsModelActivity;
 
 class UserController extends Controller
 {
-    use LogsActivity;
+    use LogsActivity, LogsModelActivity;
 
     public function register(Request $request)
     {
@@ -129,12 +130,17 @@ class UserController extends Controller
 
             DB::beginTransaction();
 
-            if ($request->user_type == "department") {
+            if (in_array($request->user_type, ['department', 'admin'])) {
                 $admin = Auth::user();
+
                 if (!$admin || $admin->user_type !== 'admin') {
-                    return response()->json(['status' => 0, 'message' => 'Only a logged-in admin can register a departmental user.'], 401);
+                    return response()->json([
+                        'status' => 0,
+                        'message' => 'Only a logged-in admin can register a ' . $request->user_type . ' user.'
+                    ], 401);
                 }
             }
+
 
             $user = User::create([
                 'name_of_enterprise' => $request->name_of_enterprise,
@@ -177,18 +183,6 @@ class UserController extends Controller
                         'updated_by' => null
                     ]);
                 }
-
-                // Log department user creation
-                // activity('admin_user_management')
-                //     ->performedOn($user)
-                //     ->causedBy($admin)
-                //     ->withProperties([
-                //         'action' => 'department_user_created',
-                //         'department_id' => $request->department_id,
-                //         'hierarchy_level' => $request->hierarchy_level,
-                //         'designation' => $request->designation
-                //     ])
-                //     ->log('Admin created department user');
             }
 
             $now = Carbon::now();
@@ -233,6 +227,14 @@ class UserController extends Controller
                 session()->forget('verified_mobile_no');
             }
 
+            if (in_array($request->user_type, ['department', 'admin'])) {
+                $admin = Auth::user();
+
+                if ($admin) {
+                    $this->logActivity($admin->user_name . ' created ' . $request->user_type . ' user: ' . $user->user_name, $user, $admin, [], 'Admin created ' . ucfirst($request->user_type) . ' user');
+                }
+            }
+
             return response()->json([
                 'status' => 1,
                 'message' => 'User registered successfully',
@@ -267,6 +269,11 @@ class UserController extends Controller
         try {
 
             $user = User::findOrFail($request->id);
+            if($user->user_type == 'individual'){
+                $user->logAs(Auth::user()->user_name . ' updated profile', "Profile update");
+            }else{
+                $user->logAs(Auth::user()->user_name . ' updated '. $user->user_type . ' user: ' . $user->user_name . " profile", "Admin updated user");
+            }
 
             $rules = [
                 'id' => 'required|exists:users,id',
@@ -507,17 +514,6 @@ class UserController extends Controller
                     ]);
                 }
 
-                // Log department user profile update
-                // activity('admin_user_management')
-                //     ->performedOn($user)
-                //     ->causedBy($auth_user)
-                //     ->withProperties([
-                //         'action' => 'department_user_updated',
-                //         'department_id' => $request->department_id,
-                //         'hierarchy_level' => $request->hierarchy_level,
-                //         'designation' => $request->designation
-                //     ])
-                //     ->log('Admin updated department user profile');
             }
 
             $locations = $user->department_user_location->map(function ($loc) {
@@ -531,7 +527,7 @@ class UserController extends Controller
                 ];
             });
 
-            $user = [
+            $data = [
                 'name_of_enterprise' => $user->name_of_enterprise,
                 'authorized_person_name' => $user->authorized_person_name,
                 'email_id' => $user->email_id,
@@ -566,7 +562,7 @@ class UserController extends Controller
             return response()->json([
                 'status' => 1,
                 'message' => 'User updated successfully',
-                'data' => $user,
+                'data' => $data,
                 'locations' => $locations,
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {

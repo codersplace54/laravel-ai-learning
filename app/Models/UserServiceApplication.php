@@ -3,11 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Concerns\LogsModelActivity;
 
 class UserServiceApplication extends Model
 {
-    use LogsModelActivity;
     protected $fillable = [
         'id',
         'user_id',

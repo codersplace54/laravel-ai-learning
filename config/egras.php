@@ -10,6 +10,8 @@ return [
     'office_code' => env('EGRAS_OFFICE_CODE'),
     'bank_code' => env('EGRAS_BANK_CODE'),
     'user_id' => env('EGRAS_USER_ID'),
+    'userid' => env('EGRAS_USERID'),
+    'grnstatus' => env('EGRAS_GRNSTATUS_URL'),
     'department_code' => env('EGRAS_DEPARTMENT_CODE'),
     'remarks' => env('EGRAS_REMARKS'),
     'return_url' => env('EGRAS_RETURN_URL'),

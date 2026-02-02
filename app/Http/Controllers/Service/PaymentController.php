@@ -629,4 +629,33 @@ class PaymentController extends Controller
             return false;
         }
     }
+
+    public function get_grn_status(Request $request): JsonResponse
+    {
+        $request->validate([
+            'grn_no' => 'required|string'
+        ]);
+
+        $grn = trim($request->grn_no);
+        $userId = config('egras.userid');
+        $baseUrl = config('egras.grnstatus');
+        $key = $this->generate_encryption_key($grn);
+        $plainText = $grn . ',' . $userId;
+        $keyBytes = array_values(unpack('C*', (string) $key));
+
+        if (count($keyBytes) < 16) {
+            $keyBytes = array_pad($keyBytes, 16, 0);
+        }
+
+        $aesKey = implode(array_map('chr', $keyBytes));
+        $iv = $aesKey;
+        $encrypted = openssl_encrypt($plainText, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $iv);
+        $val = urlencode(base64_encode($encrypted));
+        $url = $baseUrl . '?val=' . $val . '&key=' . $key;
+
+        return response()->json([
+            'status' => '1',
+            'url' => $url
+        ]);
+    }
 }

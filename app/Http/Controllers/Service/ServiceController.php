@@ -703,6 +703,7 @@ class ServiceController extends Controller
                 'updated_at'    => $application->updated_at,
                 'license_details' => $license_details,
                 'land_allotment_details' => $land_allotment_details,
+                'GRN_number' => $application->GRN_number,
             ];
 
             return response()->json([
