@@ -78,6 +78,21 @@
                     </div>
                 </div>
             </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card shadow-sm border-dark">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0">Fix Incorrectly Normalized Paths</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">Revert paths for records where old_id is null</p>
+                        <form action="{{ route('admin.correction.fix_incorrectly_normalized_paths') }}" method="POST" onsubmit="return confirm('Fix incorrectly normalized paths?');">
+                            @csrf
+                            <button type="submit" class="btn btn-dark w-100">Fix Incorrectly Normalized Paths</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="row">

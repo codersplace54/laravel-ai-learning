@@ -261,6 +261,7 @@ class PaymentController extends Controller
                 'GRN_number'        => $grn,
                 'payment_datetime' => $payment_datetime,
                 'gateway_response'  => json_encode($request->all()),
+                'hash'              => $hash,
                 'updated_at' => now()
             ]);
 

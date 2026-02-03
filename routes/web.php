@@ -49,5 +49,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::post('update-partnership-application-noc-certificate', [ApplicationDataCorrectionController::class, 'update_partnership_application_noc_certificate'])->name('correction.partnership_application_noc_certificate');
     Route::post('correct-all-file-paths', [ApplicationDataCorrectionController::class, 'correct_all_file_paths'])->name('correction.all_file_paths');
     Route::post('normalize-to-relative-paths', [ApplicationDataCorrectionController::class, 'normalize_to_relative_paths'])->name('correction.normalize_paths');
+    Route::post('fix-incorrectly-normalized-paths', [ApplicationDataCorrectionController::class, 'fix_incorrectly_normalized_paths'])->name('correction.fix_incorrectly_normalized_paths');
     Route::post('fix-partner-dates', [ApplicationDataCorrectionController::class, 'fix_partner_dates'])->name('correction.fix_partner_dates');
 });
