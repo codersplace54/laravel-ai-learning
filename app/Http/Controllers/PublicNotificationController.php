@@ -5,12 +5,12 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use App\Models\Notification;
+use App\Models\PublicNotification;
 
 
-class NotificationController extends Controller
+class PublicNotificationController extends Controller
 {
-    public function notification_store(Request $request)
+    public function public_notification_store(Request $request)
     {
 
 
@@ -42,10 +42,10 @@ class NotificationController extends Controller
 
             if ($request->hasFile('attachment')) {
                 $attachment_path = $request->file('attachment')
-                    ->store('uploads/notifications', 'public');
+                    ->store('uploads/public_notifications', 'public');
             }
 
-            $notification = Notification::create([
+            $notification = PublicNotification::create([
                 'display_order' => $request->display_order,
                 'message'       => $request->message,
                 'attachment'    => $attachment_path,
@@ -88,7 +88,7 @@ class NotificationController extends Controller
         }
     }
 
-    public function notification_update(Request $request)
+    public function public_notification_update(Request $request)
     {
 
 
@@ -104,7 +104,7 @@ class NotificationController extends Controller
             }
 
             $request->validate([
-                'id'            => 'required|integer|exists:notifications,id',
+                'id'            => 'required|integer|exists:public_notifications,id',
                 'message'       => 'required|string',
                 'display_order' => 'nullable|integer',
                 'attachment'    => 'nullable|file|mimes:pdf,jpg,jpeg,png',
@@ -117,13 +117,13 @@ class NotificationController extends Controller
 
             DB::beginTransaction();
 
-            $notification = Notification::where('id', $request->id)->first();
+            $notification = PublicNotification::where('id', $request->id)->first();
 
             $attachment_path = $notification->attachment;
 
             if ($request->hasFile('attachment')) {
                 $attachment_path = $request->file('attachment')
-                    ->store('uploads/notifications', 'public');
+                    ->store('uploads/public_notifications', 'public');
             }
 
             $notification->update([
@@ -169,7 +169,7 @@ class NotificationController extends Controller
         }
     }
 
-    public function notification_delete(Request $request)
+    public function public_notification_delete(Request $request)
     {
 
 
@@ -183,12 +183,12 @@ class NotificationController extends Controller
             }
 
             $request->validate([
-                'id' => 'required|integer|exists:notifications,id',
+                'id' => 'required|integer|exists:public_notifications,id',
             ]);
 
             DB::beginTransaction();
 
-            $notification = Notification::where('id', $request->id)->first();
+            $notification = PublicNotification::where('id', $request->id)->first();
 
             if (!$notification) {
 
@@ -227,18 +227,14 @@ class NotificationController extends Controller
         }
     }
 
-    public function notification_list(Request $request)
+    public function public_notification_list(Request $request)
     {
+
+
         try {
 
-            if (!Auth::check()) {
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'Unauthenticated user.'
-                ], 401);
-            }
 
-            $notifications = Notification::orderBy('display_order', 'asc')
+            $notifications = PublicNotification::orderBy('display_order', 'asc')
                 ->get();
 
             $notifications->transform(function ($item) {
@@ -266,23 +262,17 @@ class NotificationController extends Controller
     }
 
 
-    public function notification_view(Request $request)
+    public function public_notification_view(Request $request)
     {
 
         try {
 
-            if (!Auth::check()) {
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'Unauthenticated user.'
-                ], 401);
-            }
 
             $request->validate([
-                'id' => 'required|integer|exists:notifications,id',
+                'id' => 'required|integer|exists:public_notifications,id',
             ]);
 
-            $notification = Notification::where('id', $request->id)->first();
+            $notification = PublicNotification::where('id', $request->id)->first();
 
             if (!$notification) {
                 return response()->json([
