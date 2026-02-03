@@ -133,7 +133,7 @@ class ApplicationDataCorrectionController extends Controller
             'total_checked' => $total_checked,
         ]);
     }
-
+    
     public function normalize_to_relative_paths(Request $request)
     {
         set_time_limit(0);
@@ -144,6 +144,7 @@ class ApplicationDataCorrectionController extends Controller
         $total_checked = 0;
         
         $applications = DB::table('user_service_applications')
+            ->whereNotNull('old_id')
             ->select(['id', 'application_data', 'NOC_certificate'])
             ->get();
 
@@ -562,5 +563,78 @@ class ApplicationDataCorrectionController extends Controller
         }
         
         return $path;
+    }
+
+    public function fix_incorrectly_normalized_paths(Request $request)
+    {
+        set_time_limit(0);
+        
+        $updated_count = 0;
+        $batch_size = 100;
+        $updates_batch = [];
+        $total_checked = 0;
+        
+        $applications = DB::table('user_service_applications')
+            ->whereNull('old_id')
+            ->select(['id', 'user_id', 'application_data', 'NOC_certificate'])
+            ->get();
+
+        foreach ($applications as $app) {
+            $total_checked++;
+            $need_update = false;
+            
+            $application_data = json_decode($app->application_data, true);
+            
+            if (is_array($application_data)) {
+                $application_data = $this->revert_paths_in_array($application_data, $need_update, $app->user_id);
+            }
+            
+            $noc_certificate = $app->NOC_certificate;
+            if ($noc_certificate && str_starts_with($noc_certificate, 'sites/default/files/')) {
+                $filename = basename($noc_certificate);
+                $noc_certificate = "uploads/{$app->user_id}/application/{$filename}";
+                $need_update = true;
+            }
+            
+            if ($need_update) {
+                $updates_batch[] = [
+                    'id' => $app->id,
+                    'application_data' => json_encode($application_data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'NOC_certificate' => $noc_certificate,
+                ];
+                
+                if (count($updates_batch) >= $batch_size) {
+                    $this->execute_batch_update($updates_batch);
+                    $updated_count += count($updates_batch);
+                    $updates_batch = [];
+                }
+            }
+        }
+        
+        if (!empty($updates_batch)) {
+            $this->execute_batch_update($updates_batch);
+            $updated_count += count($updates_batch);
+        }
+
+        return back()->with([
+            'success' => 'Incorrectly normalized paths fixed successfully',
+            'updated_count' => $updated_count,
+            'total_checked' => $total_checked,
+        ]);
+    }
+
+    private function revert_paths_in_array($data, &$need_update, $user_id = null)
+    {
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $data[$key] = $this->revert_paths_in_array($value, $need_update, $user_id);
+            } elseif (is_string($value) && str_starts_with($value, 'sites/default/files/')) {
+                $filename = basename($value);
+                $data[$key] = "uploads/{$user_id}/applications/{$filename}";
+                $need_update = true;
+            }
+        }
+        
+        return $data;
     }
 }
