@@ -47,6 +47,7 @@ use App\Http\Controllers\Admin\ActivityLogController;
 use app\Http\Controllers\DeployController;
 use App\Http\Controllers\Service\ClearanceController;
 use App\Http\Controllers\TestingFacilityCapabilityController;
+use App\Http\Controllers\PublicNotificationController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -204,6 +205,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('activity-log-details', [ActivityLogController::class, 'activity_log_details']);
         Route::post('activity-log-filters', [ActivityLogController::class, 'activity_log_filters']);
 
+        Route::post('public-notification-store', [PublicNotificationController::class, 'public_notification_store']);
+        Route::post('public-notification-update', [PublicNotificationController::class, 'public_notification_update']);
+        Route::post('public-notification-delete', [PublicNotificationController::class, 'public_notification_delete']);
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
@@ -251,25 +255,25 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
             Route::post('application-workflow-history', [UserIncentiveApplicationController::class, 'application_workflow_history']);
         });
 
-    Route::post('/get-total-applications-by-user', [DashboardController::class, 'get_total_applications_by_user']);
+        Route::post('/get-total-applications-by-user', [DashboardController::class, 'get_total_applications_by_user']);
 
-    Route::post('calculate-renewal-fee', [UserServiceApplicationController::class, 'calculate_renewal_fee']);
-    Route::post('update-renewed-application', [UserServiceApplicationController::class, 'update_renewed_application']);
-    Route::post('get-applications-ready-for-renewal', [UserServiceApplicationController::class, 'get_applications_ready_for_renewal']);
-    Route::post('service/renewal-cycles', [UserServiceApplicationController::class, 'get_service_renewal_cycles']);
+        Route::post('calculate-renewal-fee', [UserServiceApplicationController::class, 'calculate_renewal_fee']);
+        Route::post('update-renewed-application', [UserServiceApplicationController::class, 'update_renewed_application']);
+        Route::post('get-applications-ready-for-renewal', [UserServiceApplicationController::class, 'get_applications_ready_for_renewal']);
+        Route::post('service/renewal-cycles', [UserServiceApplicationController::class, 'get_service_renewal_cycles']);
 
-    Route::post('service-feedback-store', [FeedbackController::class, 'service_feedback_store']);
-    Route::post('service-feedback-list', [FeedbackController::class, 'service_feedback_list']);
+        Route::post('service-feedback-store', [FeedbackController::class, 'service_feedback_store']);
+        Route::post('service-feedback-list', [FeedbackController::class, 'service_feedback_list']);
 
-    Route::post('user-appeal-store', [AppealController::class, 'user_appeal_store']);
+        Route::post('user-appeal-store', [AppealController::class, 'user_appeal_store']);
 
-    Route::post('user-unit-store', [UserController::class, 'user_unit_store']);
-    Route::post('user-unit-update', [UserController::class, 'user_unit_update']);
-    Route::post('get-user-unit-list', [UserController::class, 'get_user_unit_list']);
+        Route::post('user-unit-store', [UserController::class, 'user_unit_store']);
+        Route::post('user-unit-update', [UserController::class, 'user_unit_update']);
+        Route::post('get-user-unit-list', [UserController::class, 'get_user_unit_list']);
 
-    Route::post('fetch-licence-numbers', [ClearanceController::class, 'fetch_licence_numbers']);
-    Route::post('fetch-user-clearances', [ClearanceController::class, 'fetch_user_clearances']);
-    Route::post('fetch-clearance-details', [ClearanceController::class, 'fetch_clearance_details']);
+        Route::post('fetch-licence-numbers', [ClearanceController::class, 'fetch_licence_numbers']);
+        Route::post('fetch-user-clearances', [ClearanceController::class, 'fetch_user_clearances']);
+        Route::post('fetch-clearance-details', [ClearanceController::class, 'fetch_clearance_details']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
@@ -349,7 +353,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 });
 
 Route::post('department-get-all-departments', [DepartmentController::class, 'all_departments'])->name('department.all_departments');
- Route::post('inspectors-by-department', [InspectionController::class, 'inspectors_by_department']);
+Route::post('inspectors-by-department', [InspectionController::class, 'inspectors_by_department']);
 
 Route::post('/tripura/get-all-districts', [TripuraMasterDataController::class, 'get_districts']);
 Route::post('/tripura/get-sub-subdivisions', [TripuraMasterDataController::class, 'get_subdivisions']);
@@ -411,3 +415,6 @@ Route::post('get-fssai-lab-equipment', [TestingFacilityCapabilityController::cla
 
 Route::post('get-department-wise-static-count', [DashboardController::class, 'get_department_wise_static_count']);
 Route::post('get-overall-static-count', [DashboardController::class, 'get_overall_static_count']);
+
+Route::post('public-notification-list', [PublicNotificationController::class, 'public_notification_list']);
+Route::post('public-notification-view', [PublicNotificationController::class, 'public_notification_view']);
