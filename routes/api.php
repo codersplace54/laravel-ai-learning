@@ -47,6 +47,7 @@ use App\Http\Controllers\Admin\ActivityLogController;
 use app\Http\Controllers\DeployController;
 use App\Http\Controllers\Service\ClearanceController;
 use App\Http\Controllers\TestingFacilityCapabilityController;
+use App\Http\Controllers\NotificationController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -203,6 +204,12 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('activity-logs', [ActivityLogController::class, 'activity_logs']);
         Route::post('activity-log-details', [ActivityLogController::class, 'activity_log_details']);
         Route::post('activity-log-filters', [ActivityLogController::class, 'activity_log_filters']);
+
+        Route::post('notification-store', [NotificationController::class, 'notification_store']);
+        Route::post('notification-update', [NotificationController::class, 'notification_update']);
+        Route::post('notification-delete', [NotificationController::class, 'notification_delete']);
+        Route::post('notification-list', [NotificationController::class, 'notification_list']);
+        Route::post('notification-view', [NotificationController::class, 'notification_view']);
 
     });
 
