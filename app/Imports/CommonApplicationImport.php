@@ -70,6 +70,7 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
                 29314 => 36,
                 36197 => 37,
                 52636 => 38,
+                20692 => 27,
             ],
             'payment_status_mapping' => [
                 'unpaid' => 'pending',
@@ -150,7 +151,11 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
             return null;
         }
 
-        $service_id = $this->config['service_id_mapping'][$noc_master_id] ?? null;
+        $service_id = $this->service_id_map[$noc_master_id] ?? null;
+        
+        if ($service_id === null) {
+            $service_id = $this->config['service_id_mapping'][$noc_master_id] ?? null;
+        }
 
         if ($service_id === null) {
             $this->skipped_rows[] = [

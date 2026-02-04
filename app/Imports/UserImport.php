@@ -94,44 +94,50 @@ class UserImport
             return;
         }
 
-        // Check for existing records before inserting
-        $mobile_nos = array_column($chunk_rows, 'mobile_no');
-        $email_ids = array_column($chunk_rows, 'email_id');
+        // Check for existing old_ids, emails and usernames to prevent duplicate entries
         $old_ids = array_column($chunk_rows, 'old_id');
-
+        $email_ids = array_column($chunk_rows, 'email_id');
+        $user_names = array_column($chunk_rows, 'user_name');
+        
         $existing_records = DB::table('users')
-            ->where(function($query) use ($mobile_nos, $email_ids, $old_ids) {
-                $query->whereIn('mobile_no', $mobile_nos)
-                      ->orWhereIn('email_id', $email_ids)
-                      ->orWhereIn('old_id', $old_ids);
-            })
-            ->select('mobile_no', 'email_id', 'old_id')
+            ->whereIn('old_id', $old_ids)
+            ->orWhereIn('email_id', $email_ids)
+            ->orWhereIn('user_name', $user_names)
+            ->select('old_id', 'email_id', 'user_name')
             ->get();
 
-        $existing_mobiles = $existing_records->pluck('mobile_no')->toArray();
-        $existing_emails = $existing_records->pluck('email_id')->toArray();
         $existing_old_ids = $existing_records->pluck('old_id')->toArray();
+        $existing_emails = $existing_records->pluck('email_id')->toArray();
+        $existing_usernames = $existing_records->pluck('user_name')->toArray();
 
         $new_rows = [];
         foreach ($chunk_rows as $row) {
-            $duplicate_reason = null;
-            
-            if (in_array($row['mobile_no'], $existing_mobiles)) {
-                $duplicate_reason = 'duplicate_mobile';
-            } elseif (in_array($row['email_id'], $existing_emails)) {
-                $duplicate_reason = 'duplicate_email';
-            } elseif (in_array($row['old_id'], $existing_old_ids)) {
-                $duplicate_reason = 'duplicate_old_id';
-            }
-
-            if ($duplicate_reason) {
+            if (in_array($row['old_id'], $existing_old_ids)) {
                 $this->skipped_count++;
                 $this->skipped_rows[] = [
                     'row_index' => null,
                     'uid' => $row['old_id'],
                     'mobile_no' => $row['mobile_no'],
-                    'email_id' => $row['email_id'],
-                    'reason' => $duplicate_reason,
+                    'user_name' => $row['user_name'],
+                    'reason' => 'duplicate_old_id',
+                ];
+            } elseif (in_array($row['email_id'], $existing_emails)) {
+                $this->skipped_count++;
+                $this->skipped_rows[] = [
+                    'row_index' => null,
+                    'uid' => $row['old_id'],
+                    'mobile_no' => $row['mobile_no'],
+                    'user_name' => $row['user_name'],
+                    'reason' => 'duplicate_email',
+                ];
+            } elseif (in_array($row['user_name'], $existing_usernames)) {
+                $this->skipped_count++;
+                $this->skipped_rows[] = [
+                    'row_index' => null,
+                    'uid' => $row['old_id'],
+                    'mobile_no' => $row['mobile_no'],
+                    'user_name' => $row['user_name'],
+                    'reason' => 'duplicate_user_name',
                 ];
             } else {
                 $new_rows[] = $row;
@@ -139,7 +145,7 @@ class UserImport
         }
 
         if (!empty($new_rows)) {
-            $inserted = DB::table('users')->insert($new_rows);
+            DB::table('users')->insert($new_rows);
             $this->imported_count += count($new_rows);
         }
     }

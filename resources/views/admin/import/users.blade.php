@@ -73,6 +73,7 @@
                                                     Row Index: <strong>{{ $row['row_index'] ?? 'N/A' }}</strong>,
                                                     UID: {{ $row['uid'] ?? 'N/A' }},
                                                     Mobile: {{ $row['mobile_no'] ?? 'N/A' }},
+                                                    Mobile: {{ $row['user_name'] ?? 'N/A' }},
                                                     Reason: {{ $row['reason'] ?? 'N/A' }}
 
                                                     @if (!empty($row['missing_fields']) && is_array($row['missing_fields']))
