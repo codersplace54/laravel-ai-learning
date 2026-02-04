@@ -418,3 +418,4 @@ Route::post('get-overall-static-count', [DashboardController::class, 'get_overal
 
 Route::post('public-notification-list', [PublicNotificationController::class, 'public_notification_list']);
 Route::post('public-notification-view', [PublicNotificationController::class, 'public_notification_view']);
+Route::post('pan-lookup', [UserController::class, 'pan_lookup'])->middleware('pan.lookup.rl');

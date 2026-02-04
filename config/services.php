@@ -42,6 +42,10 @@ return [
     'entity_locker' => [
         'client_id' => env('ENTITY_LOCKER_CLIENT_ID'),
         'client_secret' => env('ENTITY_LOCKER_CLIENT_SECRET')
-    ]
+    ],
+
+    'pan_lookup' => [
+        'key' => env('PAN_LOOKUP_HMAC_KEY'),
+    ],
 
 ];

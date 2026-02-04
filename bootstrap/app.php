@@ -15,6 +15,9 @@ return Application::configure(basePath: dirname(__DIR__))
             '/user/payment-callback',
             '/user/payment-callback/*',
         ]);
+        $middleware->alias([
+            'pan.lookup.rl' => \App\Http\Middleware\PanLookupRateLimit::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

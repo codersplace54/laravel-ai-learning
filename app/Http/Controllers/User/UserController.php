@@ -22,6 +22,8 @@ use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Validation\Rule;
 use App\Traits\LogsActivity;
 use App\Models\Concerns\LogsModelActivity;
+use App\Models\EnterpriseDetail;
+use Laravel\SerializableClosure\Signers\Hmac;
 
 class UserController extends Controller
 {
@@ -269,10 +271,10 @@ class UserController extends Controller
         try {
 
             $user = User::findOrFail($request->id);
-            if($user->user_type == 'individual'){
+            if ($user->user_type == 'individual') {
                 $user->logAs(Auth::user()->user_name . ' updated profile', "Profile update");
-            }else{
-                $user->logAs(Auth::user()->user_name . ' updated '. $user->user_type . ' user: ' . $user->user_name . " profile", "Admin updated user");
+            } else {
+                $user->logAs(Auth::user()->user_name . ' updated ' . $user->user_type . ' user: ' . $user->user_name . " profile", "Admin updated user");
             }
 
             $rules = [
@@ -1339,6 +1341,75 @@ class UserController extends Controller
             return response()->json([
                 'status' => 0,
                 'message' => 'Failed to activate account.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function pan_lookup(Request $request)
+    {
+        $data = $request->validate([
+            'pan' => ['required', 'string', 'max:20'],
+            'sig' => ['required', 'string'],
+        ]);
+
+        try{
+
+        
+        $pan = strtoupper(trim($data['pan']));
+        $secret = config('services.pan_lookup.key');
+
+        $expected = hash_hmac('sha256', $pan, $secret);
+        if (!hash_equals($expected, $data['sig'])) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Invalid signature.',
+            ], 401);
+        }
+
+        $user = User::where('pan', $pan)->first();
+
+        if (!$user) {
+            $enterprise_details = EnterpriseDetail::where('business_pan_no', $pan)->first();
+            if ($enterprise_details) {
+                return response()->json([
+                    'status' => 1,
+                    'message' => 'User found.',
+                    'data' => [
+                        'name_of_enterprise' => $enterprise_details->enterprise_name,
+                        'authorized_person_name' => $enterprise_details->authorized_representative_name,
+                        'mobile_no' => $enterprise_details->authorized_representative_mobile_no,
+                        'email_id' => $enterprise_details->authorized_representative_email_id,
+                        'is_pan_verified' => 0,
+                    ],
+                ]);
+            }
+        }
+
+        if (!$user) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'No user found.',
+                'data' => [],
+            ]);
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'User found.',
+            'data' => [
+                'name_of_enterprise' => $user->name_of_enterprise,
+                'authorized_person_name' => $user->authorized_person_name,
+                'mobile_no' => $user->mobile_no,
+                'email_id' => $user->email_id,
+                'is_pan_verified' => $user->is_pan_verified,
+            ],
+        ]);
+        }catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
                 'error' => $e->getMessage()
             ], 500);
         }
