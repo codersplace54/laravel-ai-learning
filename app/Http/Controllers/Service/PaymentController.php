@@ -79,9 +79,13 @@ class PaymentController extends Controller
                 'transaction_id'     => null,
             ]);
 
+            $payment_order->update([
+                'order_id' => 'SW' . $payment_order->id
+            ]);
+
             DB::commit();
 
-            $order_id   = $payment_order->id;
+            $order_id   = $payment_order->order_id;
             $dept_code  = 'FIN';
             $dto_code   = '99';
             $ddo_code   = '99001';
@@ -235,7 +239,7 @@ class PaymentController extends Controller
                 );
             }
 
-            $payment = PaymentOrder::where('id', $order_id)
+            $payment = PaymentOrder::where('order_id', $order_id)
                 ->where('payment_status', 'initiated')
                 ->first();
 
@@ -462,7 +466,7 @@ class PaymentController extends Controller
                 'pagination' => [
                     'current_page' => $service_user_applications->currentPage(),
                     'last_page' => $service_user_applications->lastPage(),
-                    'per_page' => $service_user_applications->count(),
+                    'per_page' => $service_user_applications->perPage(),
                     'total' => $service_user_applications->total(),
                     'next_page_url' => $service_user_applications->nextPageUrl(),
                     'prev_page_url' => $service_user_applications->previousPageUrl(),
@@ -495,10 +499,10 @@ class PaymentController extends Controller
             $results = [];
 
             foreach ($orders as $order) {
-                $response = $this->call_soap_api($order->id, 'FIN');
+                $response = $this->call_soap_api($order->order_id, 'FIN');
 
                 if (!$response) {
-                    $results[] = ['order_id' => $order->id, 'status' => 'api_error'];
+                    $results[] = ['order_id' => $order->order_id, 'status' => 'api_error'];
                     continue;
                 }
 
@@ -509,7 +513,7 @@ class PaymentController extends Controller
                 $readable_response = json_decode((string) $result, true);
 
                 if (!$readable_response || !isset($readable_response[0])) {
-                    $results[] = ['order_id' => $order->id, 'status' => 'invalid_response'];
+                    $results[] = ['order_id' => $order->order_id, 'status' => 'invalid_response'];
                     continue;
                 }
 
@@ -517,9 +521,9 @@ class PaymentController extends Controller
                 $status = $readable_response[0]['Status'];
 
                 if ($status == "Success") {
-                    $results[] = ['order_id' => $order->id, 'status' => 'success', 'grn' => $grn];
+                    $results[] = ['order_id' => $order->order_id, 'status' => 'success', 'grn' => $grn];
                 } else {
-                    $results[] = ['order_id' => $order->id, 'status' => 'pending', 'payment_status' => $status];
+                    $results[] = ['order_id' => $order->order_id, 'status' => 'pending', 'payment_status' => $status];
                 }
             }
 
@@ -546,7 +550,7 @@ class PaymentController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Order ID required'], 400);
             }
 
-            $payment = PaymentOrder::where('id', $order_id)
+            $payment = PaymentOrder::where('order_id', $order_id)
                 ->where('payment_status', 'initiated')
                 ->first();
 

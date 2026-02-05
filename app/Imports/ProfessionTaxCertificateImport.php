@@ -190,7 +190,7 @@ class ProfessionTaxCertificateImport implements ToCollection, WithHeadingRow
         $status_key = strtolower(str_replace([' ', '-'], '_', $application_status_raw));
         $status_map = [
             'draft' => 'draft',
-            'submitted' => 'saved',
+            'submitted' => 'submitted',
             'acknowledged' => 'under_review',
             'approved' => 'approved',
             'rejected' => 'rejected',
@@ -294,7 +294,7 @@ class ProfessionTaxCertificateImport implements ToCollection, WithHeadingRow
         }
 
         $status_map = [
-            'saved' => 'saved',
+            'submitted' => 'saved',
             'pending' => 'pending',
             're_submitted' => 're_submitted',
             'extra_payment' => 'extra_payment',
@@ -361,7 +361,7 @@ class ProfessionTaxCertificateImport implements ToCollection, WithHeadingRow
         }
 
         $status_map = [
-            'saved' => 'saved',
+            'submitted' => 'saved',
             'pending' => 'pending',
             're_submitted' => 'approved',
             'extra_payment' => 'extra_payment',

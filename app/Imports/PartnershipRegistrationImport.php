@@ -284,7 +284,7 @@ class PartnershipRegistrationImport implements ToCollection, WithHeadingRow
 
         $status_map = [
             'draft'                         => 'draft',
-            'submitted'                     => 'saved',
+            'submitted'                     => 'submitted',
             'acknowledged'                  => 'under_review',
             'approved'                      => 'approved',
             'rejected'                      => 'rejected',
@@ -470,7 +470,7 @@ class PartnershipRegistrationImport implements ToCollection, WithHeadingRow
         }
 
         $app_status_to_assignment = [
-            'saved'         => 'saved',
+            'submitted'         => 'saved',
             'pending'       => 'pending',
             're_submitted'  => 're_submitted',
             'extra_payment' => 'extra_payment',
@@ -531,7 +531,7 @@ class PartnershipRegistrationImport implements ToCollection, WithHeadingRow
         }
 
         $app_status_to_history = [
-            'saved'         => 'saved',
+            'submitted'         => 'saved',
             'pending'       => 'pending',
             're_submitted'  => 'approved',
             'extra_payment' => 'extra_payment',
