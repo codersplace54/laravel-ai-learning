@@ -18,6 +18,7 @@ use App\Models\ServiceQuestionnaire;
 use App\Models\UserServiceApplication;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use App\Models\Clearance;
+use Illuminate\Support\Facades\Log;
 
 class CertificateController extends Controller
 {
@@ -1029,4 +1030,25 @@ class CertificateController extends Controller
     //         ];
     //     }
     // }
+
+    public function auto_generate_certificate($application)
+    {
+        try {
+            $service = $application->service;
+            
+            if (empty($service->form_template)) {
+                return;
+            }
+
+            $request = new Request([
+                'is_preview' => 'no',
+                'application_id' => $application->id,
+                'add_watermark' => 'yes'
+            ]);
+
+            $this->user_certificate_generate($request);
+        } catch (\Exception $e) {
+            Log::error('Auto certificate generation failed: ' . $e->getMessage());
+        }
+    }
 }
