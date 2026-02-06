@@ -637,4 +637,136 @@ class ApplicationDataCorrectionController extends Controller
         
         return $data;
     }
+
+    public function correct_workflow_in_assignment_and_history()
+    {
+        set_time_limit(600);
+        $service_flows_map = $this->get_service_flows_map();
+        $updated_count = 0;
+        $skipped_count = 0;
+        $skipped_rows = [];
+        $batch_size = 100;
+        $updates_batch = [];
+
+        $assignments = DB::table('application_workflow_assignments')
+            ->join('user_service_applications', 'application_workflow_assignments.application_id', '=', 'user_service_applications.id')
+            ->whereNotNull('user_service_applications.old_id')
+            ->select('application_workflow_assignments.id', 'application_workflow_assignments.service_id', 'application_workflow_assignments.application_id')
+            ->get();
+
+        foreach ($assignments as $assignment) {
+            $first_step = $service_flows_map[$assignment->service_id][0] ?? null;
+            if ($first_step) {
+                if (empty($first_step->hierarchy_level)) {
+                    $skipped_count++;
+                    $skipped_rows[] = [
+                        'table' => 'application_workflow_assignments',
+                        'id' => $assignment->id,
+                        'application_id' => $assignment->application_id,
+                        'service_id' => $assignment->service_id,
+                        'reason' => 'empty_hierarchy_level'
+                    ];
+                    continue;
+                }
+                
+                $updates_batch[] = [
+                    'id' => $assignment->id,
+                    'step_number' => $first_step->step_number,
+                    'step_type' => $first_step->step_type,
+                    'department_id' => $first_step->department_id,
+                    'hierarchy_level' => $first_step->hierarchy_level,
+                ];
+                
+                if (count($updates_batch) >= $batch_size) {
+                    $this->execute_workflow_batch_update('application_workflow_assignments', $updates_batch);
+                    $updated_count += count($updates_batch);
+                    $updates_batch = [];
+                }
+            }
+        }
+        
+        if (!empty($updates_batch)) {
+            $this->execute_workflow_batch_update('application_workflow_assignments', $updates_batch);
+            $updated_count += count($updates_batch);
+            $updates_batch = [];
+        }
+
+        $histories = DB::table('application_workflow_history')
+            ->join('user_service_applications', 'application_workflow_history.application_id', '=', 'user_service_applications.id')
+            ->whereNotNull('user_service_applications.old_id')
+            ->select('application_workflow_history.id', 'application_workflow_history.service_id', 'application_workflow_history.application_id')
+            ->get();
+            
+        foreach ($histories as $history) {
+            $first_step = $service_flows_map[$history->service_id][0] ?? null;
+            if ($first_step) {
+                if (empty($first_step->hierarchy_level)) {
+                    $skipped_count++;
+                    $skipped_rows[] = [
+                        'table' => 'application_workflow_history',
+                        'id' => $history->id,
+                        'application_id' => $history->application_id,
+                        'service_id' => $history->service_id,
+                        'reason' => 'empty_hierarchy_level'
+                    ];
+                    continue;
+                }
+                
+                $updates_batch[] = [
+                    'id' => $history->id,
+                    'step_number' => $first_step->step_number,
+                    'step_type' => $first_step->step_type,
+                    'department_id' => $first_step->department_id,
+                    'hierarchy_level' => $first_step->hierarchy_level,
+                ];
+                
+                if (count($updates_batch) >= $batch_size) {
+                    $this->execute_workflow_batch_update('application_workflow_history', $updates_batch);
+                    $updated_count += count($updates_batch);
+                    $updates_batch = [];
+                }
+            }
+        }
+        
+        if (!empty($updates_batch)) {
+            $this->execute_workflow_batch_update('application_workflow_history', $updates_batch);
+            $updated_count += count($updates_batch);
+        }
+
+        return back()->with([
+            'success' => 'Workflow columns updated successfully',
+            'updated_count' => $updated_count,
+            'skipped_count' => $skipped_count,
+            'skipped_rows' => $skipped_rows,
+        ]);
+    }
+
+    private function execute_workflow_batch_update($table, $updates_batch)
+    {
+        foreach ($updates_batch as $update) {
+            DB::table($table)
+                ->where('id', $update['id'])
+                ->update([
+                    'step_number' => $update['step_number'],
+                    'step_type' => $update['step_type'],
+                    'department_id' => $update['department_id'],
+                    'hierarchy_level' => $update['hierarchy_level'],
+                    'updated_at' => now(),
+                ]);
+        }
+    }
+
+    private function get_service_flows_map(): array
+    {
+        $flows = DB::table('service_approval_flows')
+            ->orderBy('service_id')
+            ->orderBy('step_number')
+            ->get();
+
+        $grouped = [];
+        foreach ($flows as $flow) {
+            $grouped[$flow->service_id][] = $flow;
+        }
+        return $grouped;
+    }
 }

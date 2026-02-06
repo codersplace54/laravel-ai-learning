@@ -79,7 +79,7 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
             'application_status_mapping' => [
                 'draft' => 'draft',
                 'noc_issued' => 'noc_issued',
-                'submitted' => 'saved',
+                'submitted' => 'submitted',
                 'acknowledged' => 'under_review',
                 'approved' => 'approved',
                 'approved_beyond_timeline' => 'approved',
@@ -333,7 +333,7 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
         }
 
         $app_status_to_assignment = [
-            'saved' => 'saved',
+            'submitted' => 'saved',
             'pending' => 'pending',
             're_submitted' => 're_submitted',
             'extra_payment' => 'extra_payment',
@@ -382,7 +382,7 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
         }
 
         $app_status_to_history = [
-            'saved' => 'saved',
+            'submitted' => 'saved',
             'pending' => 'pending',
             're_submitted' => 'approved',
             'extra_payment' => 'extra_payment',

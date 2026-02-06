@@ -129,6 +129,21 @@
                     </div>
                 </div>
             </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card shadow-sm border-warning">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">Update Workflow Columns</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">Fix wrong workflow columns in assignment and history tables using correct first step flow data</p>
+                        <form action="{{ route('admin.update.workflow_columns') }}" method="POST" onsubmit="return confirm('Update workflow columns for all records?');">
+                            @csrf
+                            <button type="submit" class="btn btn-warning w-100">Update Workflow Columns</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="row">
