@@ -419,6 +419,19 @@ class PaymentController extends Controller
 
             $service_user_applications = UserServiceApplication::where('user_id', $user_id)
                 ->where('payment_status', $request->payment_status)
+                ->where(function($query) {
+                    $query->where(function($q) {
+                        $q->whereNotNull('extra_payment')
+                          ->where('extra_payment', '>', 0);
+                    })
+                    ->orWhere(function($q) {
+                        $q->whereNull('extra_payment')
+                          ->where(function($subq) {
+                              $subq->where('effective_fee', '>', 0)
+                                   ->orWhere('total_fee', '>', 0);
+                          });
+                    });
+                })
                 ->orderByDesc('created_at')
                 ->paginate($request->per_page);
 
@@ -440,10 +453,6 @@ class PaymentController extends Controller
                 } else {
                     $amount = $application->effective_fee ?? $application->total_fee ?? 0;
                     $payment_type = 'Application Fee Payment';
-                }
-
-                if ($amount == 0) {
-                    continue;
                 }
 
                 $response_data[] = [

@@ -458,6 +458,11 @@ class UserServiceApplicationController extends Controller
                             'remarks'            => null,
                         ]);
                     }
+
+                    if (!$has_approval_flow && $status === 'approved') {
+                        app(CertificateController::class)->auto_generate_certificate($user_service_application);
+                    }
+
                     DB::commit();
 
                     if ($status === 'saved' || ($status === 'submitted' && $user_service_application->total_fee == 0)) {
@@ -1205,6 +1210,70 @@ class UserServiceApplicationController extends Controller
             return response()->json([
                 'status' => 0,
                 'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function admin_delete_user_service_application(Request $request)
+    {
+        try {
+
+            $admin = Auth::user();
+            if (!$admin) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            if ($admin->user_type !== 'admin') {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Only admin can delete applications.'
+                ], 403);
+            }
+
+            $request->validate([
+                'id' => 'required|integer|exists:user_service_applications,id',
+            ]);
+
+            DB::beginTransaction();
+
+            $application = UserServiceApplication::find($request->id);
+
+            if (!$application) {
+                DB::rollBack();
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Application not found.'
+                ], 404);
+            }
+
+            $application->delete();
+
+            $this->logActivity($admin->user_name . ' deleted the application', $application, User::find($application->user_id), [
+                'application_id' => $application->applicationId,
+            ], 'Admin deleted application');
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Application deleted successfully.',
+                'deleted_id' => $request->id
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
