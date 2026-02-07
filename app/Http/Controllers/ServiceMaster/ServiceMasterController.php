@@ -421,13 +421,13 @@ class ServiceMasterController extends Controller
                 })
 
                 ->when($user->user_type === 'individual', function ($query) {
-                        $query->where('status', 1);
+                    $query->where('status', 1);
                 })
                 ->get();
 
 
             $services = $services->map(function ($service) use ($user, $is_caf_filled) {
-                $service_depends_and_caf_filled =($service->caf_depends === 'yes') ? $is_caf_filled: true;
+                $service_depends_and_caf_filled = ($service->caf_depends === 'yes') ? $is_caf_filled : true;
 
                 $data = [
                     'id' => $service->id,
@@ -952,6 +952,40 @@ class ServiceMasterController extends Controller
                 'success' => false,
                 'message' => 'Failed to generate Excel file',
                 'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function get_all_services(Request $request)
+    {
+
+
+        try {
+
+            $query = ServiceMaster::select(
+                'id',
+                'service_title_or_description as service_name',
+            )
+                ->where('is_active', 1);
+
+            if ($request->filled('department_id')) {
+                $query->where('department_id', $request->department_id);
+            }
+
+            $services = $query
+                ->orderBy('id', 'asc')
+                ->get();
+
+            return response()->json([
+                'status' => 1,
+                'data' => $services
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to retrieve services.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

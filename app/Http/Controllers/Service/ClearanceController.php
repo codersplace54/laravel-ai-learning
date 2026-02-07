@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Service;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use App\Models\Clearance;
 use Illuminate\Support\Facades\Auth;
 use App\Models\UserServiceApplication;
@@ -315,10 +316,10 @@ class ClearanceController extends Controller
                 'message' => 'Clearance details fetched successfully.',
                 'data'    => [
                     'user_id'            => $application->user_id,
-                    'application_id'     => $application->applicationId,
-                    'application_number' => $application->id,
-                    'NOC_certificate'    => $application->NOC_certificate
-                        ? url($application->NOC_certificate)
+                    'application_id'     => $application->id,
+                    'application_number' =>  $application->applicationId,
+                    'NOC_certificate' => $application->NOC_certificate
+                        ? url(Storage::url($application->NOC_certificate))
                         : null,
                     'service_id'         => $application->service_id,
                     'service_name'       => optional($application->service)->service_title_or_description,

@@ -201,6 +201,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('delete-user-service-application', [UserServiceApplicationController::class, 'admin_delete_user_service_application']);
 
         Route::post('get-total-applications-by-admin', [DashboardController::class, 'get_total_applications_by_admin']);
+        Route::post('get-analytical-dashboard-count-for-admin', [DashboardController::class, 'get_analytical_dashboard_count_for_admin']);
 
         Route::post('activity-logs', [ActivityLogController::class, 'activity_logs']);
         Route::post('activity-log-details', [ActivityLogController::class, 'activity_log_details']);
@@ -420,3 +421,4 @@ Route::post('get-overall-static-count', [DashboardController::class, 'get_overal
 Route::post('public-notification-list', [PublicNotificationController::class, 'public_notification_list']);
 Route::post('public-notification-view', [PublicNotificationController::class, 'public_notification_view']);
 Route::post('pan-lookup', [UserController::class, 'pan_lookup'])->middleware('pan.lookup.rl');
+Route::post('get-all-services', [ServiceMasterController::class, 'get_all_services']);
