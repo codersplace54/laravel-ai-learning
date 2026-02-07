@@ -1291,4 +1291,114 @@ class ReportController extends Controller
             ], 500);
         }
     }
+
+    public function registration_renewal_granted(Request $request)
+    {
+        try {
+            $request->validate([
+                'department_id' => 'nullable|integer|exists:departments,id',
+                'service_id' => 'nullable|integer|exists:service_masters,id',
+                'from_date' => 'nullable|date',
+                'to_date' => 'nullable|date',
+            ]);
+
+            $query = UserServiceApplication::query();
+
+            if ($request->filled('from_date')) {
+                $query->whereDate('application_date', '>=', $request->from_date);
+            }
+
+            if ($request->filled('to_date')) {
+                $query->whereDate('application_date', '<=', $request->to_date);
+            }
+
+            if ($request->filled('service_id')) {
+                $query->where('service_id', $request->service_id);
+            }
+
+            if ($request->filled('department_id')) {
+                $query->whereHas('service', function ($q) use ($request) {
+                    $q->where('department_id', $request->department_id);
+                });
+            }
+
+            $applications = $query->with(['service', 'user.management_details'])->get();
+
+            $report = [];
+
+            foreach (['Registration', 'Renewal'] as $type) {
+                $apps = $applications->filter(function ($app) use ($type) {
+                    return $type === 'Renewal' ? $app->renewal === 'yes' : $app->renewal !== 'yes';
+                });
+
+                if ($apps->isEmpty()) {
+                    continue;
+                }
+
+                $approved = $apps->where('status', 'approved');
+
+                $female_received = $apps->filter(function ($app) {
+                    return $app->user?->management_details?->owner_details_is_women_entrepreneur === 'YES';
+                });
+
+                $female_approved = $approved->filter(function ($app) {
+                    return $app->user?->management_details?->owner_details_is_women_entrepreneur === 'YES';
+                });
+
+                $durations = $approved
+                    ->filter(function ($app) {
+                        return $app->NOC_generationDate && $app->application_date;
+                    })
+                    ->map(function ($app) {
+                        $start = strtotime($app->application_date);
+                        $end   = strtotime($app->NOC_generationDate);
+
+                        return abs(($end - $start) / 86400);
+                    });
+
+                $fees = $approved
+                    ->pluck('approved_fee')
+                    ->filter(function ($fee) {
+                        return $fee !== null && $fee !== '';
+                    })
+                    ->map(function ($fee) {
+                        return (float) $fee;
+                    });
+
+
+                $median_time = 0;
+                if ($durations->count() > 0) {
+                    $sorted = $durations->sort()->values();
+                    $mid = floor(($durations->count() - 1) / 2);
+                    $median_time = $durations->count() % 2 ? $sorted[$mid] : ($sorted[$mid] + $sorted[$mid + 1]) / 2;
+                }
+
+                $report[] = [
+                    'type' => $type,
+                    'time_limit' => $apps->first()?->service?->target_days ?? 0,
+                    'total_received' => $apps->count(),
+                    'total_female_owned' => $female_received->count(),
+                    'total_approved' => $approved->count(),
+                    'total_approved_female_owned' => $female_approved->count(),
+                    'avg_time' => round($durations->avg() ?? 0, 2),
+                    'median_time' => round($median_time, 2),
+                    'min_time' => round($durations->min() ?? 0, 2),
+                    'max_time' => round($durations->max() ?? 0, 2),
+                    'avg_fee' => round($fees->avg() ?? 0, 2),
+                ];
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Registration/Renewal granted report generated successfully.',
+                'data' => $report
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to generate report.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

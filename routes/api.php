@@ -365,6 +365,7 @@ Route::post('/tripura/get-multiple-subdivisions', [TripuraMasterDataController::
 Route::post('/tripura/get-multiple-block', [TripuraMasterDataController::class, 'get_multiple_ulbs']);
 
 Route::prefix('report')->group(function () {
+    Route::post('registration-renewal-granted', [ReportController::class, 'registration_renewal_granted']);
     Route::post('online-single-windows', [ReportController::class, 'online_single_windows']);
     Route::post('application-status', [ReportController::class, 'application_status']);
     Route::post('department-user-list', [ReportController::class, 'department_user_list']);

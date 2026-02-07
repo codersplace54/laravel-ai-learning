@@ -184,6 +184,25 @@
                     </div>
                 </div>
             </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card shadow-sm border-info">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Update Cooperative Application NOC Certificate</h5>
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ route('admin.correction.cooperative_application_noc_certificate') }}" method="POST" enctype="multipart/form-data">
+                            @csrf
+                            <div class="mb-3">
+                                <label for="coop_noc_files" class="form-label">Upload Excel Files</label>
+                                <input type="file" name="files[]" id="coop_noc_files" class="form-control" multiple required>
+                                <small class="text-muted">Excel with NID & NOC Issued columns</small>
+                            </div>
+                            <button type="submit" class="btn btn-info w-100">Update Cooperative NOC Certificates</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
