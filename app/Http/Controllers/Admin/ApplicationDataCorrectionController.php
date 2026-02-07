@@ -243,11 +243,11 @@ class ApplicationDataCorrectionController extends Controller
                 }
                 
                 $filename = basename($field_certificate);
-                $noc_certificate_url = "https://swaagatbackend.tripura.gov.in/new/storage/sites/default/files/{$filename}";
+                $noc_certificate_path = "sites/default/files/{$filename}";
                 
                 $batch_updates[] = [
                     'nid' => $nid,
-                    'noc_certificate' => $noc_certificate_url,
+                    'noc_certificate' => $noc_certificate_path,
                     'row' => $index + 2
                 ];
                 
@@ -277,6 +277,89 @@ class ApplicationDataCorrectionController extends Controller
         ]);
     }
     
+    public function update_cooperative_application_noc_certificate(Request $request)
+    {
+        // dd("ASDf");
+        $request->validate([
+            'files' => 'required|array',
+            'files.*' => 'required|file|mimes:xlsx,xls,csv',
+        ]);
+
+        $files = $request->file('files');
+        $total_updated = 0;
+        $total_skipped = 0;
+        $all_skipped_rows = [];
+        $batch_updates = [];
+        $batch_size = 100;
+
+        foreach ($files as $file) {
+            $data = Excel::toArray(null, $file);
+            $rows = $data[0] ?? [];
+            
+            if (empty($rows)) {
+                continue;
+            }
+            
+            $headers = array_shift($rows);
+            $nid_index = array_search('NID', $headers);
+            $field_certificate_index = array_search('NOC Issued', $headers);
+            if ($nid_index === false || $field_certificate_index === false) {
+                $all_skipped_rows[] = [
+                    'file' => $file->getClientOriginalName(),
+                    'reason' => 'Missing required columns (nid or noc_issued)'
+                ];
+                continue;
+            }
+            foreach ($rows as $index => $row) {
+                $nid = $row[$nid_index] ?? null;
+                $field_certificate = $row[$field_certificate_index] ?? null;
+                
+                if (empty($nid) || empty($field_certificate)) {
+                    $total_skipped++;
+                    $all_skipped_rows[] = [
+                        'row' => $index + 2,
+                        'nid' => $nid,
+                        'reason' => 'Missing nid or noc_issued'
+                    ];
+                    continue;
+                }
+                
+                $filename = basename($field_certificate);
+                
+                $noc_certificate_path = "sites/default/files/{$filename}";
+                
+                $batch_updates[] = [
+                    'nid' => $nid,
+                    'noc_certificate' => $noc_certificate_path,
+                    'row' => $index + 2
+                ];
+                
+                if (count($batch_updates) >= $batch_size) {
+                    $updated = $this->execute_noc_batch_update($batch_updates);
+                    $total_updated += $updated['updated'];
+                    $total_skipped += $updated['skipped'];
+                    $all_skipped_rows = array_merge($all_skipped_rows, $updated['skipped_rows']);
+                    $batch_updates = [];
+                }
+            }
+        }
+        
+        if (!empty($batch_updates)) {
+            $updated = $this->execute_noc_batch_update($batch_updates);
+            $total_updated += $updated['updated'];
+            $total_skipped += $updated['skipped'];
+            $all_skipped_rows = array_merge($all_skipped_rows, $updated['skipped_rows']);
+        }
+
+        return back()->with([
+            'success' => 'Cooperative NOC certificates updated successfully',
+            'files_processed' => count($files),
+            'updated_count' => $total_updated,
+            'skipped_count' => $total_skipped,
+            'skipped_rows' => $all_skipped_rows,
+        ]);
+    }
+
     private function execute_noc_batch_update($batch_updates)
     {
         if (empty($batch_updates)) {
@@ -284,11 +367,13 @@ class ApplicationDataCorrectionController extends Controller
         }
         
         $nids = array_column($batch_updates, 'nid');
+        $noc_map = array_column($batch_updates, 'noc_certificate', 'nid');
+        
         $existing_apps = DB::table('user_service_applications')
             ->whereIn('old_id', $nids)
             ->pluck('id', 'old_id')
             ->toArray();
-        
+        // dd($existing_apps);
         $updates_batch = [];
         $skipped_rows = [];
         
@@ -304,7 +389,7 @@ class ApplicationDataCorrectionController extends Controller
             
             $updates_batch[] = [
                 'id' => $existing_apps[$update['nid']],
-                'noc_certificate' => $update['noc_certificate']
+                'noc_certificate' => $noc_map[$update['nid']]
             ];
         }
         
