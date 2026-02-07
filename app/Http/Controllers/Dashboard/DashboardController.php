@@ -16,6 +16,9 @@ use App\Models\User;
 use App\Models\DepartmentUser;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
+use App\Models\UserFeedback;
+use App\Models\Holiday;
+use App\Models\Inspection;
 
 
 class DashboardController extends Controller
@@ -586,7 +589,7 @@ class DashboardController extends Controller
                     'service_name' => $service->service_title_or_description,
                     'application_count' => $service->applications_count,
                 ];
-            });
+            })->sortByDesc('application_count')->values();
 
             $total_individual_users = User::whereNull('old_id')
                 ->where('user_type', 'individual')
@@ -757,6 +760,137 @@ class DashboardController extends Controller
             return response()->json([
                 'status'  => 0,
                 'message' => 'Something went wrong while fetching overall statistics',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function get_analytical_dashboard_count_for_admin()
+    {
+
+        try {
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $total_applications = UserServiceApplication::whereNotIn('status', ['expired', 'draft'])->count();
+
+            $new_users_last_30_days = User::where('created_at', '>=', Carbon::now()->subDays(30))
+                ->count();
+
+
+            $total_queries = UserFeedback::count();
+
+            $noc_issued = UserServiceApplication::where('status', 'noc_issued')->count();
+
+
+            $total_count_pending_application = UserServiceApplication::whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review', 'saved', 'extra_payment', 'send_back'])
+                ->count();
+
+            $total_payments = UserServiceApplication::where('payment_status', 'paid')
+                ->where('paid_amount', '>', 0)
+                ->count();
+
+            $upcoming_holidays = Holiday::whereDate('holiday_date', '>=', now()->toDateString())
+                ->orderBy('holiday_date', 'asc')
+                ->limit(2)
+                ->get('holiday_date');
+
+            $noc_expired_last_90_days = UserServiceApplication::whereDate('NOC_expiry_date', '>=', now()->subDays(90))
+                ->whereDate('NOC_expiry_date', '<=', now())
+                ->count();
+
+            $rejected_application = UserServiceApplication::where('status', 'rejected')->count();
+
+            $received_applications = UserServiceApplication::whereIn('status', ['submitted', 'under_process', 'approved'])->count();
+
+            $total_individual_users = User::whereNull('old_id')
+                ->where('user_type', 'individual')
+                ->count();
+
+            $total_inspections = Inspection::count();
+
+            $department_wise_application = Department::leftJoin('application_workflow_assignments as awa', 'departments.id', '=', 'awa.department_id')
+                ->leftJoin('user_service_applications as usa', 'awa.application_id', '=', 'usa.id')
+                ->select(
+                    'departments.id as department_id',
+                    'departments.name as department_name',
+                    DB::raw('COUNT(DISTINCT usa.id) as application_count'),
+                    DB::raw('COUNT(DISTINCT CASE WHEN usa.status = "noc_issued" THEN usa.id END) as noc_issued_count')
+                )
+                ->groupBy('departments.id', 'departments.name')
+                ->orderByRaw(
+                    'COUNT(DISTINCT usa.id) +
+         COUNT(DISTINCT CASE WHEN usa.status = "noc_issued" THEN usa.id END) DESC'
+                )
+                ->get();
+
+            $service_wise_application = ServiceMaster::leftJoin('user_service_applications as usa', 'service_masters.id', '=', 'usa.service_id')
+                ->select(
+                    'service_masters.id as service_id',
+                    'service_masters.service_title_or_description as service_name',
+                    DB::raw('COUNT(usa.id) as application_count'),
+                    DB::raw('COUNT(CASE WHEN usa.status = "noc_issued" THEN 1 END) as noc_issued_count')
+                )
+                ->groupBy('service_masters.id', 'service_masters.service_title_or_description')
+                ->orderByDesc('application_count')
+                ->get();
+
+            $district_wise_application_per_service =
+                UserServiceApplication::join('service_masters', 'service_masters.id', '=', 'user_service_applications.service_id')
+                ->join('users', 'users.id', '=', 'user_service_applications.user_id')
+                ->join('tripura_master_data as tmd', 'tmd.id', '=', 'users.district_id')
+                ->selectRaw('
+            service_masters.id as service_id,
+            service_masters.service_title_or_description as service_name,
+            tmd.district_name,
+            COUNT(*) as count
+        ')
+                ->groupBy(
+                    'service_masters.id',
+                    'service_masters.service_title_or_description',
+                    'tmd.district_name'
+                )
+                ->get()
+                ->groupBy('service_name')
+                ->map(fn($rows, $service) => [
+                    'service_name' => $service,
+                    'districts' => $rows->map(fn($r) => [
+                        'district_name' => $r->district_name,
+                        'count' => $r->count
+                    ])->values()
+                ])
+                ->values();
+
+
+            return response()->json([
+                'status'            => 1,
+                'message'           => 'Total count applications under this department fetched successfully',
+                'total_applications' => $total_applications,
+                'new_users_last_30_days' => $new_users_last_30_days,
+                'total_queries' => $total_queries,
+                'noc_issued' => $noc_issued,
+                'total_count_pending_application' => $total_count_pending_application,
+                'total_payments' => $total_payments,
+                'upcoming_holidays' => $upcoming_holidays,
+                'noc_expired_last_90_days' => $noc_expired_last_90_days,
+                'rejected_application'        => $rejected_application,
+                'received_applications'        => $received_applications,
+                'total_individual_users'       => $total_individual_users,
+                'total_inspections'            => $total_inspections,
+                'department_wise_application'  => $department_wise_application,
+                'service_wise_application'     => $service_wise_application,
+                'district_wise_application_per_service'     => $district_wise_application_per_service,
+
+            ], 200);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching the application count',
                 'error'   => $e->getMessage()
             ], 500);
         }
