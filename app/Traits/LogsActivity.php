@@ -13,8 +13,8 @@ trait LogsActivity
         $request = request();
         
         $properties = array_merge([
-            'ip_address' => $request->ip(),
-            'user_agent' => $request->header('User-Agent')
+            'ip_address' => $request->ip() ?? 'unknown',
+            'user_agent' => $request->userAgent() ?? $request->header('User-Agent') ?? 'unknown'
         ], $additionalProperties);
         
         $activity = activity();

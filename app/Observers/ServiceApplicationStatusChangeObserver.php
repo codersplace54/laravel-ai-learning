@@ -12,13 +12,17 @@ class ServiceApplicationStatusChangeObserver
         if ($application->status !== 'draft') {
             $user = $application->user;
             $service = $application->service;
+            $request = request();
             
             activity('application_created')
+                ->event('application_created')
                 ->causedBy($user)
                 ->performedOn($application)
                 ->withProperties([
                     'application_id' => $application->applicationId,
                     'service_title_or_description' => $service->service_title_or_description ?? 'Unknown Service',
+                    'ip_address' => $request->ip() ?? 'unknown',
+                    'user_agent' => $request->userAgent() ?? 'unknown',
                 ])
                 ->log($user->user_name . ' applied for ' . ($service->service_title_or_description ?? 'Unknown Service') . ' application');
         }
@@ -33,6 +37,8 @@ class ServiceApplicationStatusChangeObserver
             $user = Auth::user();
             $context = $this->get_context();
             $appKey = $application->getKey();
+            $request = request();
+            
             activity('status_change')
                 ->causedBy($user)
                 ->performedOn($application)
@@ -42,6 +48,8 @@ class ServiceApplicationStatusChangeObserver
                     'new_status' => $new_status,
                     'context' => $context,
                     'application_id' => $appKey,
+                    'ip_address' => $request->ip() ?? 'unknown',
+                    'user_agent' => $request->userAgent() ?? 'unknown',
                 ])
                 ->log(($user->user_name ?? 'System') . ' changed ' . ($application->user->user_name ?? 'Unknown User') . "'s application status from '{$old_status}' to '{$new_status}'");
         }
