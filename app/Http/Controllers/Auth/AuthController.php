@@ -983,6 +983,34 @@ class AuthController extends Controller
         }
     }
 
+    public function check_session()
+    {
+        try {
+            
+            $user = JWTAuth::parseToken()->authenticate();
+            
+            if (!$user) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Session expired',
+                    'is_valid' => false
+                ], 401);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Session is valid',
+                'is_valid' => true
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Session expired',
+                'is_valid' => false
+            ], 401);
+        }
+    }
+
     //For external portals 
     public function external_send_otp(Request $request)
     {

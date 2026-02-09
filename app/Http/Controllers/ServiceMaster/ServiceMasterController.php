@@ -966,7 +966,7 @@ class ServiceMasterController extends Controller
                 'id',
                 'service_title_or_description as service_name',
             )
-                ->where('is_active', 1);
+                ->where('status', 1);
 
             if ($request->filled('department_id')) {
                 $query->where('department_id', $request->department_id);
