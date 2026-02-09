@@ -59,6 +59,7 @@ Route::prefix('user')->group(function () {
     Route::post('forgot-password-reset', [AuthController::class, 'forgot_password_reset']);
     Route::post('check-pan-registered', [AuthController::class, 'check_pan_registered']);
     Route::post('check-mobile-resgistered', [AuthController::class, 'check_mobile_registered']);
+    Route::post('check-session', [AuthController::class, 'check_session']);
 });
 
 Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function () {
