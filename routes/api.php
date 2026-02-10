@@ -45,6 +45,8 @@ use App\Http\Controllers\PanVerificationController;
 use App\Http\Controllers\Service\AppealController;
 use App\Http\Controllers\Admin\ActivityLogController;
 use app\Http\Controllers\DeployController;
+use App\Http\Controllers\GovernmentOrderController;
+use App\Http\Controllers\InvestorQueryController;
 use App\Http\Controllers\Service\ClearanceController;
 use App\Http\Controllers\TestingFacilityCapabilityController;
 use App\Http\Controllers\PublicNotificationController;
@@ -211,6 +213,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('public-notification-store', [PublicNotificationController::class, 'public_notification_store']);
         Route::post('public-notification-update', [PublicNotificationController::class, 'public_notification_update']);
         Route::post('public-notification-delete', [PublicNotificationController::class, 'public_notification_delete']);
+
+        Route::post('investor-queries-list', [InvestorQueryController::class, 'investor_queries_list']);
+        Route::post('investor-queries-update-status', [InvestorQueryController::class, 'investor_queries_update_status']);
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
@@ -424,3 +429,10 @@ Route::post('public-notification-list', [PublicNotificationController::class, 'p
 Route::post('public-notification-view', [PublicNotificationController::class, 'public_notification_view']);
 Route::post('pan-lookup', [UserController::class, 'pan_lookup'])->middleware('pan.lookup.rl');
 Route::post('get-all-services', [ServiceMasterController::class, 'get_all_services']);
+
+Route::post('investor-query-store', [InvestorQueryController::class, 'investor_query_store']);
+Route::post('previous-investor-query', [InvestorQueryController::class, 'get_previous_queries']);
+
+Route::post('government-orders-list', [GovernmentOrderController::class, 'government_orders_list']);
+
+Route::post('public-certificate-download', [CertificateController::class, 'public_certificate_download']);

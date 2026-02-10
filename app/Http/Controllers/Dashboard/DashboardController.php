@@ -630,133 +630,79 @@ class DashboardController extends Controller
 
     public function get_department_wise_static_count(Request $request)
     {
-
         try {
-
-
             $request->validate([
                 'department_id' => 'required|integer|exists:departments,id',
             ]);
 
-            $department_id = $request->department_id;
+            $departmentId = (int) $request->department_id;
 
-            $latest_assignments = ApplicationWorkflowAssignment::selectRaw('MAX(id) as id')
-                ->groupBy('application_id');
+            $cacheKey = "department_application_status_counts_v1:dept:{$departmentId}";
 
-            $query = UserServiceApplication::join(
-                'application_workflow_assignments as awa',
-                'awa.application_id',
-                '=',
-                'user_service_applications.id'
-            )
-                ->whereIn('awa.id', $latest_assignments)
-                ->where('awa.department_id', $department_id);
+            $data = Cache::remember($cacheKey, now()->addHour(), function () use ($departmentId) {
 
-            $total_submitted = (clone $query)
-                ->where('user_service_applications.status', 'submitted')
-                ->count();
+                $base = UserServiceApplication::query()
+                    ->whereHas('service', function ($q) use ($departmentId) {
+                        $q->where('department_id', $departmentId);
+                    });
 
-            $total_approved = (clone $query)
-                ->where('user_service_applications.status', 'approved')
-                ->count();
-
-            $total_noc_issued = (clone $query)
-                ->where('user_service_applications.status', 'noc_issued')
-                ->count();
-
-            $total_rejected = (clone $query)
-                ->where('user_service_applications.status', 'rejected')
-                ->count();
-
-            $total_under_process = (clone $query)
-                ->whereIn('user_service_applications.status', [
-                    'pending',
-                    'under_review',
-                    're_submitted',
-                    'send_back',
-                    'extra_payment'
-                ])
-                ->count();
+                return [
+                    'submitted' => (clone $base)->where('status', 'submitted')->count(),
+                    'noc_issued' => (clone $base)->whereIn('status', ['noc_issued', 'approved'])->count(),
+                    'rejected'  => (clone $base)->where('status', 'rejected')->count(),
+                    'under_process' => (clone $base)->whereIn('status', [
+                        'pending',
+                        'under_review',
+                        're_submitted',
+                        'send_back',
+                        'extra_payment',
+                    ])->count(),
+                ];
+            });
 
             return response()->json([
                 'status'  => 1,
                 'message' => 'Department wise application status count fetched successfully',
-                'data'    => [
-                    'submitted'     => $total_submitted,
-                    'approved'      => $total_approved,
-                    'noc_issued'    => $total_noc_issued,
-                    'rejected'      => $total_rejected,
-                    'under_process' => $total_under_process,
-                ]
+                'data'    => $data,
             ], 200);
         } catch (\Exception $e) {
-
             return response()->json([
                 'status'  => 0,
                 'message' => 'Something went wrong while fetching department statistics',
-                'error'   => $e->getMessage()
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
 
+
     public function get_overall_static_count(Request $request)
     {
-
-
         try {
+            $cacheKey = 'overall_application_status_counts_v1';
 
+            $data = Cache::remember($cacheKey, now()->addHour(), function () {
+                $base = UserServiceApplication::query();
 
-            $latest_assignments = ApplicationWorkflowAssignment::selectRaw('MAX(id) as id')
-                ->groupBy('application_id');
-
-
-            $query = UserServiceApplication::join(
-                'application_workflow_assignments as awa',
-                'awa.application_id',
-                '=',
-                'user_service_applications.id'
-            )
-                ->whereIn('awa.id', $latest_assignments);
-
-            $total_submitted = (clone $query)
-                ->where('user_service_applications.status', 'submitted')
-                ->count();
-
-            $total_approved = (clone $query)
-                ->where('user_service_applications.status', 'approved')
-                ->count();
-
-            $total_noc_issued = (clone $query)
-                ->where('user_service_applications.status', 'noc_issued')
-                ->count();
-
-            $total_rejected = (clone $query)
-                ->where('user_service_applications.status', 'rejected')
-                ->count();
-
-            $total_under_process = (clone $query)
-                ->whereIn('user_service_applications.status', [
-                    'pending',
-                    'under_review',
-                    're_submitted',
-                    'send_back',
-                    'extra_payment'
-                ])
-                ->count();
+                return [
+                    'submitted' => (clone $base)->where('status', 'submitted')->count(),
+                    'noc_issued' => (clone $base)->whereIn('status', ['noc_issued', 'approved'])->count(),
+                    'rejected'  => (clone $base)->where('status', 'rejected')->count(),
+                    'under_process' => (clone $base)->whereIn('status', [
+                        'pending',
+                        'under_review',
+                        're_submitted',
+                        'send_back',
+                        'extra_payment'
+                    ])->count(),
+                ];
+            });
 
             return response()->json([
                 'status'  => 1,
                 'message' => 'Overall application status count fetched successfully',
-                'data'    => [
-                    'submitted'     => $total_submitted,
-                    'approved'      => $total_approved,
-                    'noc_issued'    => $total_noc_issued,
-                    'rejected'      => $total_rejected,
-                    'under_process' => $total_under_process,
-                ]
+                'data'    => $data
             ], 200);
         } catch (\Exception $e) {
-
             return response()->json([
                 'status'  => 0,
                 'message' => 'Something went wrong while fetching overall statistics',

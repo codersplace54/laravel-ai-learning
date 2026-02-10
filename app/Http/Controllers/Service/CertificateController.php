@@ -368,7 +368,7 @@ class CertificateController extends Controller
                 ];
 
                 $application->update($update_data);
-               // $clearance_response = $this->store_clearance($application);
+                // $clearance_response = $this->store_clearance($application);
 
 
                 $application->NOC_certificate = asset('storage/' . $application->NOC_certificate);
@@ -1049,6 +1049,87 @@ class CertificateController extends Controller
             $this->user_certificate_generate($request);
         } catch (\Exception $e) {
             Log::error('Auto certificate generation failed: ' . $e->getMessage());
+        }
+    }
+
+    public function public_certificate_download(Request $request)
+    {
+        try {
+            $request->validate([
+                'certificate_number' => 'required|string|max:255',
+
+                'mobile_no'          => 'required_without:date_of_issue|nullable|string|max:20',
+                'date_of_issue'      => 'required_without:mobile_no|nullable|date',
+            ], [
+                [
+                    'certificate_number.required' => 'License Id or Application ID is required.',
+
+                    'mobile_no.required_without'  => 'Either mobile number or date of issue is required.',
+                    'date_of_issue.required_without' => 'Either date of issue or mobile number is required.',
+
+                    'date_of_issue.date' => 'Date of issue must be a valid date.',
+                ]
+            ]);
+
+            $application = UserServiceApplication::query()
+                ->where(function ($qq) use ($request) {
+                    $qq->where('applicationid', $request->certificate_number)
+                        ->orWhere('license_id', $request->certificate_number);
+                });
+
+            if ($request->filled('mobile_no')) {
+                $application->whereHas('user', function ($query) use ($request) {
+                    $query->where('mobile_no', $request->mobile_no);
+                });
+            }
+
+            if ($request->filled('date_of_issue')) {
+                $application->whereDate('NOC_generationDate', $request->date_of_issue);
+            }
+
+            $certificate = $application->first();
+
+            if (!$certificate) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Certificate not found or details do not match.',
+                ], 404);
+            }
+
+            $path = $certificate->NOC_certificate;
+
+            $certificateUrl = $path ? asset('storage/' . $path) : null;
+
+            $certificateNumber = $certificate->license_id ?: $certificate->applicationid;
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Certificate fetched successfully.',
+                'data'    => [
+                    'id'                 => $certificate->id,
+                    'certificate_number' => $certificateNumber,
+                    'mobile_no'          => optional($certificate->user)->mobile_no,
+                    'date_of_issue'      => $certificate->NOC_generationDate,
+                    'certificate_url'    => $certificateUrl,
+                ],
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed',
+                'errors'  => $e->errors(),
+            ], 422);
+
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Failed to fetch certificate',
+                'error'   => $e->getMessage(),
+            ], 500);
+            
         }
     }
 }
