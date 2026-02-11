@@ -95,7 +95,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     Route::post('department-show-department', [DepartmentController::class, 'show_department'])->name('department.show_department');
     Route::post('department-update-department', [DepartmentController::class, 'update_department'])->name('department.update_department');
     Route::post('department-destroy-department', [DepartmentController::class, 'destroy_department'])->name('department.destroy_department');
-
+    Route::post('update-department-status/{id}', [DepartmentController::class, 'update_department_status']);
 
     Route::post('caf/core-application-store-enterprise-detail', [EnterpriseDetailController::class, 'enterprise_details_store_or_update'])->name('core_application.store_enterprise_detail');
     Route::post('caf/core-application-show-enterprise-detail', [EnterpriseDetailController::class, 'show_enterprise_details'])->name('core_application.show_enterprise_detail');

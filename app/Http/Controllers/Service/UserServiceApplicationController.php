@@ -1184,7 +1184,7 @@ class UserServiceApplicationController extends Controller
                     'message' => 'User Service application not found.'
                 ], 404);
             }
-
+            $applicationid = $service_user_application->applicationId;
             $service_user_application->delete();
 
             DB::commit();
@@ -1192,7 +1192,7 @@ class UserServiceApplicationController extends Controller
             return response()->json([
                 'status' => 1,
                 'message' => 'User Service application deleted successfully.',
-                'deleted_id' => $request->id
+                'deleted_id' => $applicationid
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -1213,7 +1213,6 @@ class UserServiceApplicationController extends Controller
             ], 500);
         }
     }
-
     public function admin_delete_user_service_application(Request $request)
     {
         try {
@@ -2491,10 +2490,9 @@ class UserServiceApplicationController extends Controller
     private function get_renewal_details($application)
     {
         $service = $application->service;
-        $application_date = Carbon::parse($application->application_date);
 
-        if (!empty($service->noc_validity)) {
-            $expiry_date = $application_date->copy()->addDays((int)$service->noc_validity);
+        if (!empty($service->noc_validity) && !empty($application->NOC_expiry_date)) {
+            $expiry_date = Carbon::parse($application->NOC_expiry_date);
         } elseif (!empty($service->fixed_expiry_date)) {
             $expiry_date = Carbon::parse($service->fixed_expiry_date);
         } else {
@@ -2515,15 +2513,17 @@ class UserServiceApplicationController extends Controller
                 $renewal_end   = Carbon::parse($cycle->fixed_renewal_end_date);
             } else {
 
-                if (!empty($cycle->renewal_target_days)) {
+                if (!empty($cycle->renewal_target_days) && $expiry_date) {
+                    
                     $renewal_start = $expiry_date->copy()->subDays((int)$cycle->renewal_target_days);
                     $renewal_end   = $expiry_date->copy();
                 }
 
-                if (!empty($cycle->renewal_window_days)) {
+                if (!empty($cycle->renewal_window_days) && $expiry_date) {
+                    
                     $window_start = $expiry_date->copy();
                     $window_end   = $expiry_date->copy()->addDays((int)$cycle->renewal_window_days);
-
+                    
                     if ($renewal_start === null || $window_start < $renewal_start) {
                         $renewal_start = $window_start;
                     }
@@ -2991,23 +2991,21 @@ class UserServiceApplicationController extends Controller
             foreach ($applications as $app) {
 
                 $renewal_details = $this->get_renewal_details($app);
-                $canRenew = collect($renewal_details['renewal_cycles'])
-                    ->contains(fn($cycle) => $cycle['can_renew'] === true);
+                
+                $active_cycle = collect($renewal_details['renewal_cycles'])
+                    ->firstWhere('can_renew', true);
 
-                $renewal_details = $this->get_renewal_details($app);
-
-                if ($canRenew) {
+                if ($active_cycle) {
                     $renewable_applications[] = [
-                        'application_id'     => $app->id,
+                        'application_id'     => $app->applicationId,
                         'application_number' => $app->applicationId,
                         'service_id'         => $app->service_id,
-                        'service_name'       => $app->service->service_name ?? null,
+                        'service_name'       => $app->service->service_title_or_description ?? null,
                         'department_name'    => $app->service->department->name,
                         'status'             => $app->status ?? null,
                         'expiry_date'        => $renewal_details['expiry_date'],
-                        'renewal_start_date' => $renewal_details['renewal_cycles'][0]['renewal_start_date'] ?? null,
-                        'renewal_end_date'   => $renewal_details['renewal_cycles'][0]['renewal_end_date'] ?? null,
-                        // 'renewal_cycles'     => $renewal_details['renewal_cycles'],
+                        'renewal_start_date' => $active_cycle['renewal_start_date'] ?? null,
+                        'renewal_end_date'   => $active_cycle['renewal_end_date'] ?? null,
                     ];
                 }
             }

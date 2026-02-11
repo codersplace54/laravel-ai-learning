@@ -14,11 +14,17 @@ class DepartmentController extends Controller
     public function all_departments(Request $request)
     {
         try {
-
+            $request->validate([
+                'status' => 'nullable|in:active,disabled',
+            ]);
 
             // $per_page = $request->input('per_page', 10);
 
-            $departments = Department::all();
+            $departments = Department::query()
+                ->when($request->filled('status'), function ($q) use ($request) {
+                    $q->where('status', $request->status);
+                })
+                ->get();
 
             return response()->json([
                 'status' => 1,
@@ -30,6 +36,13 @@ class DepartmentController extends Controller
                 //     'last_page' => $departments->lastPage(),
                 // ],
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
         } catch (Exception $e) {
 
 
@@ -260,6 +273,39 @@ class DepartmentController extends Controller
             return response()->json([
                 'status' => 0,
                 'message' => 'Failed to delete department.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function update_department_status($id)
+    {
+
+
+        try {
+
+            DB::beginTransaction();
+
+            $department = Department::findOrFail($id);
+
+            $department->status = $department->status === "active" ? "disabled" : "active";
+            $department->save();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Status updated successfully.',
+                'updated_status' => $department->status,
+            ]);
+        } catch (\Exception $e) {
+
+
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while updating status.',
                 'error' => $e->getMessage(),
             ], 500);
         }
