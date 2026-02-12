@@ -26,6 +26,7 @@ use App\Models\UnitDetail;
 use Illuminate\Http\UploadedFile;
 use App\Services\ApplicationDataFormatter;
 use App\Services\SmsService;
+use App\Services\WhatsAppService;
 use App\Models\Department;
 use App\Models\IndustrialEstate;
 use App\Models\User;
@@ -128,7 +129,7 @@ class UserServiceApplicationController extends Controller
             }
 
             $service_data = ServiceMaster::where('id', $request->service_id)
-                ->first(['noc_name', 'service_mode',  'target_days', 'allow_repeat_application', 'caf_depends']);
+                ->first(['noc_name', 'service_mode',  'target_days', 'allow_repeat_application', 'caf_depends', 'service_title_or_description']);
 
             $is_caf_filled = UnitDetail::where('user_id', $user->id)->exists();
             $service_depends_and_caf_filled = ($service_data->caf_depends === 'yes') ? $is_caf_filled : true;
@@ -476,6 +477,13 @@ class UserServiceApplicationController extends Controller
                             $sms['message'],
                             $sms['template_id']
                         );
+
+                        // app(WhatsAppService::class)->sendTemplate(
+                        //     $user->mobile_no,
+                        //     'application_temp',
+                        //     [$user_service_application->applicationId, $service_data->service_title_or_description],
+                        //     "application_id={$user_service_application->id}"
+                        // );
                     }
 
 
@@ -3030,7 +3038,8 @@ class UserServiceApplicationController extends Controller
     {
 
         $request->validate([
-            'service_id' => 'nullable|integer|exists:service_masters,id'
+            'service_id' => 'nullable|integer|exists:service_masters,id',
+            'application_id' => 'nullable|integer|exists:user_service_applications,id'
         ]);
 
         $service = ServiceMaster::with('renewalCycles')->find($request->service_id);
@@ -3042,57 +3051,65 @@ class UserServiceApplicationController extends Controller
             ], 404);
         }
 
+        $renewal_period_days = [
+            'monthly'     => 30,
+            'quarterly'   => 90,
+            'half_yearly' => 182,
+            'annually'    => 365,
+            'biannual'    => 182,
+            'biennial'    => 730,
+            'triennial'   => 1095,
+            '4year'       => 1460,
+            '5year'       => 1825,
+        ];
+
         $cycles = [];
-        $today = Carbon::today();
+
+        if ($request->filled('application_id')) {
+            $application = UserServiceApplication::find($request->application_id);
+            if ($application && !empty($application->NOC_expiry_date)) {
+                $expiry_date = Carbon::parse($application->NOC_expiry_date);
+            } else {
+                $expiry_date = null;
+            }
+        } else {
+            $expiry_date = null;
+        }
+
+        if (!$expiry_date) {
+            if (!empty($service->noc_validity)) {
+                $expiry_date = Carbon::today()->addDays((int) $service->noc_validity);
+            } elseif (!empty($service->fixed_expiry_date)) {
+                $expiry_date = Carbon::parse($service->fixed_expiry_date);
+            }
+        }
 
         foreach ($service->renewalCycles as $cycle) {
 
             $renewal_start = null;
             $renewal_end   = null;
 
-            if (!empty($cycle->fixed_renewal_start_date) && !empty($cycle->fixed_renewal_end_date)) {
+            if ($expiry_date) {
+                $renewal_start = $expiry_date->copy()->addDay();
 
-                $renewal_start = Carbon::parse($cycle->fixed_renewal_start_date);
-                $renewal_end   = Carbon::parse($cycle->fixed_renewal_end_date);
-            } else {
-
-                if (!empty($service->noc_validity)) {
-                    $expiry_date = $today->copy()->addDays((int) $service->noc_validity);
-                } elseif (!empty($service->fixed_expiry_date)) {
-                    $expiry_date = Carbon::parse($service->fixed_expiry_date);
-                } else {
-                    $expiry_date = null;
-                }
-
-                if ($expiry_date) {
-
-                    if (!empty($cycle->renewal_target_days)) {
-                        $renewal_start = $expiry_date->copy()->subDays((int)$cycle->renewal_target_days);
-                        $renewal_end   = $expiry_date->copy();
+                if ($cycle->renewal_period === 'custom' && !empty($cycle->renewal_period_custom)) {
+                    $days = (int) preg_replace('/[^0-9]/', '', $cycle->renewal_period_custom);
+                    if ($days > 0) {
+                        $renewal_end = $renewal_start->copy()->addDays($days);
                     }
-
-                    if (!empty($cycle->renewal_window_days)) {
-                        $window_start = $expiry_date->copy();
-                        $window_end   = $expiry_date->copy()->addDays((int)$cycle->renewal_window_days);
-
-                        if (!$renewal_start || $window_start < $renewal_start) {
-                            $renewal_start = $window_start;
-                        }
-
-                        if (!$renewal_end || $window_end > $renewal_end) {
-                            $renewal_end = $window_end;
-                        }
-                    }
+                } elseif (isset($renewal_period_days[$cycle->renewal_period])) {
+                    $renewal_end = $renewal_start->copy()->addDays($renewal_period_days[$cycle->renewal_period]);
                 }
             }
 
             $cycles[] = [
                 'id'                  => $cycle->id,
                 'renewal_title'       => $cycle->renewal_title ?? null,
+                'application_expiry_date' => $expiry_date ? $expiry_date->toDateString() : null,
                 'renewal_start_date' => optional($renewal_start)->toDateString(),
                 'renewal_end_date'   => optional($renewal_end)->toDateString(),
-                'pre_window_days'          => $cycle->renewal_target_days,
-                'post_window_days'          => $cycle->renewal_window_days,
+                'pre_window_days'    => $cycle->renewal_target_days,
+                'post_window_days'   => $cycle->renewal_window_days,
                 'late_fee_type'      => $cycle->late_fee_calculation_dynamic,
                 'late_fee_amount'    => $cycle->late_fee_fixed_amount,
                 'late_fee_applicable' => $cycle->late_fee_applicable,
