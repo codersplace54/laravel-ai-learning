@@ -33,12 +33,12 @@ class SmsService
             'dlt_template_id' => $dlt_template_id,
         ]);
 
-        Log::info('SMS_REQUEST', [
-            'mobile' => $mobile_no,
-            'message' => $message,
-            'template_id' => $dlt_template_id,
-            'gateway_url' => $gateway_url,
-        ]);
+        // Log::info('SMS_REQUEST', [
+        //     'mobile' => $mobile_no,
+        //     'message' => $message,
+        //     'template_id' => $dlt_template_id,
+        //     'gateway_url' => $gateway_url,
+        // ]);
 
         $ch = curl_init($gateway_url . '?' . $params);
         curl_setopt_array($ch, [
@@ -52,10 +52,10 @@ class SmsService
         $status   = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        Log::info('SMS_GATEWAY_RESPONSE', [
-            'status_code' => $status,
-            'response' => $response,
-        ]);
+        // Log::info('SMS_GATEWAY_RESPONSE', [
+        //     'status_code' => $status,
+        //     'response' => $response,
+        // ]);
 
         if ($error) {
             Log::error('sms_error', ['error' => $error]);
