@@ -20,8 +20,8 @@ class WhatsAppService
             Log::error('whatsapp_config_missing');
             return ['success' => false, 'status_code' => 500, 'response' => 'WhatsApp configuration missing'];
         }
-
-        $to = preg_replace('/\D+/', '', $phone);
+        
+        $to = $phone;
 
         $payload = [
             'messaging_product' => 'whatsapp',
@@ -66,7 +66,9 @@ class WhatsAppService
             Log::info('WHATSAPP_RESPONSE', [
                 'to' => $to,
                 'status_code' => $res->status(),
+                'body' => $res->body(),
             ]);
+
 
             return [
                 'success' => $res->successful(),

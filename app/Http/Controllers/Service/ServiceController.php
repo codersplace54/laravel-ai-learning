@@ -21,6 +21,7 @@ use App\Services\ApplicationDataFormatter;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use setasign\Fpdi\Fpdi;
 use App\Services\SmsService;
+use App\Jobs\SendWhatsAppNotification;
 
 class ServiceController extends Controller
 {
@@ -835,6 +836,16 @@ class ServiceController extends Controller
                             $sms['message'],
                             $sms['template_id']
                         );
+
+                        SendWhatsAppNotification::dispatch(
+                            $user->mobile_no,
+                            'application_approved_v1',
+                            [
+                                $application->applicationId,
+                                $application->service->service_title_or_description,
+                                $current_step->department->name
+                            ]
+                        );
                     }
 
                     return response()->json([
@@ -956,7 +967,8 @@ class ServiceController extends Controller
             return response()->json([
                 'status' => 0,
                 'message' => 'Something went wrong while updating status',
-                'error'   => $e->getMessage()
+                'error'   => $e->getMessage(),
+                'line' => $e->getLine()
             ], 500);
         }
     }
