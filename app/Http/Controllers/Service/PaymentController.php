@@ -62,6 +62,14 @@ class PaymentController extends Controller
                     $amount = $application->effective_fee ?? $application->total_fee ?? 0;
                 }
 
+                if ($amount <= 0) {
+                    DB::rollBack();
+                    return response()->json([
+                        'status' => 0,
+                        'message' => 'Fee amount cannot be zero for application ID: ' . $application->id,
+                    ], 400);
+                }
+
                 $scheme_names[] = $application->service->egras_scheme_code ?? 'NA';
                 $fee_amounts[]  = $amount;
             }
@@ -198,6 +206,13 @@ class PaymentController extends Controller
             $bankcode = $request->input('bankcode');
             $hash = $request->input('hash');
             $trandatetime = $request->input('trandatetime');
+
+            if ($status && stripos($status, 'One process is already running') !== false) {
+                $frontendurl = config('payment.frontendurl');
+                return redirect()->away(
+                    $frontendurl . '?status=failed&message=' . urlencode('Please try again after some time.')
+                );
+            }
 
             DB::beginTransaction();
 
