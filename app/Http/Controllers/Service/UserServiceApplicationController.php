@@ -477,6 +477,13 @@ class UserServiceApplicationController extends Controller
                             $sms['message'],
                             $sms['template_id']
                         );
+
+                        // app(WhatsAppService::class)->sendTemplate(
+                        //     $user->mobile_no,
+                        //     'application_temp',
+                        //     [$user_service_application->applicationId, $service_data->service_title_or_description],
+                        //     "application_id={$user_service_application->id}"
+                        // );
                     }
 
                     if (in_array($status, ['saved', 'submitted', 'approved'], true)) {
