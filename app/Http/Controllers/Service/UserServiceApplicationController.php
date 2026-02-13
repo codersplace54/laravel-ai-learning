@@ -26,7 +26,7 @@ use App\Models\UnitDetail;
 use Illuminate\Http\UploadedFile;
 use App\Services\ApplicationDataFormatter;
 use App\Services\SmsService;
-use App\Services\WhatsAppService;
+use App\Jobs\SendWhatsAppNotification;
 use App\Models\Department;
 use App\Models\IndustrialEstate;
 use App\Models\User;
@@ -477,13 +477,19 @@ class UserServiceApplicationController extends Controller
                             $sms['message'],
                             $sms['template_id']
                         );
+                    }
 
-                        // app(WhatsAppService::class)->sendTemplate(
-                        //     $user->mobile_no,
-                        //     'application_temp',
-                        //     [$user_service_application->applicationId, $service_data->service_title_or_description],
-                        //     "application_id={$user_service_application->id}"
-                        // );
+                    if (in_array($status, ['saved', 'submitted', 'approved'], true)) {
+                        $param_1 = $user_service_application->applicationId ?? $user_service_application->id;
+                        $param_2 = $service_data->service_title_or_description ?? '';
+                        $param_3 = ucfirst($status);
+
+                        SendWhatsAppNotification::dispatch(
+                            $user->mobile_no,
+                            'application_temp',
+                            [$param_1, $param_2, $param_3],
+                            "application_id={$user_service_application->id}"
+                        );
                     }
 
 
@@ -1448,7 +1454,19 @@ class UserServiceApplicationController extends Controller
                 ], 404);
             }
 
-            $application->application_data = json_decode($application->application_data, true) ?: [];
+            $application_data = json_decode($application->application_data, true) ?: [];
+
+            $question_ids = [];
+            $this->collect_question_ids_recursive($application_data, $question_ids);
+            if (!empty($question_ids)) {
+                $file_questions = ServiceQuestionnaire::whereIn('id', $question_ids)
+                    ->where('question_type', 'file')
+                    ->pluck('id')
+                    ->toArray();
+                $this->convert_file_urls_recursive($application_data, $file_questions);
+            }
+
+            $application->application_data = $application_data;
 
             $application_data = $application->application_data;
             // $formatted_data   = [];
@@ -2522,16 +2540,16 @@ class UserServiceApplicationController extends Controller
             } else {
 
                 if (!empty($cycle->renewal_target_days) && $expiry_date) {
-                    
+
                     $renewal_start = $expiry_date->copy()->subDays((int)$cycle->renewal_target_days);
                     $renewal_end   = $expiry_date->copy();
                 }
 
                 if (!empty($cycle->renewal_window_days) && $expiry_date) {
-                    
+
                     $window_start = $expiry_date->copy();
                     $window_end   = $expiry_date->copy()->addDays((int)$cycle->renewal_window_days);
-                    
+
                     if ($renewal_start === null || $window_start < $renewal_start) {
                         $renewal_start = $window_start;
                     }
@@ -2999,7 +3017,7 @@ class UserServiceApplicationController extends Controller
             foreach ($applications as $app) {
 
                 $renewal_details = $this->get_renewal_details($app);
-                
+
                 $active_cycle = collect($renewal_details['renewal_cycles'])
                     ->firstWhere('can_renew', true);
 
@@ -3427,6 +3445,29 @@ class UserServiceApplicationController extends Controller
                 'message' => 'Something went wrong.',
                 'error'   => $e->getMessage(),
             ], 500);
+        }
+    }
+
+    private function collect_question_ids_recursive(array $data, array &$question_ids): void
+    {
+        foreach ($data as $key => $value) {
+            if (is_numeric($key)) {
+                $question_ids[] = (int) $key;
+            }
+            if (is_array($value)) {
+                $this->collect_question_ids_recursive($value, $question_ids);
+            }
+        }
+    }
+
+    private function convert_file_urls_recursive(array &$data, array $file_question_ids): void
+    {
+        foreach ($data as $key => &$value) {
+            if (is_numeric($key) && in_array((int) $key, $file_question_ids) && is_string($value) && $value !== '' && !str_starts_with($value, 'http')) {
+                $value = asset('storage/' . ltrim($value, '/'));
+            } elseif (is_array($value)) {
+                $this->convert_file_urls_recursive($value, $file_question_ids);
+            }
         }
     }
 }

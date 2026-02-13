@@ -17,6 +17,7 @@ use App\Models\UserServiceApplication;
 use App\Models\User;
 use App\Models\ApplicationWorkflowHistory;
 use App\Services\SmsService;
+use App\Jobs\SendWhatsAppNotification;
 use App\Traits\LogsActivity;
 
 class PaymentController extends Controller
@@ -345,6 +346,17 @@ class PaymentController extends Controller
                         $user->mobile_no,
                         $sms['message'],
                         $sms['template_id']
+                    );
+
+                    SendWhatsAppNotification::dispatch(
+                        $user->mobile_no,
+                        'payment_success_v1',
+                        [
+                            $user->authorized_person_name ?? $user->name_of_enterprise,
+                            $application->paid_amount,
+                            $application->GRN_number
+                        ],
+                        'application_id=' . $application->id
                     );
                 }
             }
