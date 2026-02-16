@@ -19,6 +19,7 @@ use App\Models\ApplicationWorkflowHistory;
 use App\Services\SmsService;
 use App\Jobs\SendWhatsAppNotification;
 use App\Traits\LogsActivity;
+use Illuminate\Support\Facades\Http;
 
 class PaymentController extends Controller
 {
@@ -319,7 +320,7 @@ class PaymentController extends Controller
                     }
 
 
-                    UserServiceApplication::where('id', $application->id)->update([
+                    $user_service_application =  UserServiceApplication::where('id', $application->id)->update([
                         'payment_status'   => 'paid',
                         'paid_amount'      => $amount,
                         'status'           => $status,
@@ -328,6 +329,41 @@ class PaymentController extends Controller
                         'payment_time' => $payment_datetime,
                         'updated_at'       => now(),
                     ]);
+
+
+                    if ($application->is_third_party == 1) {
+
+                        $url = 'https://pwdwrtripura.in/api/third-party/payment-update';
+
+                        $payload = [
+                            "swaagat_user_id"  => $user_service_application->user_id,
+                            "amount"           => $amount,
+                            "status"           => "success",
+                            "transaction_id"   => $grn,
+                            "application_id"   => $user_service_application->applicationId,
+                        ];
+
+                        $response = Http::acceptJson()
+                            ->asJson()
+                            ->timeout(20)
+                            ->post($url, $payload);
+
+                        if ($response->successful()) {
+
+                            $result = $response->json();
+
+                            Log::info('Third-party pwdwrtripura success response', [
+                                'status_code' => $response->status(),
+                                'response'    => $result,
+                            ]);
+                        } else {
+
+                            Log::error('Third-party API pwdwrtripura failed response', [
+                                'status_code' => $response->status(),
+                                'response'    => $response->body(),
+                            ]);
+                        }
+                    }
 
                     // Log payment success
                     $this->logActivity('Payment completed successfully', $application, User::find($application->user_id), [

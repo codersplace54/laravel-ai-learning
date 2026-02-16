@@ -14,6 +14,7 @@ use App\Models\ServiceApprovalFlow;
 use App\Models\User;
 use App\Exports\ServiceMasterExport;
 use App\Models\UnitDetail;
+use App\Models\UserServiceApplication;
 use Maatwebsite\Excel\Facades\Excel;
 
 
@@ -938,6 +939,46 @@ class ServiceMasterController extends Controller
             ], 500);
         }
     }
+
+    public function third_party_application_list()
+    {
+        try {
+
+            $services = ServiceMaster::where('service_mode', "third_party")->get();
+
+            $applications = UserServiceApplication::whereIn('service_id', $services->pluck('id'))
+                ->select('id', 'applicationId', 'service_id', 'user_id', 'application_date', 'total_fee', 'payment_status', 'status', 'GRN_number', 'NOC_certificate')
+                ->where('user_id', auth()->user()->id)
+                ->orderByDesc('id')
+                ->get()
+                ->map(function ($app) {
+                    $app->is_certificate_generated = !is_null($app->NOC_certificate);
+                    return $app;
+                })
+                ->groupBy('service_id');
+
+            $data = $services->map(function ($service) use ($applications) {
+                return [
+                    'service_id'   => $service->id,
+                    'service_name' => $service->service_title_or_description,
+                    'applications' => $applications->get($service->id, collect())->values(),
+                ];
+            })->values();
+
+            return response()->json([
+                'success' => 1,
+                'data' => $data
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate Excel file',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
 
     public function export_services()
     {

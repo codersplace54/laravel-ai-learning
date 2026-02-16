@@ -11,7 +11,7 @@ use App\Models\UserDocument;
 
 class EntityLockerController extends Controller
 {
-    private $redirect_uri = 'https://swaagatbackend.tripura.gov.in/entity_locker';
+    private $redirect_uri = 'https://swaagatbackend.tripura.gov.in/new/api/entity_locker';
     private $base_url = 'https://entity.digilocker.gov.in/public/oauth2';
 
     public function initiate_auth(Request $request)

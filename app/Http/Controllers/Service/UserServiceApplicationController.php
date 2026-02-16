@@ -376,6 +376,13 @@ class UserServiceApplicationController extends Controller
                             $sms['message'],
                             $sms['template_id']
                         );
+
+                        // app(WhatsAppService::class)->sendTemplate(
+                        //     $user->whatsapp_no ?? $user->mobile_no,
+                        //     'application_temp',
+                        //     [$user_service_application->applicationId, $service_data->noc_name ?? 'Service', $department_name ?? 'Department'],
+                        //     "application_id={$user_service_application->id}"
+                        // );
                     }
 
                     $message = $status === 'draft' ? 'Application saved as draft successfully.' : 'Application updated successfully.';
@@ -1766,7 +1773,7 @@ class UserServiceApplicationController extends Controller
                 'external_noc_number'   => $request->external_noc_number,
                 'external_valid_till'   => $request->external_valid_till,
                 'external_remarks'   => $request->external_remarks,
-                'is_third_party'   => $request->is_third_party,
+                'is_third_party'   => 1,
             ]);
 
             $this->store_third_party_status_logs($request, $user_service_application);
@@ -1967,6 +1974,8 @@ class UserServiceApplicationController extends Controller
             $user_id          = $request->input('user_id');
             $approved_fee      = $request->input('approved_fee');
             $extra_payment          = $request->input('extra_payment');
+            $application_date          = $request->input('application_date');
+            $updation_date          = $request->input('updation_date');
 
 
             $data = UserServiceApplication::where('external_application_id', $external_id)->first();
@@ -1997,12 +2006,27 @@ class UserServiceApplicationController extends Controller
                     'remarks'                 => $remarks,
                     'bin'                     => $request->input('bin'),
                     'approved_fee'            => $approved_fee,
+                    'total_fee'               => $approved_fee,
                     'extra_payment'           => $extra_payment,
+                ]);
+
+                $payment_order = PaymentOrder::create([
+                    'user_id'            => $user_id,
+                    'application_id' => json_encode([$data->id]),
+                    'payment_amount'     => $approved_fee,
+                    'payment_created_on' => now(),
+                    'payment_updated_on' => now(),
+                    'payment_status'     => 'initiated',
+                    'transaction_id'     => null,
+                ]);
+
+                $payment_order->update([
+                    'order_id' => 'SW' . $payment_order->id
                 ]);
             }
 
-            //$redirectUrl = env('APP_FRONTEND_URL') . "/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";
-            $redirectUrl = "http://localhost:4200/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";
+            $redirectUrl = env('APP_FRONTEND_URL') . "/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";
+            // $redirectUrl = "http://localhost:4200/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";
             return redirect()->away($redirectUrl);
 
             // return response()->json([
