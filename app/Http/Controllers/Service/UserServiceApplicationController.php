@@ -1959,37 +1959,43 @@ class UserServiceApplicationController extends Controller
 
     public function third_party_return(Request $request)
     {
-
         try {
 
-
-            $external_id        = $request->input('applicationId');
-            $status            = $request->input('status');
-            $payment_status     = $request->input('payment_status');
-            $max_processing_date = $request->input('max_processing_date');
-            $noc_number         = $request->input('noc_number');
+            $external_id         = $request->input('applicationId');
+            $status              = $request->input('status');
+            $payment_status      = $request->input('payment_status');
+            $max_processing_date = $request->input('max_processing_date'); // expected: 2026-02-17
+            $noc_number          = $request->input('noc_number');
             $noc_valid_till      = $request->input('noc_valid_till');
-            $remarks           = $request->input('remarks');
-            $service_id        = $request->input('service_id');
-            $user_id          = $request->input('user_id');
-            $approved_fee      = $request->input('approved_fee');
-            $extra_payment          = $request->input('extra_payment');
-            $application_date          = $request->input('application_date');
-            $updation_date          = $request->input('updation_date');
-
+            $remarks             = $request->input('remarks');
+            $service_id          = $request->input('service_id');
+            $user_id             = $request->input('user_id');
+            $approved_fee        = $request->input('approved_fee');
+            $extra_payment       = $request->input('extra_payment');
+            $application_date    = $request->input('application_date');
+            $updation_date       = $request->input('updation_date');
 
             $data = UserServiceApplication::where('external_application_id', $external_id)->first();
 
             if ($data) {
+
                 $data->update([
                     'status'              => $status,
                     'payment_status'      => $payment_status ?? $data->payment_status,
                     'max_processing_date' => $max_processing_date ?? $data->max_processing_date,
-                    'noc_number'          => $noc_number ?? $data->noc_number,
-                    'noc_valid_till'      => $noc_valid_till ?? $data->noc_valid_till,
+                    'license_id'          => $noc_number ?? $data->noc_number,
+                    'NOC_expiry_date'     => $noc_valid_till ?? $data->noc_valid_till,
                     'remarks'             => $remarks ?? $data->remarks,
                     'approved_fee'        => $approved_fee ?? $data->approved_fee,
+                    'total_fee'           => $approved_fee ?? $data->approved_fee,
                     'extra_payment'       => $extra_payment ?? $data->extra_payment,
+
+                    'external_status'              => $status,
+                    'external_payment_status'      => $payment_status,
+                    'external_max_processing_date' => $max_processing_date ?? $data->external_max_processing_date,
+                    'external_noc_number'          => $noc_number ?? $data->external_noc_number,
+                    'external_valid_till'          => $noc_valid_till ?? $data->external_valid_till,
+                    'external_remarks'             => $remarks ?? $data->external_remarks,
                 ]);
             } else {
 
@@ -2001,41 +2007,72 @@ class UserServiceApplicationController extends Controller
                     'status'                  => $status,
                     'payment_status'          => $payment_status ?? 'pending',
                     'max_processing_date'     => $max_processing_date,
-                    'noc_number'              => $noc_number,
-                    'noc_valid_till'          => $noc_valid_till,
+                    'license_id'              => $noc_number,
+                    'NOC_expiry_date'         => $noc_valid_till,
                     'remarks'                 => $remarks,
                     'bin'                     => $request->input('bin'),
                     'approved_fee'            => $approved_fee,
                     'total_fee'               => $approved_fee,
                     'extra_payment'           => $extra_payment,
-                ]);
 
-                $payment_order = PaymentOrder::create([
-                    'user_id'            => $user_id,
-                    'application_id' => json_encode([$data->id]),
-                    'payment_amount'     => $approved_fee,
-                    'payment_created_on' => now(),
-                    'payment_updated_on' => now(),
-                    'payment_status'     => 'initiated',
-                    'transaction_id'     => null,
-                ]);
-
-                $payment_order->update([
-                    'order_id' => 'SW' . $payment_order->id
+                    'external_status'              => $status,
+                    'external_payment_status'      => $payment_status,
+                    'external_max_processing_date' => $max_processing_date,
+                    'external_noc_number'          => $noc_number,
+                    'external_valid_till'          => $noc_valid_till,
+                    'external_remarks'             => $remarks,
+                    'is_third_party'               => 1,
                 ]);
             }
 
+            if ($payment_status === 'pending' && (float) $approved_fee > 0) {
+
+                $payment_order = PaymentOrder::where('user_id', $user_id)
+                    ->where('application_id', json_encode([$data->id]))
+                    ->first();
+
+                if (!$payment_order) {
+                    $payment_order = PaymentOrder::create([
+                        'user_id'            => $user_id,
+                        'application_id'     => json_encode([$data->id]),
+                        'payment_amount'     => $approved_fee,
+                        'payment_created_on' => now(),
+                        'payment_updated_on' => now(),
+                        'payment_status'     => 'initiated',
+                        'transaction_id'     => null,
+                    ]);
+
+                    $payment_order->update([
+                        'order_id' => 'SW' . $payment_order->id
+                    ]);
+                }
+            }
+
+            try {
+                ThirdPartyStatusLog::create([
+                    'service_id'         => $service_id,
+                    'application_id'     => $external_id,
+                    'swaagat_user_id'    => $user_id,
+                    'service_status'     => $status,
+                    'mobile_no'          => $request->input('mobile_no'),
+                    'application_date'   => $application_date,
+                    'updation_date'      => $updation_date,
+                    'action_by'          => $request->input('action_by'),
+                    'remark'             => $remarks,
+                    'payment_amount'     => $approved_fee,
+                    'payment_status'     => $payment_status, // pending/paid/failed
+                    'payment_url'        => $request->input('payment_url'),
+                    'egras_account_head' => $request->input('egras_account_head'),
+                    'noc_url'            => $request->input('noc_url'),
+                    'noc_file'           => $request->input('noc_file'),
+                ]);
+            } catch (\Exception $e) {
+                // ignore
+            }
+
             $redirectUrl = env('APP_FRONTEND_URL') . "/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";
-            // $redirectUrl = "http://localhost:4200/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";
             return redirect()->away($redirectUrl);
-
-            // return response()->json([
-            //     'status' => 1,
-            //     'message' => 'Service user application fetched successfully.',
-            //     'data' => $data
-            // ]);
         } catch (\Exception $e) {
-
 
             return response()->json([
                 'success' => 0,
@@ -2045,11 +2082,10 @@ class UserServiceApplicationController extends Controller
         }
     }
 
+
     public function update_third_party_status_log(Request $request)
     {
-
         try {
-
 
             $request->validate([
                 'application_id'       => 'required|string',
@@ -2067,11 +2103,19 @@ class UserServiceApplicationController extends Controller
                 'egras_account_head'   => 'nullable|string',
                 'noc_url'              => 'nullable|string',
                 'noc_file'             => 'nullable|string',
+                'transaction_id'       => 'nullable|string',
             ]);
 
-            $log = ThirdPartyStatusLog::where('application_id', $request->application_id)->first();
 
-            $data = [
+            $external_payment_status = strtolower((string) $request->payment_status);
+
+            if (in_array($external_payment_status, ['success', 'paid'])) {
+                $external_payment_status = 'paid';
+            } else {
+                $external_payment_status = $request->payment_status;
+            }
+
+            ThirdPartyStatusLog::create([
                 'service_id'         => $request->service_id,
                 'application_id'     => $request->application_id,
                 'swaagat_user_id'    => $request->swaagat_user_id,
@@ -2082,50 +2126,64 @@ class UserServiceApplicationController extends Controller
                 'action_by'          => $request->action_by,
                 'remark'             => $request->remark,
                 'payment_amount'     => $request->payment_amount,
-                'payment_status'     => $request->payment_status,
+                'payment_status'     => $external_payment_status,
                 'payment_url'        => $request->payment_url,
                 'egras_account_head' => $request->egras_account_head,
                 'noc_url'            => $request->noc_url,
                 'noc_file'           => $request->noc_file,
-            ];
+            ]);
+            
 
-            if ($log) {
-                $log->update([
-                    'service_id'         => $request->service_id,
-                    'application_id'     => $request->application_id,
-                    'swaagat_user_id'    => $request->swaagat_user_id,
-                    'service_status'     => $request->service_status,
-                    'mobile_no'          => $request->mobile_no,
-                    'application_date'   => $request->application_date,
-                    'updation_date'      => $request->updation_date,
-                    'action_by'          => $request->action_by,
-                    'remark'             => $request->remark,
-                    'payment_amount'     => $request->payment_amount,
-                    'payment_status'     => $request->payment_status,
-                    'payment_url'        => $request->payment_url,
-                    'egras_account_head' => $request->egras_account_head,
-                    'noc_url'            => $request->noc_url,
-                    'noc_file'           => $request->noc_file,
-                ]);
-            } else {
+            $application = UserServiceApplication::where('external_application_id', $request->application_id)->first();
 
-                ThirdPartyStatusLog::create([
-                    'service_id'         => $request->service_id,
-                    'application_id'     => $request->application_id,
-                    'swaagat_user_id'    => $request->swaagat_user_id,
-                    'service_status'     => $request->service_status,
-                    'mobile_no'          => $request->mobile_no,
-                    'application_date'   => $request->application_date,
-                    'updation_date'      => $request->updation_date,
-                    'action_by'          => $request->action_by,
-                    'remark'             => $request->remark,
-                    'payment_amount'     => $request->payment_amount,
-                    'payment_status'     => $request->payment_status,
-                    'payment_url'        => $request->payment_url,
-                    'egras_account_head' => $request->egras_account_head,
-                    'noc_url'            => $request->noc_url,
-                    'noc_file'           => $request->noc_file,
+            if ($application) {
+                $application->update([
+                    'payment_status'         => $request->payment_status,
+                    'external_application_id' => $request->application_id,
+                    'external_status'         => $request->service_status,
+                    'external_payment_status' => $external_payment_status,
+                    'external_remarks'        => $request->remark,
+
                 ]);
+            }
+
+            if ($application) {
+
+                $app_json = json_encode([$application->id]);
+                $amount  = (float) ($request->payment_amount ?? 0);
+
+                $payment_order = PaymentOrder::where('user_id', $request->swaagat_user_id)
+                    ->where('application_id', $app_json)
+                    ->first();
+
+                if ($request->payment_status === 'pending' && $amount > 0) {
+
+                    if (!$payment_order) {
+                        $payment_order = PaymentOrder::create([
+                            'user_id'            => $request->swaagat_user_id,
+                            'application_id'     => $app_json,
+                            'payment_amount'     => $amount,
+                            'payment_created_on' => now(),
+                            'payment_updated_on' => now(),
+                            'payment_status'     => 'initiated',
+                            'transaction_id'     => $request->transaction_id ?? null,
+                        ]);
+
+                        $payment_order->update([
+                            'order_id' => 'SW' . $payment_order->id
+                        ]);
+                    }
+                } else {
+
+                    if ($payment_order) {
+                        $payment_order->update([
+                            'payment_amount'     => $amount > 0 ? $amount : $payment_order->payment_amount,
+                            'payment_updated_on' => now(),
+                            'payment_status'     => $request->payment_status,
+                            'transaction_id'     => $request->transaction_id ?? $payment_order->transaction_id,
+                        ]);
+                    }
+                }
             }
 
             return response()->json([
@@ -2134,14 +2192,12 @@ class UserServiceApplicationController extends Controller
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
-
             return response()->json([
                 'success' => 0,
                 'message' => 'Validation Error',
                 'errors'  => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
-
 
             return response()->json([
                 'success' => 0,
@@ -2151,6 +2207,7 @@ class UserServiceApplicationController extends Controller
             ], 500);
         }
     }
+
 
     // public function get_all_applications_list(Request $request)
     // {

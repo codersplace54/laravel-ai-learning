@@ -417,7 +417,7 @@ Route::post('entity_locker-initiate', [EntityLockerController::class, 'initiate_
 Route::get('entity_locker', [EntityLockerController::class, 'handle_callback']);
 Route::post('entity_locker-documents', [EntityLockerController::class, 'user_documents']);
 
-Route::post('/deploy-backend-latest-code-in-server', [DeployController::class, 'deploy']);
+// Route::post('/deploy-backend-latest-code-in-server', [DeployController::class, 'deploy']);
 
 Route::post('get-testing-facility-capabilities', [TestingFacilityCapabilityController::class, 'get_testing_facility_capabilities']);
 Route::post('get-testing-facilities', [TestingFacilityCapabilityController::class, 'get_testing_facilities']);
