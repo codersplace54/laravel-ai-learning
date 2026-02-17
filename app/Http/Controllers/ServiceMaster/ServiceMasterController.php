@@ -70,7 +70,7 @@ class ServiceMasterController extends Controller
                 'third_party_payment_mode' => 'nullable|in:unified,external',
                 'is_active' => 'nullable|integer',
                 'fixed_expiry_date' => 'nullable|date',
-                'egras_scheme_code' => 'required|string',
+                'egras_scheme_code' => 'nullable|string',
                 'caf_depends' => 'nullable|in:yes,no',
             ]);
 
@@ -191,7 +191,7 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => 'nullable|string',
                 'third_party_payment_mode' => 'nullable|in:unified,external',
                 'is_active' => 'nullable|integer',
-                'egras_scheme_code' => 'required|string',
+                'egras_scheme_code' => 'nullable|string',
                 'caf_depends' => 'nullable|in:yes,no',
             ]);
 
@@ -944,11 +944,20 @@ class ServiceMasterController extends Controller
     {
         try {
 
-            $services = ServiceMaster::where('service_mode', "third_party")->get();
-
-            $applications = UserServiceApplication::whereIn('service_id', $services->pluck('id'))
-                ->select('id', 'applicationId', 'service_id', 'user_id', 'application_date', 'total_fee', 'payment_status', 'status', 'GRN_number', 'NOC_certificate')
+            $applications = UserServiceApplication::where('is_third_party', 1)
                 ->where('user_id', auth()->user()->id)
+                ->select(
+                    'id',
+                    'applicationId',
+                    'service_id',
+                    'user_id',
+                    'application_date',
+                    'total_fee',
+                    'payment_status',
+                    'status',
+                    'GRN_number',
+                    'NOC_certificate'
+                )
                 ->orderByDesc('id')
                 ->get()
                 ->map(function ($app) {
@@ -957,11 +966,11 @@ class ServiceMasterController extends Controller
                 })
                 ->groupBy('service_id');
 
-            $data = $services->map(function ($service) use ($applications) {
+            $data = $applications->map(function ($apps, $serviceId) {
                 return [
-                    'service_id'   => $service->id,
-                    'service_name' => $service->service_title_or_description,
-                    'applications' => $applications->get($service->id, collect())->values(),
+                    'service_id'   => (int) $serviceId,
+                    'service_name' => $apps->first()->service->service_title_or_description ?? null,
+                    'applications' => $apps->values(),
                 ];
             })->values();
 
@@ -971,12 +980,13 @@ class ServiceMasterController extends Controller
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'success' => false,
-                'message' => 'Failed to generate Excel file',
+                'success' => 0,
+                'message' => 'Failed to fetch applications',
                 'error'   => $e->getMessage(),
             ], 500);
         }
     }
+
 
 
 
