@@ -940,55 +940,6 @@ class ServiceMasterController extends Controller
         }
     }
 
-    public function third_party_application_list()
-    {
-        try {
-
-            $applications = UserServiceApplication::where('is_third_party', 1)
-                ->where('user_id', auth()->user()->id)
-                ->select(
-                    'id',
-                    'applicationId',
-                    'service_id',
-                    'user_id',
-                    'application_date',
-                    'total_fee',
-                    'payment_status',
-                    'status',
-                    'GRN_number',
-                    'NOC_certificate'
-                )
-                ->orderByDesc('id')
-                ->get()
-                ->map(function ($app) {
-                    $app->is_certificate_generated = !is_null($app->NOC_certificate);
-                    return $app;
-                })
-                ->groupBy('service_id');
-
-            $data = $applications->map(function ($apps, $serviceId) {
-                return [
-                    'service_id'   => (int) $serviceId,
-                    'service_name' => $apps->first()->service->service_title_or_description ?? null,
-                    'applications' => $apps->values(),
-                ];
-            })->values();
-
-            return response()->json([
-                'success' => 1,
-                'data' => $data
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => 0,
-                'message' => 'Failed to fetch applications',
-                'error'   => $e->getMessage(),
-            ], 500);
-        }
-    }
-
-
-
 
     public function export_services()
     {
