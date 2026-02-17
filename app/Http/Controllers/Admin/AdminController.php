@@ -176,6 +176,17 @@ class AdminController extends Controller
                 });
             }
 
+            if ($request->filled('district_id')) {
+
+                $district_ids = is_array($request->district_id)
+                    ? $request->district_id
+                    : explode(',', $request->district_id);
+
+                $query->whereHas('department_user_location', function ($q) use ($district_ids) {
+                    $q->whereIn('district_id', $district_ids);
+                });
+            }
+
             if ($request->export == 'excel') {
 
                 $users = $query->get();
