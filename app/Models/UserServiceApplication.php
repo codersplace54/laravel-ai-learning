@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class UserServiceApplication extends Model
 {
@@ -122,5 +123,16 @@ class UserServiceApplication extends Model
     public function appeal()
     {
         return $this->hasOne(Appeal::class, 'application_id');
+    }
+
+    public function getNocCertificateUrlAttribute()
+    {
+        if (!$this->NOC_certificate) {
+            return null;
+        }
+
+        return $this->is_third_party
+            ? $this->NOC_certificate
+            : url(Storage::url($this->NOC_certificate));
     }
 }
