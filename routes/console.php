@@ -16,3 +16,6 @@ Schedule::command('backup:clean')
     ->dailyAt('03:00')
     ->withoutOverlapping();
 
+Schedule::command('saral:sync')
+    ->dailyAt('23:00');
+
