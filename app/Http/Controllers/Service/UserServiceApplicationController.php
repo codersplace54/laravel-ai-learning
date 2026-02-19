@@ -2027,6 +2027,15 @@ class UserServiceApplicationController extends Controller
                 'transaction_id'       => 'nullable|string',
             ]);
 
+            $incoming_service_status = strtolower((string) $request->service_status);
+
+            if ($incoming_service_status === 'approved') {
+                $application_status = 'approved';
+            } elseif ($incoming_service_status === 'pending') {
+                $application_status = 'pending';
+            } else {
+                $application_status = 'under_review';
+            }
 
             $external_payment_status = strtolower((string) $request->payment_status);
 
@@ -2052,39 +2061,23 @@ class UserServiceApplicationController extends Controller
 
             if ($application) {
 
-            ThirdPartyStatusLog::create([
-                'service_id'         => $request->service_id,
-                'application_id'     => $request->application_id,
-                'swaagat_user_id'    => $request->swaagat_user_id,
-                'service_status'     => $request->service_status,
-                'mobile_no'          => $request->mobile_no,
-                'application_date'   => $request->application_date,
-                'updation_date'      => $request->updation_date,
-                'action_by'          => $request->action_by,
-                'remark'             => $request->remark,
-                'payment_amount'     => $request->payment_amount,
-                'payment_status'     => $external_payment_status,
-                'payment_url'        => $request->payment_url,
-                'egras_account_head' => $request->egras_account_head,
-                'noc_url'            => $request->noc_url,
-                'noc_file'           => $request->noc_file,
-            ]);
-
-
-            $application = UserServiceApplication::where('external_application_id', $request->application_id)->first();
-
-            if ($application) {
-                $application->update([
-                    'payment_status'         => $request->payment_status,
-                    'external_application_id' => $request->application_id,
-                    'external_status'         => $request->service_status,
-                    'external_payment_status' => $external_payment_status,
-                    'external_remarks'        => $request->remark,
-
+                ThirdPartyStatusLog::create([
+                    'service_id'         => $request->service_id,
+                    'application_id'     => $application->id,
+                    'swaagat_user_id'    => $request->swaagat_user_id,
+                    'service_status'     => $request->service_status,
+                    'mobile_no'          => $request->mobile_no,
+                    'application_date'   => $request->application_date,
+                    'updation_date'      => $request->updation_date,
+                    'action_by'          => $request->action_by,
+                    'remark'             => $request->remark,
+                    'payment_amount'     => $request->payment_amount,
+                    'payment_status'     => $external_payment_status,
+                    'payment_url'        => $request->payment_url,
+                    'egras_account_head' => $request->egras_account_head,
+                    'noc_url'            => $request->noc_url,
+                    'noc_file'           => $request->noc_file,
                 ]);
-            }
-
-            if ($application) {
 
                 $app_json = json_encode([$application->id]);
                 $amount  = (float) ($request->payment_amount ?? 0);
