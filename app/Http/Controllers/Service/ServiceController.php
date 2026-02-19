@@ -646,7 +646,7 @@ class ServiceController extends Controller
                 'NOC_expiry_date' => $application->NOC_expiry_date,
                 'license_id' => $application->license_id,
                 'NOC_mode' => $application->NOC_mode,
-                'NOC_certificate' => $application->NOC_certificate ? asset('storage/' . $application->NOC_certificate) : null,
+                'NOC_certificate' => $application->noc_certificate_url,
             ];
 
             $is_land_allotment = $application->service_id == 64;

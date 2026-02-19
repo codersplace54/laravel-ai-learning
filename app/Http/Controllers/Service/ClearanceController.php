@@ -318,9 +318,7 @@ class ClearanceController extends Controller
                     'user_id'            => $application->user_id,
                     'application_id'     => $application->id,
                     'application_number' =>  $application->applicationId,
-                    'NOC_certificate' => $application->NOC_certificate
-                        ? url(Storage::url($application->NOC_certificate))
-                        : null,
+                    'NOC_certificate'    => $application->noc_certificate_url,
                     'service_id'         => $application->service_id,
                     'service_name'       => optional($application->service)->service_title_or_description,
                     'department_id'      => optional($application->service)->department_id,

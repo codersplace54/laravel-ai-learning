@@ -1484,86 +1484,6 @@ class UserServiceApplicationController extends Controller
             $application->application_data = $application_data;
 
             $application_data = $application->application_data;
-            // $formatted_data   = [];
-
-            // if (!empty($application_data)) {
-            //     $question_ids = [];
-
-            //     foreach ($application_data as $key => $value) {
-            //         if (is_numeric($key)) {
-            //             $question_ids[] = (int) $key;
-            //         }
-
-            //         if (is_string($key) && is_array($value)) {
-            //             foreach ($value as $row) {
-            //                 if (!is_array($row)) {
-            //                     continue;
-            //                 }
-
-            //                 foreach ($row as $inner_key => $inner_value) {
-            //                     if (is_numeric($inner_key)) {
-            //                         $question_ids[] = (int) $inner_key;
-            //                     }
-            //                 }
-            //             }
-            //         }
-            //     }
-
-            //     $question_ids = array_values(array_unique($question_ids));
-
-            //     if (!empty($question_ids)) {
-            //         $questions = ServiceQuestionnaire::whereIn('id', $question_ids)
-            //             ->get(['id', 'question_label', 'question_type'])
-            //             ->keyBy('id');
-            //     } else {
-            //         $questions = collect();
-            //     }
-
-            //     foreach ($application_data as $key => $value) {
-            //         if (is_numeric($key)) {
-            //             $question = $questions->get((int) $key);
-
-            //             if ($question && $question->question_type === 'file' && $value) {
-            //                 $value = asset('storage/' . $value);
-            //             }
-
-            //             $formatted_data[] = [
-            //                 'id'       => (int) $key,
-            //                 'question' => $question->question_label ?? 'Question not found',
-            //                 'answer'   => $value ?? null,
-            //             ];
-            //         } else {
-            //             $section_name   = $key;
-            //             $section_answer = $value;
-
-            //             if (is_array($section_answer)) {
-            //                 foreach ($section_answer as $row_index => $row_answers) {
-            //                     if (!is_array($row_answers)) {
-            //                         continue;
-            //                     }
-
-            //                     foreach ($row_answers as $inner_key => $inner_value) {
-            //                         if (!is_numeric($inner_key)) {
-            //                             continue;
-            //                         }
-
-            //                         $inner_question = $questions->get((int) $inner_key);
-
-            //                         if ($inner_question && $inner_question->question_type === 'file' && $inner_value) {
-            //                             $section_answer[$row_index][$inner_key] = asset('storage/' . $inner_value);
-            //                         }
-            //                     }
-            //                 }
-            //             }
-
-            //             $formatted_data[] = [
-            //                 'id'       => $section_name,
-            //                 'question' => $section_name,
-            //                 'answer'   => $section_answer,
-            //             ];
-            //         }
-            //     }
-            // }
 
             $history_data = ApplicationWorkflowHistory::where('application_id', $application->id)
                 ->orderBy('id', 'desc')
@@ -2115,6 +2035,22 @@ class UserServiceApplicationController extends Controller
             } else {
                 $external_payment_status = $request->payment_status;
             }
+
+            $application = UserServiceApplication::where('external_application_id', $request->application_id)->first();
+
+            if ($application) {
+                $application->update([
+                    'status'                  => $application_status,
+                    'payment_status'          => $request->payment_status,
+                    'external_application_id' => $request->application_id,
+                    'external_status'         => $request->service_status,
+                    'external_payment_status' => $external_payment_status,
+                    'external_remarks'        => $request->remark,
+                    'NOC_certificate'         => $request->noc_url
+                ]);
+            }
+
+            if ($application) {
 
             ThirdPartyStatusLog::create([
                 'service_id'         => $request->service_id,
