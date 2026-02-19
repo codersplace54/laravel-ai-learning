@@ -22,6 +22,7 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use setasign\Fpdi\Fpdi;
 use App\Services\SmsService;
 use App\Jobs\SendWhatsAppNotification;
+use Carbon\Carbon;
 
 class ServiceController extends Controller
 {
@@ -474,16 +475,19 @@ class ServiceController extends Controller
                 });
 
             if ($request->filled('search')) {
-                $search = $request->search;
 
+                $search = $request->search;
                 $data->where(function ($q) use ($search) {
 
-                    $q->whereHas('user', function ($u) use ($search) {
-                        $u->where('authorized_person_name', 'like', "%{$search}%")
-                            ->orWhere('mobile_no', 'like', "%{$search}%");
-                    });
+                        $q->where('applicationId', 'like', "%{$search}%")
+
+                        ->orWhereHas('user', function ($u) use ($search) {
+                            $u->where('authorized_person_name', 'like', "%{$search}%")
+                                ->orWhere('mobile_no', 'like', "%{$search}%");
+                        });
                 });
             }
+
 
             if ($request->status) {
                 $data->where('status', $request->status);
@@ -650,8 +654,8 @@ class ServiceController extends Controller
             ];
 
             $is_land_allotment = $application->service_id == 64;
-            $land_allotment_details = [ 
-                'is_land_allotment' => $is_land_allotment ,
+            $land_allotment_details = [
+                'is_land_allotment' => $is_land_allotment,
                 'land_allotment_estimate_amount' => $is_land_allotment ? $application->applied_fee : null,
                 'land_allotment_approved_amount' => $is_land_allotment ? $application->total_fee : null
             ];
@@ -810,9 +814,9 @@ class ServiceController extends Controller
                 $max_step = ServiceApprovalFlow::where('service_id', $application->service_id)
                     ->max('step_number');
 
-                if($application->service_id == 64){
-                    $application -> update ([
-                        'total_fee' => $request -> land_allotment_approved_amount,
+                if ($application->service_id == 64) {
+                    $application->update([
+                        'total_fee' => $request->land_allotment_approved_amount,
                         'payment_status' => 'pending'
                     ]);
                 }
@@ -839,11 +843,12 @@ class ServiceController extends Controller
 
                         SendWhatsAppNotification::dispatch(
                             $user->mobile_no,
-                            'application_approved_v1',
+                            'application_approved_v2',
                             [
                                 $application->applicationId,
                                 $application->service->service_title_or_description,
-                                $current_step->department->name
+                                'Approved',
+                                Carbon::parse($application->updated_at)->format('d M Y, g:i A')
                             ]
                         );
                     }
@@ -884,6 +889,17 @@ class ServiceController extends Controller
             } elseif ($request->status === 'rejected') {
 
                 $application->update(['status' => 'rejected']);
+
+                SendWhatsAppNotification::dispatch(
+                    $application->user->mobile_no,
+                    'application_rejected_v1',
+                    [
+                        $application->applicationId,
+                        $application->service->service_title_or_description,
+                        Carbon::parse($application->updated_at)->format('d M Y, g:i A'),
+                        $request->remarks ?? 'No reason provided'
+                    ]
+                );
             } elseif ($request->status === 'send_back') {
 
                 $first_step_flow = ServiceApprovalFlow::where('service_id', $application->service_id)
@@ -908,6 +924,18 @@ class ServiceController extends Controller
                         'current_step_number' => $first_step_flow->step_number,
                         'status'              => 'send_back',
                     ]);
+
+                    SendWhatsAppNotification::dispatch(
+                        $application->user->mobile_no,
+                        'application_returned_v1',
+                        [
+                            $application->applicationId,
+                            $application->service->service_title_or_description,
+                            'Returned',
+                            Carbon::parse($application->updated_at)->format('d M Y, g:i A'),
+                            $request->remarks ?? 'No reason provided',
+                        ]
+                    );
                 }
             } elseif ($request->status === 'extra_payment') {
 
@@ -944,6 +972,18 @@ class ServiceController extends Controller
                         'remarks'             => $request->remarks,
                         'status'              => 'extra_payment',
                     ]);
+
+                    SendWhatsAppNotification::dispatch(
+                        $application->user->mobile_no,
+                        'additional_payment_required_v1',
+                        [
+                            $application->applicationId,
+                            $application->service->service_title_or_description,
+                            $request->extra_payment,
+                            $request->remarks ?? 'Additional payment required',
+                            Carbon::parse($application->updated_at)->format('d M Y, g:i A')
+                        ]
+                    );
                 }
             }
 
