@@ -931,6 +931,19 @@ class UserServiceApplicationController extends Controller
 
         foreach ($rules as $rule) {
 
+            if ($rule->fee_type === 'hardcoded') {
+
+                if (!empty($rule->fixed_calculated_fee)) {
+                    $final_fee += (float) $rule->fixed_calculated_fee;
+                }
+
+                if (!empty($rule->minimum_fee) && $rule->minimum_fee > $minimum_fee) {
+                    $minimum_fee = (float) $rule->minimum_fee;
+                }
+
+                continue;
+            }
+
             if ($rule->condition_label_question_id) {
                 $pre_value = $application_data[$rule->condition_label_question_id] ?? null;
 
@@ -994,16 +1007,6 @@ class UserServiceApplicationController extends Controller
             };
 
             if (!$match) continue;
-
-            switch ($rule->fee_type) {
-                case 'hardcoded':
-                    if (!empty($rule->fixed_calculated_fee)) {
-                        $final_fee += (float) $rule->fixed_calculated_fee;
-                    }
-                    break;
-
-                case 'calculated':
-                case 'estimated':
                     $temp_fee = 0;
 
                     if (!empty($rule->per_unit_fee)) {
@@ -1015,8 +1018,6 @@ class UserServiceApplicationController extends Controller
                     }
 
                     $final_fee += $temp_fee;
-                    break;
-            }
 
             if (!empty($rule->minimum_fee) && $rule->minimum_fee > $minimum_fee) {
                 $minimum_fee = (float) $rule->minimum_fee;
@@ -2051,7 +2052,7 @@ class UserServiceApplicationController extends Controller
             try {
                 ThirdPartyStatusLog::create([
                     'service_id'         => $service_id,
-                    'application_id'     => $data->id,
+                    'application_id'     => $external_id,
                     'swaagat_user_id'    => $user_id,
                     'service_status'     => $status,
                     'mobile_no'          => $request->input('mobile_no'),
@@ -2106,15 +2107,6 @@ class UserServiceApplicationController extends Controller
                 'transaction_id'       => 'nullable|string',
             ]);
 
-            $incoming_service_status = strtolower((string) $request->service_status);
-
-            if ($incoming_service_status === 'approved') {
-                $application_status = 'approved';
-            } elseif ($incoming_service_status === 'pending') {
-                $application_status = 'pending';
-            } else {
-                $application_status = 'under_review';
-            }
 
             $external_payment_status = strtolower((string) $request->payment_status);
 
@@ -2124,25 +2116,9 @@ class UserServiceApplicationController extends Controller
                 $external_payment_status = $request->payment_status;
             }
 
-            $application = UserServiceApplication::where('external_application_id', $request->application_id)->first();
-
-            if ($application) {
-                $application->update([
-                    'status'                  => $application_status,
-                    'payment_status'          => $request->payment_status,
-                    'external_application_id' => $request->application_id,
-                    'external_status'         => $request->service_status,
-                    'external_payment_status' => $external_payment_status,
-                    'external_remarks'        => $request->remark,
-
-                ]);
-            }
-
-            if ($application) {
-
             ThirdPartyStatusLog::create([
                 'service_id'         => $request->service_id,
-                'application_id'     => $application->id,
+                'application_id'     => $request->application_id,
                 'swaagat_user_id'    => $request->swaagat_user_id,
                 'service_status'     => $request->service_status,
                 'mobile_no'          => $request->mobile_no,
@@ -2157,6 +2133,22 @@ class UserServiceApplicationController extends Controller
                 'noc_url'            => $request->noc_url,
                 'noc_file'           => $request->noc_file,
             ]);
+
+
+            $application = UserServiceApplication::where('external_application_id', $request->application_id)->first();
+
+            if ($application) {
+                $application->update([
+                    'payment_status'         => $request->payment_status,
+                    'external_application_id' => $request->application_id,
+                    'external_status'         => $request->service_status,
+                    'external_payment_status' => $external_payment_status,
+                    'external_remarks'        => $request->remark,
+
+                ]);
+            }
+
+            if ($application) {
 
                 $app_json = json_encode([$application->id]);
                 $amount  = (float) ($request->payment_amount ?? 0);

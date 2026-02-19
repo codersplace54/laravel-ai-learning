@@ -40,6 +40,7 @@ class RenewalCycleController extends Controller
                 'renewals.*.is_active' => 'nullable|integer',
                 'renewals.*.late_fee_start_type' => 'nullable|in:fixed_date,date_of_expiry',
                 'renewals.*.late_fee_start_date' => 'nullable|date',
+                'renewals.*.before_date_of_expiry' => 'nullable|string',
             ]);
 
             DB::beginTransaction();
@@ -64,6 +65,7 @@ class RenewalCycleController extends Controller
                     'is_active' => $renewal['is_active'] ?? 1,
                     'late_fee_start_type' => $renewal['late_fee_start_type'] ?? null,
                     'late_fee_start_date' => $renewal['late_fee_start_date'] ?? null,
+                    'before_date_of_expiry' => $renewal['before_date_of_expiry'] ?? null,
                     'created_by' => $admin->email_id
                 ]);
             }
@@ -119,6 +121,7 @@ class RenewalCycleController extends Controller
                 'renewals.*.is_active' => 'nullable|integer',
                 'renewals.*.late_fee_start_type' => 'nullable|in:fixed_date,date_of_expiry',
                 'renewals.*.late_fee_start_date' => 'nullable|date',
+                'renewals.*.before_date_of_expiry' => 'nullable|string',
             ]);
 
             DB::beginTransaction();
@@ -145,6 +148,7 @@ class RenewalCycleController extends Controller
                     'is_active' => $renewal['is_active'] ?? 1,
                     'late_fee_start_type' => $renewal['late_fee_start_type'] ?? null,
                     'late_fee_start_date' => $renewal['late_fee_start_date'] ?? null,
+                    'before_date_of_expiry' => $renewal['before_date_of_expiry'] ?? null,
                     'updated_by' => $admin->email_id
 
                 ]);
