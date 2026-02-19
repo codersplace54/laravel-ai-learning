@@ -38,7 +38,7 @@ class RenewalCycleController extends Controller
                 'renewals.*.late_fee_calculated_amount' => 'nullable|string',
                 'renewals.*.allow_renewal_input_form' => 'required|in:yes,no',
                 'renewals.*.is_active' => 'nullable|integer',
-                'renewals.*.late_fee_start_type' => 'nullable|in:fixed_date,date_of_expiry',
+                'renewals.*.late_fee_start_type' => 'nullable|in:fixed_date,date_of_expiry,from_date_of_expiry',
                 'renewals.*.late_fee_start_date' => 'nullable|date',
                 'renewals.*.before_date_of_expiry' => 'nullable|string',
             ]);
@@ -119,7 +119,7 @@ class RenewalCycleController extends Controller
                 'renewals.*.late_fee_calculated_amount' => 'nullable|string',
                 'renewals.*.allow_renewal_input_form' => 'required|in:yes,no',
                 'renewals.*.is_active' => 'nullable|integer',
-                'renewals.*.late_fee_start_type' => 'nullable|in:fixed_date,date_of_expiry',
+                'renewals.*.late_fee_start_type' => 'nullable|in:fixed_date,date_of_expiry,from_date_of_expiry',
                 'renewals.*.late_fee_start_date' => 'nullable|date',
                 'renewals.*.before_date_of_expiry' => 'nullable|string',
             ]);
