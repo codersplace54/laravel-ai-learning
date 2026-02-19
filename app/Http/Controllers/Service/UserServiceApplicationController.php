@@ -931,6 +931,19 @@ class UserServiceApplicationController extends Controller
 
         foreach ($rules as $rule) {
 
+            if ($rule->fee_type === 'hardcoded') {
+
+                if (!empty($rule->fixed_calculated_fee)) {
+                    $final_fee += (float) $rule->fixed_calculated_fee;
+                }
+
+                if (!empty($rule->minimum_fee) && $rule->minimum_fee > $minimum_fee) {
+                    $minimum_fee = (float) $rule->minimum_fee;
+                }
+
+                continue;
+            }
+
             if ($rule->condition_label_question_id) {
                 $pre_value = $application_data[$rule->condition_label_question_id] ?? null;
 
@@ -994,16 +1007,6 @@ class UserServiceApplicationController extends Controller
             };
 
             if (!$match) continue;
-
-            switch ($rule->fee_type) {
-                case 'hardcoded':
-                    if (!empty($rule->fixed_calculated_fee)) {
-                        $final_fee += (float) $rule->fixed_calculated_fee;
-                    }
-                    break;
-
-                case 'calculated':
-                case 'estimated':
                     $temp_fee = 0;
 
                     if (!empty($rule->per_unit_fee)) {
@@ -1015,8 +1018,6 @@ class UserServiceApplicationController extends Controller
                     }
 
                     $final_fee += $temp_fee;
-                    break;
-            }
 
             if (!empty($rule->minimum_fee) && $rule->minimum_fee > $minimum_fee) {
                 $minimum_fee = (float) $rule->minimum_fee;
@@ -1971,7 +1972,7 @@ class UserServiceApplicationController extends Controller
             try {
                 ThirdPartyStatusLog::create([
                     'service_id'         => $service_id,
-                    'application_id'     => $data->id,
+                    'application_id'     => $external_id,
                     'swaagat_user_id'    => $user_id,
                     'service_status'     => $status,
                     'mobile_no'          => $request->input('mobile_no'),
@@ -2060,23 +2061,23 @@ class UserServiceApplicationController extends Controller
 
             if ($application) {
 
-            ThirdPartyStatusLog::create([
-                'service_id'         => $request->service_id,
-                'application_id'     => $application->id,
-                'swaagat_user_id'    => $request->swaagat_user_id,
-                'service_status'     => $request->service_status,
-                'mobile_no'          => $request->mobile_no,
-                'application_date'   => $request->application_date,
-                'updation_date'      => $request->updation_date,
-                'action_by'          => $request->action_by,
-                'remark'             => $request->remark,
-                'payment_amount'     => $request->payment_amount,
-                'payment_status'     => $external_payment_status,
-                'payment_url'        => $request->payment_url,
-                'egras_account_head' => $request->egras_account_head,
-                'noc_url'            => $request->noc_url,
-                'noc_file'           => $request->noc_file,
-            ]);
+                ThirdPartyStatusLog::create([
+                    'service_id'         => $request->service_id,
+                    'application_id'     => $application->id,
+                    'swaagat_user_id'    => $request->swaagat_user_id,
+                    'service_status'     => $request->service_status,
+                    'mobile_no'          => $request->mobile_no,
+                    'application_date'   => $request->application_date,
+                    'updation_date'      => $request->updation_date,
+                    'action_by'          => $request->action_by,
+                    'remark'             => $request->remark,
+                    'payment_amount'     => $request->payment_amount,
+                    'payment_status'     => $external_payment_status,
+                    'payment_url'        => $request->payment_url,
+                    'egras_account_head' => $request->egras_account_head,
+                    'noc_url'            => $request->noc_url,
+                    'noc_file'           => $request->noc_file,
+                ]);
 
                 $app_json = json_encode([$application->id]);
                 $amount  = (float) ($request->payment_amount ?? 0);
