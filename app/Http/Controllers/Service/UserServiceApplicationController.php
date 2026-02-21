@@ -1007,17 +1007,17 @@ class UserServiceApplicationController extends Controller
             };
 
             if (!$match) continue;
-                    $temp_fee = 0;
+            $temp_fee = 0;
 
-                    if (!empty($rule->per_unit_fee)) {
-                        $temp_fee += $user_answer * (float) $rule->per_unit_fee;
-                    }
+            if (!empty($rule->per_unit_fee)) {
+                $temp_fee += $user_answer * (float) $rule->per_unit_fee;
+            }
 
-                    if (!empty($rule->fixed_calculated_fee)) {
-                        $temp_fee += (float) $rule->fixed_calculated_fee;
-                    }
+            if (!empty($rule->fixed_calculated_fee)) {
+                $temp_fee += (float) $rule->fixed_calculated_fee;
+            }
 
-                    $final_fee += $temp_fee;
+            $final_fee += $temp_fee;
 
             if (!empty($rule->minimum_fee) && $rule->minimum_fee > $minimum_fee) {
                 $minimum_fee = (float) $rule->minimum_fee;
@@ -2611,6 +2611,19 @@ class UserServiceApplicationController extends Controller
 
         foreach ($rules as $rule) {
 
+            if ($rule->fee_type === 'hardcoded') {
+
+                if (!empty($rule->fixed_calculated_fee)) {
+                    $final_fee += (float) $rule->fixed_calculated_fee;
+                }
+
+                if (!empty($rule->minimum_fee) && $rule->minimum_fee > $minimum_fee) {
+                    $minimum_fee = (float) $rule->minimum_fee;
+                }
+
+                continue;
+            }
+
             if ($rule->condition_label_question_id) {
                 $pre_value = $application_data[$rule->condition_label_question_id] ?? null;
 
@@ -2674,29 +2687,17 @@ class UserServiceApplicationController extends Controller
             };
 
             if (!$match) continue;
+            $temp_fee = 0;
 
-            switch ($rule->fee_type) {
-                case 'hardcoded':
-                    if (!empty($rule->fixed_calculated_fee)) {
-                        $final_fee += (float) $rule->fixed_calculated_fee;
-                    }
-                    break;
-
-                case 'calculated':
-                case 'estimated':
-                    $temp_fee = 0;
-
-                    if (!empty($rule->per_unit_fee)) {
-                        $temp_fee += $user_answer * (float) $rule->per_unit_fee;
-                    }
-
-                    if (!empty($rule->fixed_calculated_fee)) {
-                        $temp_fee += (float) $rule->fixed_calculated_fee;
-                    }
-
-                    $final_fee += $temp_fee;
-                    break;
+            if (!empty($rule->per_unit_fee)) {
+                $temp_fee += $user_answer * (float) $rule->per_unit_fee;
             }
+
+            if (!empty($rule->fixed_calculated_fee)) {
+                $temp_fee += (float) $rule->fixed_calculated_fee;
+            }
+
+            $final_fee += $temp_fee;
 
             if (!empty($rule->minimum_fee) && $rule->minimum_fee > $minimum_fee) {
                 $minimum_fee = (float) $rule->minimum_fee;
@@ -2734,12 +2735,25 @@ class UserServiceApplicationController extends Controller
         $expiry_date = Carbon::parse($renewal['expiry_date']);
         $today = Carbon::today();
 
-        if ($today->lte($expiry_date)) {
+        $late_fee_start_date = $expiry_date->copy();
+
+        if ($renewal_cycle->late_fee_start_type === 'from_date_of_expiry') {
+
+            $days = (int) $renewal_cycle->before_date_of_expiry;
+
+            if ($days >= 0) {
+                $late_fee_start_date = $expiry_date->copy()->addDays($days);
+            } else {
+                $late_fee_start_date = $expiry_date->copy()->subDays(abs($days));
+            }
+        }
+
+        if ($today->lt($late_fee_start_date)) {
             return 0;
         }
 
-        $days_late = $today->diffInDays($expiry_date);
-        $months_late = $today->diffInMonths($expiry_date);
+        $days_late = $today->diffInDays($late_fee_start_date);
+        $months_late = $today->diffInMonths($late_fee_start_date);
 
         $base_fee = $renewal_cycle->late_fee_fixed_amount ?? 0;
 
@@ -3041,7 +3055,7 @@ class UserServiceApplicationController extends Controller
 
                 if ($active_cycle) {
                     $renewable_applications[] = [
-                        'application_id'     => $app->applicationId,
+                        'application_id'     => $app->id,
                         'application_number' => $app->applicationId,
                         'service_id'         => $app->service_id,
                         'service_name'       => $app->service->service_title_or_description ?? null,
