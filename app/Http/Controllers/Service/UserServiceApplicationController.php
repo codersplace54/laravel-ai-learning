@@ -2735,17 +2735,37 @@ class UserServiceApplicationController extends Controller
         $expiry_date = Carbon::parse($renewal['expiry_date']);
         $today = Carbon::today();
 
-        $late_fee_start_date = $expiry_date->copy();
+        $late_fee_start_date = null;
 
-        if ($renewal_cycle->late_fee_start_type === 'from_date_of_expiry') {
+        switch ($renewal_cycle->late_fee_start_type) {
 
-            $days = (int) $renewal_cycle->before_date_of_expiry;
+            case 'date_of_expiry':
+                $late_fee_start_date = $expiry_date->copy();
+                break;
 
-            if ($days >= 0) {
-                $late_fee_start_date = $expiry_date->copy()->addDays($days);
-            } else {
-                $late_fee_start_date = $expiry_date->copy()->subDays(abs($days));
-            }
+            case 'from_date_of_expiry':
+                $days = (int) $renewal_cycle->before_date_of_expiry;
+
+                if ($days >= 0) {
+                    $late_fee_start_date = $expiry_date->copy()->addDays($days);
+                } else {
+                    $late_fee_start_date = $expiry_date->copy()->subDays(abs($days));
+                }
+                break;
+
+            case 'fixed_date':
+                if (!empty($renewal_cycle->late_fee_fixed_date)) {
+                    $late_fee_start_date = Carbon::parse($renewal_cycle->late_fee_fixed_date);
+                }
+                break;
+
+            default:
+                $late_fee_start_date = $expiry_date->copy();
+                break;
+        }
+
+        if (!$late_fee_start_date) {
+            return 0;
         }
 
         if ($today->lt($late_fee_start_date)) {
@@ -2757,21 +2777,25 @@ class UserServiceApplicationController extends Controller
 
         $base_fee = $renewal_cycle->late_fee_fixed_amount ?? 0;
 
+        if (!empty($renewal_cycle->late_fee_calculated_amount)) {
+            $base_fee *= (float) $renewal_cycle->late_fee_calculated_amount;
+        }
+
         switch ($renewal_cycle->late_fee_calculation_dynamic) {
 
             case 'fixed':
-                return (float) $renewal_cycle->late_fee_fixed_amount;
+                return $base_fee;
 
             case 'percentage':
-                $percentage = (float) $renewal_cycle->late_fee_fixed_amount;
+                $percentage = $base_fee;
                 return ($base_fee * $percentage) / 100;
 
             case 'per_day':
-                return $days_late * (float) $renewal_cycle->late_fee_fixed_amount;
+                return $days_late * $base_fee;
 
             case 'per_month':
                 $months_late = max($months_late, 1);
-                return $months_late * (float) $renewal_cycle->late_fee_fixed_amount;
+                return $months_late * $base_fee;
         }
 
         return 0;
