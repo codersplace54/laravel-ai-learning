@@ -386,11 +386,13 @@ class PaymentController extends Controller
 
                     SendWhatsAppNotification::dispatch(
                         $user->mobile_no,
-                        'payment_success_v1',
+                        'payment_success_v2',
                         [
-                            $user->authorized_person_name ?? $user->name_of_enterprise,
-                            $application->paid_amount,
-                            $application->GRN_number
+                            $application->service->service_title_or_description,
+                            $application->applicationId,
+                            $application->paid_amount ?? 'NA',
+                            $application->GRN_number ?? 'NA',
+                            Carbon::parse($payment_datetime)->format('d M Y')
                         ],
                         'application_id=' . $application->id
                     );

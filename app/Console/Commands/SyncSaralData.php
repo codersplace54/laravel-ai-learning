@@ -13,7 +13,7 @@ class SyncSaralData extends Command
     protected $signature = 'saral:sync';
     protected $description = 'Sync application data with Saral system';
 
-    private $saral_api_url = 'https://uat.tripura.gov.in/SaralTracking/api/SaralBulkUpload';
+    private $saral_api_url = 'https://uat.tripura.gov.in/SaralTracking/api/values/SaralBulkUpload';
 
     private $service_code_mapping = [
         16 => '01',
@@ -43,6 +43,7 @@ class SyncSaralData extends Command
                 $q->where('department_id', 6);
             })
             ->whereIn('service_id', array_keys($this->service_code_mapping))
+            ->limit(10)
             ->get();
 
         if ($applications->isEmpty()) {
@@ -89,7 +90,7 @@ class SyncSaralData extends Command
                 'json'    => $response->json(),        
             ]);
 
-            $this->info("Successfully pushed {count($saral_data)} applications to Saral.");
+            $this->info("Successfully pushed {$applications->count()} applications to Saral.");
 
             if (!empty($errors)) {
                 $this->warn("Failed to process " . count($errors) . " applications.");

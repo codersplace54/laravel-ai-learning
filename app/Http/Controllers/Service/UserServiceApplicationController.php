@@ -484,24 +484,18 @@ class UserServiceApplicationController extends Controller
                             $sms['message'],
                             $sms['template_id']
                         );
-
-                        // app(WhatsAppService::class)->sendTemplate(
-                        //     $user->mobile_no,
-                        //     'application_temp',
-                        //     [$user_service_application->applicationId, $service_data->service_title_or_description],
-                        //     "application_id={$user_service_application->id}"
-                        // );
                     }
 
                     if (in_array($status, ['saved', 'submitted', 'approved'], true)) {
                         $param_1 = $user_service_application->applicationId ?? $user_service_application->id;
                         $param_2 = $service_data->service_title_or_description ?? '';
                         $param_3 = ucfirst($status);
+                        $param_4 = Carbon::parse($user_service_application->application_date)->format('d M Y, g:i A');
 
                         SendWhatsAppNotification::dispatch(
                             $user->mobile_no,
-                            'application_temp',
-                            [$param_1, $param_2, $param_3],
+                            'application_submitted_v3',
+                            [$param_1, $param_2, $param_3, $param_4],
                             "application_id={$user_service_application->id}"
                         );
                     }
@@ -2534,7 +2528,7 @@ class UserServiceApplicationController extends Controller
     private function get_renewal_details($application)
     {
         $service = $application->service;
-
+        // dd("sda");
         if (!empty($service->noc_validity) && !empty($application->NOC_expiry_date)) {
             $expiry_date = Carbon::parse($application->NOC_expiry_date);
         } elseif (!empty($service->fixed_expiry_date)) {
@@ -2542,7 +2536,7 @@ class UserServiceApplicationController extends Controller
         } else {
             $expiry_date = null;
         }
-
+        // dd($expiry_date);
         $today = Carbon::today();
         $renewal_data = [];
         $renewal_cycles = $service->renewalCycles;
@@ -2566,9 +2560,11 @@ class UserServiceApplicationController extends Controller
                 if (!empty($cycle->renewal_window_days) && $expiry_date) {
 
                     $window_start = $expiry_date->copy();
+                    // dd($renewal_start);
                     $window_end   = $expiry_date->copy()->addDays((int)$cycle->renewal_window_days);
 
                     if ($renewal_start === null || $window_start < $renewal_start) {
+                        // dd("ASDF");
                         $renewal_start = $window_start;
                     }
 
@@ -2578,8 +2574,11 @@ class UserServiceApplicationController extends Controller
                 }
             }
             $can_renew = false;
+            
+            // dd($renewal_start);
             if ($renewal_start && $renewal_end) {
                 if ($today->between($renewal_start, $renewal_end)) {
+                    // dd("Hello");
                     $can_renew = true;
                 }
             }
