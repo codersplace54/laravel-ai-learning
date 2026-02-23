@@ -41,7 +41,9 @@ return [
 
     'entity_locker' => [
         'client_id' => env('ENTITY_LOCKER_CLIENT_ID'),
-        'client_secret' => env('ENTITY_LOCKER_CLIENT_SECRET')
+        'client_secret' => env('ENTITY_LOCKER_CLIENT_SECRET'),
+        'redirect_uri' => env('ENTITY_LOCKER_REDIRECT_URI'),
+        'frontend_redirect_url' => env('FRONTEND_REDIRECT_URL'),
     ],
 
     'pan_lookup' => [

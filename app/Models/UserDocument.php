@@ -16,12 +16,16 @@ class UserDocument extends Model
         'document_name',
         'issuer',
         'issued_date',
-        'document_data'
+        'document_data',
+        'local_path',
+        'content_type',
+        'downloaded_at'
     ];
 
     protected $casts = [
         'document_data' => 'array',
-        'issued_date' => 'date'
+        'issued_date' => 'date',
+        'downloaded_at' => 'datetime'
     ];
 
     public function user()
