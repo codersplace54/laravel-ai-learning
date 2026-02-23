@@ -1491,7 +1491,23 @@ class UserServiceApplicationController extends Controller
                         'remarks'         => $history->remarks,
                         'status_file'     => $history->status_file ? asset('storage/' . $history->status_file) : null,
                         'action_taken_at' => $history->action_taken_at,
-                        'action_taken_by' => $history->action_taken_by,
+                        'action_taken_by' => $history->actionTaker->authorized_person_name,
+                    ];
+                });
+
+            $assignment_data = ApplicationWorkflowAssignment::where('application_id', $application->id)
+                ->orderBy('id', 'desc')
+                ->get()
+                ->map(function ($assignment) {
+                    return [
+                        'id'              => $assignment->id,
+                        'step_number'     => $assignment->step_number,
+                        'status'          => $assignment->status,
+                        'step_type'       => $assignment->step_type,
+                        'remarks'         => $assignment->remarks,
+                        'status_file'     => $assignment->status_file ? asset('storage/' . $assignment->status_file) : null,
+                        'action_taken_at' => $assignment->action_taken_at,
+                        'action_taken_by' => $assignment->actionTaker->authorized_person_name,
                     ];
                 });
 
@@ -1569,6 +1585,7 @@ class UserServiceApplicationController extends Controller
                 'message'           => 'Service user application fetched successfully.',
                 'data'              => $application,
                 'application_data'  => $formatted_application_data,
+                'assignment_data'   => $assignment_data,
                 'history_data'    => $history_data,
                 'service_name'    => $application->service->service_title_or_description,
                 'renewal_details' => $renewal_details,
@@ -3356,7 +3373,7 @@ class UserServiceApplicationController extends Controller
                         'remarks'         => $history->remarks,
                         'status_file'     => $history->status_file ? asset('storage/' . $history->status_file) : null,
                         'action_taken_at' => $history->action_taken_at,
-                        'action_taken_by' => $history->action_taken_by,
+                        'action_taken_by' => $history->actionTaker->authorized_person_name,
                     ];
                 });
 

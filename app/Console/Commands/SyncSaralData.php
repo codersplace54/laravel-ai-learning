@@ -112,17 +112,14 @@ class SyncSaralData extends Command
             throw new \Exception("User or Service not found for application ID: {$application->id}");
         }
 
-        // $service_code = $this->service_code_mapping[$application->service_id] ?? null;
-        // if (!$service_code) {
-        //     throw new \Exception("Service code mapping not found for service_id: {$application->service_id}");
-        // }
+        $service_code = $this->service_code_mapping[$application->service_id] ?? null;
 
         $last_workflow_history = $application->workflowHistory()->orderBy('id', 'desc')->first();
         $last_workflow_assignment = $application->workflow()->orderBy('id', 'desc')->first();
 
         $last_status_description = $last_workflow_history->status ?? 'NA';
         $last_action_date = $last_workflow_history->action_taken_at ?? $application->application_date;
-        $last_action_by = $last_workflow_history->action_taken_by ?? 'System';
+        $last_action_by = $last_workflow_history->actionTaker->authorized_person_name ?? 'System';
         $remarks_eng = $last_workflow_history->remarks ?? 'NA';
         $level = $last_workflow_assignment->step_type ?? null;
         $file_with_user = $last_workflow_assignment->hierarchy_level ?? 'NA';
@@ -132,7 +129,7 @@ class SyncSaralData extends Command
         return [
             'DeptCode' => 'LAB',
             'ApplicationCode' => '04',
-            'ServiceCode' => '06',
+            'ServiceCode' => $service_code,
             'SubserviceCode' => '',
             'FileReferenceNo' => $application->applicationId,
             'ReceiptDate' => $this->format_datetime($application->application_date),
@@ -143,7 +140,7 @@ class SyncSaralData extends Command
             'MobileNo' => $user->mobile_no,
             'email_id' => $user->email_id ?? '',
             'RTSDueDate' => '',
-            'DistrictCode' => str_pad($user->district_id, 4, '0', STR_PAD_LEFT),
+            'DistrictCode' => $user->district_id,
             'LocationCode' => $user->district_id,
             'LocationType' => $user->district_id,
             'LocationName' => 'DIS',
@@ -180,4 +177,5 @@ class SyncSaralData extends Command
         $text = preg_replace('/[^A-Za-z0-9\s_.,:\/&()\-]/', '', $text);
         return trim($text);
     }
+
 }

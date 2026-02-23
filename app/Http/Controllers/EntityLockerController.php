@@ -39,7 +39,7 @@ class EntityLockerController extends Controller
             'code_challenge' => $code_challenge,
             'code_challenge_method' => 'S256',
             'state' => $state,
-            'consent_valid_till' => now()->addDays(35)->timestamp,
+            // 'consent_valid_till' => now()->addDays(35)->timestamp,
         ];
 
         return response()->json([
