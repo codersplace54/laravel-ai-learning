@@ -2567,35 +2567,35 @@ class UserServiceApplicationController extends Controller
                 $renewal_end   = Carbon::parse($cycle->fixed_renewal_end_date);
             } else {
 
-                if (!empty($cycle->renewal_target_days) && $expiry_date) {
-                    $target_days = (int)$cycle->renewal_target_days;
+                if (!empty($cycle->renewal_window_days) && $expiry_date) {
+                    $window_days = (int)$cycle->renewal_window_days;
                     
-                    if ($target_days >= 0) {
-                        $renewal_start = $expiry_date->copy()->subDays($target_days);
+                    if ($window_days >= 0) {
+                        $renewal_start = $expiry_date->copy()->subDays($window_days);
                         if ($renewal_end === null) {
                             $renewal_end = $expiry_date->copy();
                         }
                     } else {
-                        $renewal_start = $expiry_date->copy()->addDays(abs($target_days));
+                        $renewal_start = $expiry_date->copy()->addDays(abs($window_days));
                         if ($renewal_end === null) {
                             $renewal_end = $expiry_date->copy();
                         }
                     }
                 }
 
-                if (!empty($cycle->renewal_window_days) && $expiry_date) {
-                    $window_days = (int)$cycle->renewal_window_days;
+                if (!empty($cycle->renewal_target_days) && $expiry_date) {
+                    $target_days = (int)$cycle->renewal_target_days;
                     
-                    if ($window_days >= 0) {
+                    if ($target_days >= 0) {
                         if ($renewal_start === null) {
                             $renewal_start = $expiry_date->copy();
                         }
-                        $renewal_end = $expiry_date->copy()->addDays($window_days);
+                        $renewal_end = $expiry_date->copy()->addDays($target_days);
                     } else {
                         if ($renewal_start === null) {
                             $renewal_start = $expiry_date->copy();
                         }
-                        $renewal_end = $expiry_date->copy()->subDays(abs($window_days));
+                        $renewal_end = $expiry_date->copy()->subDays(abs($target_days));
                     }
                 }
             }
@@ -3205,8 +3205,8 @@ class UserServiceApplicationController extends Controller
                 'application_expiry_date' => $expiry_date ? $expiry_date->toDateString() : null,
                 'renewal_start_date' => optional($renewal_start)->toDateString(),
                 'renewal_end_date'   => optional($renewal_end)->toDateString(),
-                'pre_window_days'    => $cycle->renewal_target_days,
-                'post_window_days'   => $cycle->renewal_window_days,
+                'pre_window_days'    => $cycle->renewal_window_days,
+                'post_window_days'   => $cycle->renewal_target_days,
                 'late_fee_type'      => $cycle->late_fee_calculation_dynamic,
                 'late_fee_amount'    => $cycle->late_fee_fixed_amount,
                 'late_fee_applicable' => $cycle->late_fee_applicable,
@@ -3217,7 +3217,7 @@ class UserServiceApplicationController extends Controller
             'status' => 1,
             'message' => 'Renewal cycles fetched successfully',
             'service_id' => $service->id,
-            'service_name' => $service->service_name,
+            'service_name' => $service->service_title_or_description,
             'cycles' => $cycles
         ]);
     }
