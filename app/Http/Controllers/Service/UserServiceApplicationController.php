@@ -2528,7 +2528,7 @@ class UserServiceApplicationController extends Controller
     private function get_renewal_details($application)
     {
         $service = $application->service;
-        // dd("sda");
+        
         if (!empty($service->noc_validity) && !empty($application->NOC_expiry_date)) {
             $expiry_date = Carbon::parse($application->NOC_expiry_date);
         } elseif (!empty($service->fixed_expiry_date)) {
@@ -2536,7 +2536,6 @@ class UserServiceApplicationController extends Controller
         } else {
             $expiry_date = null;
         }
-        // dd($expiry_date);
         $today = Carbon::today();
         $renewal_data = [];
         $renewal_cycles = $service->renewalCycles;
@@ -2552,33 +2551,41 @@ class UserServiceApplicationController extends Controller
             } else {
 
                 if (!empty($cycle->renewal_target_days) && $expiry_date) {
-
-                    $renewal_start = $expiry_date->copy()->subDays((int)$cycle->renewal_target_days);
-                    $renewal_end   = $expiry_date->copy();
+                    $target_days = (int)$cycle->renewal_target_days;
+                    
+                    if ($target_days >= 0) {
+                        $renewal_start = $expiry_date->copy()->subDays($target_days);
+                        if ($renewal_end === null) {
+                            $renewal_end = $expiry_date->copy();
+                        }
+                    } else {
+                        $renewal_start = $expiry_date->copy()->addDays(abs($target_days));
+                        if ($renewal_end === null) {
+                            $renewal_end = $expiry_date->copy();
+                        }
+                    }
                 }
 
                 if (!empty($cycle->renewal_window_days) && $expiry_date) {
-
-                    $window_start = $expiry_date->copy();
-                    // dd($renewal_start);
-                    $window_end   = $expiry_date->copy()->addDays((int)$cycle->renewal_window_days);
-
-                    if ($renewal_start === null || $window_start < $renewal_start) {
-                        // dd("ASDF");
-                        $renewal_start = $window_start;
-                    }
-
-                    if ($renewal_end === null || $window_end > $renewal_end) {
-                        $renewal_end = $window_end;
+                    $window_days = (int)$cycle->renewal_window_days;
+                    
+                    if ($window_days >= 0) {
+                        if ($renewal_start === null) {
+                            $renewal_start = $expiry_date->copy();
+                        }
+                        $renewal_end = $expiry_date->copy()->addDays($window_days);
+                    } else {
+                        if ($renewal_start === null) {
+                            $renewal_start = $expiry_date->copy();
+                        }
+                        $renewal_end = $expiry_date->copy()->subDays(abs($window_days));
                     }
                 }
             }
             $can_renew = false;
             
-            // dd($renewal_start);
             if ($renewal_start && $renewal_end) {
                 if ($today->between($renewal_start, $renewal_end)) {
-                    // dd("Hello");
                     $can_renew = true;
                 }
             }
