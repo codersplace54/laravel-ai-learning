@@ -62,11 +62,11 @@ class DashboardController extends Controller
                 $user
             ) {
 
-                $total_application = UserServiceApplication::whereNotIn('status', ['expired', 'draft'])->count();
+                $total_application = UserServiceApplication::whereNotIn('status', ['expired', 'draft', 'saved'])->count();
 
                 $total_applications_for_this_department = ApplicationWorkflowAssignment::where('department_id', $department_id)
                     ->whereHas('application', function ($query) {
-                        $query->whereNotIn('status', ['expired', 'draft']);
+                        $query->whereNotIn('status', ['expired', 'draft', 'saved']);
                     })
                     ->distinct('application_id')
                     ->count('application_id');
@@ -86,7 +86,6 @@ class DashboardController extends Controller
                         'pending',
                         'under_review',
                         're_submitted',
-                        'saved',
                         'submitted',
                         'extra_payment',
                         'send_back'
@@ -207,7 +206,7 @@ class DashboardController extends Controller
                     ->withCount([
                         'applications as licenses_issued_count' => function ($q) {
                             $q->whereNotNull('NOC_certificate')
-                                ->where('status', 'approved');
+                                ->where('status', 'noc_issued');
                         }
                     ])->get(['id', 'service_title_or_description']);
 
@@ -393,16 +392,16 @@ class DashboardController extends Controller
 
                 $total_services_per_user = ServiceMaster::count();
 
-                $total_application = UserServiceApplication::whereNotIn('status', ['expired', 'draft'])->count();
+                $total_application = UserServiceApplication::whereNotIn('status', ['expired', 'draft', 'saved'])->count();
 
-                $total_applications_for_this_user = User::find($user_id)->applications()->whereNotIn('status', ['expired', 'draft'])->count();
+                $total_applications_for_this_user = User::find($user_id)->applications()->whereNotIn('status', ['expired', 'draft', 'saved'])->count();
 
                 $percentage_total_application = $total_applications_for_this_user > 0
                     ? min(100, round(($total_applications_for_this_user / $total_application) * 100, 2))
                     : 0;
 
                 $total_count_pending_application_in_user = UserServiceApplication::where('user_id', $user_id)
-                    ->whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review', 'saved', 'extra_payment', 'send_back'])
+                    ->whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review', 'extra_payment', 'send_back'])
                     ->count();
 
                 $total_count_approved_application_in_user = UserServiceApplication::where('user_id', $user_id)
@@ -430,6 +429,7 @@ class DashboardController extends Controller
                     ServiceMaster::withCount([
                         'applications as application_count' => fn($q) =>
                         $q->where('user_id', $user_id)
+                            ->whereNotIn('status', ['expired', 'draft', 'saved'])
                     ])
                     ->orderByRaw('application_count = 0')
                     ->orderByDesc('id')
@@ -553,11 +553,11 @@ class DashboardController extends Controller
 
             $total_services = ServiceMaster::count();
 
-            $total_applications = UserServiceApplication::whereNotIn('status', ['expired', 'draft'])->count();
+            $total_applications = UserServiceApplication::whereNotIn('status', ['expired', 'draft', 'saved'])->count();
 
             $percentage_total_application = 100;
 
-            $total_count_pending_application = UserServiceApplication::whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review', 'saved', 'extra_payment', 'send_back'])
+            $total_count_pending_application = UserServiceApplication::whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review', 'extra_payment', 'send_back'])
                 ->count();
 
             $total_count_approved_application = UserServiceApplication::whereIn('status', ['approved', 'noc_issued'])
@@ -729,7 +729,7 @@ class DashboardController extends Controller
                     ->when($to_date, fn($q) => $q->whereDate('created_at', '<=', $to_date));
             };
 
-            $total_applications = UserServiceApplication::whereNotIn('status', ['expired', 'draft'])->tap($date_filter)->count();
+            $total_applications = UserServiceApplication::whereNotIn('status', ['expired', 'draft','saved'])->tap($date_filter)->count();
 
             $new_users_last_30_days = User::where('created_at', '>=', Carbon::now()->subDays(30))
                 ->count();
@@ -737,10 +737,10 @@ class DashboardController extends Controller
 
             $total_queries = UserFeedback::count();
 
-            $noc_issued = UserServiceApplication::where('status', 'noc_issued')->count();
+            $noc_issued = UserServiceApplication::whereIN('status', ['noc_issued','approved'])->count();
 
 
-            $total_count_pending_application = UserServiceApplication::whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review', 'saved', 'extra_payment', 'send_back'])
+            $total_count_pending_application = UserServiceApplication::whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review', 'extra_payment', 'send_back'])
                 ->tap($date_filter)
                 ->count();
 
@@ -793,7 +793,7 @@ class DashboardController extends Controller
                     'service_masters.id as service_id',
                     'service_masters.service_title_or_description as service_name',
                     DB::raw('COUNT(usa.id) as application_count'),
-                    DB::raw('COUNT(CASE WHEN usa.status = "noc_issued" THEN 1 END) as noc_issued_count')
+                    DB::raw('COUNT(CASE WHEN usa.status IN ("noc_issued", "approved") THEN 1 END) as noc_issued_count')
                 )
                 ->groupBy('service_masters.id', 'service_masters.service_title_or_description')
                 ->orderByDesc('application_count')
@@ -846,7 +846,7 @@ class DashboardController extends Controller
             $monthly_application_status = UserServiceApplication::selectRaw('
         MONTH(created_at) as month,
         COUNT(*) as total_applications,
-        SUM(CASE WHEN status IN ("submitted","re_submitted","pending","under_review","saved","extra_payment","send_back") THEN 1 ELSE 0 END) as pending_count,
+        SUM(CASE WHEN status IN ("submitted","re_submitted","pending","under_review","extra_payment","send_back") THEN 1 ELSE 0 END) as pending_count,
         SUM(CASE WHEN status = "rejected" THEN 1 ELSE 0 END) as rejected_count
     ')
                 ->whereYear('created_at', $year)

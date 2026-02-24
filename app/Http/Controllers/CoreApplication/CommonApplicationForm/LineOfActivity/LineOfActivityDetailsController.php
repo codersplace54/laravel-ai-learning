@@ -28,20 +28,20 @@ class LineOfActivityDetailsController extends Controller
 
             if ($request->save_data != 1) {
                 $request->validate([
-                    'thrust_sector' => 'required|in:Agri & Horticultural Produce,Bamboo,Gas,Hospital/Nursing Home,Hotel,Rubber,Tea,Tourism Promoting Activites(Water-Sports, Ropeways, Adventure and Leisure Sports)',
+                    'thrust_sector' => 'nullable|in:Agri & Horticultural Produce,Bamboo,Gas,Hospital/Nursing Home,Hotel,Rubber,Tea,Tourism Promoting Activites(Water-Sports, Ropeways, Adventure and Leisure Sports)',
 
-                    'raw_materials' => 'required|array',
+                    'raw_materials' => 'nullable|array',
                     'raw_materials.*.id' => 'nullable|integer|exists:raw_material_to_be_used,id',
-                    'raw_materials.*.raw_material_name' => 'required|string',
-                    'raw_materials.*.raw_material_quantity_per_month' => 'required|string',
-                    'raw_materials.*.raw_material_unit' => 'required|in:Liters Numbers Per Month,Kilo Liters Number Per Month,Meter Numbers Per Month,Square Meter Numbers Per Month,Cubic Meter Numbers Per Month,Foot Numbers Per Month,Square Foot Numbers Per Month,Tonnes Numbers Per Month,Metric Tonnes Numbers Per Month,Million Unit (MU)',
+                    'raw_materials.*.raw_material_name' => 'nullable|string',
+                    'raw_materials.*.raw_material_quantity_per_month' => 'nullable|string',
+                    'raw_materials.*.raw_material_unit' => 'nullable|in:Liters Numbers Per Month,Kilo Liters Number Per Month,Meter Numbers Per Month,Square Meter Numbers Per Month,Cubic Meter Numbers Per Month,Foot Numbers Per Month,Square Foot Numbers Per Month,Tonnes Numbers Per Month,Metric Tonnes Numbers Per Month,Million Unit (MU)',
 
-                    'products' => 'required|array',
+                    'products' => 'nullable|array',
                     'products.*.id' => 'nullable|integer|exists:list_of_products_or_by_products,id',
-                    'products.*.product_name' => 'required|string',
-                    'products.*.product_production_capacity_per_month' => 'required|string',
-                    'products.*.product_average_production_per_month' => 'required|string',
-                    'products.*.unit' => 'required|in:Liters Numbers Per Month,Kilo Liters Number Per Month,Meter Numbers Per Month,Square Meter Numbers Per Month,Cubic Meter Numbers Per Month,Foot Numbers Per Month,Square Foot Numbers Per Month,Tonnes Numbers Per Month,Metric Tonnes Numbers Per Month,Million Unit (MU)',
+                    'products.*.product_name' => 'nullable|string',
+                    'products.*.product_production_capacity_per_month' => 'nullable|string',
+                    'products.*.product_average_production_per_month' => 'nullable|string',
+                    'products.*.unit' => 'nullable|in:Liters Numbers Per Month,Kilo Liters Number Per Month,Meter Numbers Per Month,Square Meter Numbers Per Month,Cubic Meter Numbers Per Month,Foot Numbers Per Month,Square Foot Numbers Per Month,Tonnes Numbers Per Month,Metric Tonnes Numbers Per Month,Million Unit (MU)',
                 ]);
             }
 
@@ -61,49 +61,54 @@ class LineOfActivityDetailsController extends Controller
             }
 
             $raw_material_to_be_used = [];
-            foreach ($request->raw_materials as $material) {
-                if (!empty($material['id'])) {
-                    $raw_material = RawMaterialToBeUsed::where('id', $material['id'])->where('user_id', $user->id)->firstOrFail();
+            if (!empty($request->raw_materials)) {
+                foreach ($request->raw_materials as $material) {
+                    if (!empty($material['id'])) {
+                        $raw_material = RawMaterialToBeUsed::where('id', $material['id'])->where('user_id', $user->id)->firstOrFail();
 
-                    $raw_material->update([
-                        'raw_material_name'               => $material['raw_material_name'],
-                        'raw_material_quantity_per_month' => $material['raw_material_quantity_per_month'],
-                        'raw_material_unit'               => $material['raw_material_unit'],
-                    ]);
-                } else {
-                    $raw_material = RawMaterialToBeUsed::create([
-                        'user_id'                          => $user->id,
-                        'raw_material_name'                => $material['raw_material_name'],
-                        'raw_material_quantity_per_month'  => $material['raw_material_quantity_per_month'],
-                        'raw_material_unit'                => $material['raw_material_unit'],
-                    ]);
+                        $raw_material->update([
+                            'raw_material_name'               => $material['raw_material_name'],
+                            'raw_material_quantity_per_month' => $material['raw_material_quantity_per_month'],
+                            'raw_material_unit'               => $material['raw_material_unit'],
+                        ]);
+                    } else {
+                        $raw_material = RawMaterialToBeUsed::create([
+                            'user_id'                          => $user->id,
+                            'raw_material_name'                => $material['raw_material_name'],
+                            'raw_material_quantity_per_month'  => $material['raw_material_quantity_per_month'],
+                            'raw_material_unit'                => $material['raw_material_unit'],
+                        ]);
+                    }
+
+                    $raw_material_to_be_used[] = $raw_material->toArray();
                 }
-
-                $raw_material_to_be_used[] = $raw_material->toArray();
             }
 
             $list_of_products_or_by_products = [];
-            foreach ($request->products as $product) {
-                if (!empty($product['id'])) {
-                    $list_of_products = ListOfProductsOrByProduct::where('id', $product['id'])->where('user_id', $user->id)->firstOrFail();
+            if (!empty($request->products)) {
+                $list_of_products_or_by_products = [];
+                foreach ($request->products as $product) {
+                    if (!empty($product['id'])) {
+                        $list_of_products = ListOfProductsOrByProduct::where('id', $product['id'])->where('user_id', $user->id)->firstOrFail();
 
-                    $list_of_products->update([
-                        'product_name'                          => $product['product_name'],
-                        'product_production_capacity_per_month' => $product['product_production_capacity_per_month'],
-                        'product_average_production_per_month'  => $product['product_average_production_per_month'],
-                        'unit'                                  => $product['unit'],
-                    ]);
-                } else {
-                    $list_of_products = ListOfProductsOrByProduct::create([
-                        'user_id'                                => $user->id,
-                        'product_name'                           => $product['product_name'],
-                        'product_production_capacity_per_month'  => $product['product_production_capacity_per_month'],
-                        'product_average_production_per_month'   => $product['product_average_production_per_month'],
-                        'unit'                                   => $product['unit'],
-                    ]);
+                        $list_of_products->update([
+                            'product_name'                          => $product['product_name'],
+                            'product_production_capacity_per_month' => $product['product_production_capacity_per_month'],
+                            'product_average_production_per_month'  => $product['product_average_production_per_month'],
+                            'unit'                                  => $product['unit'],
+                        ]);
+                    } else {
+                        $list_of_products = ListOfProductsOrByProduct::create([
+                            'user_id'                                => $user->id,
+                            'product_name'                           => $product['product_name'],
+                            'product_production_capacity_per_month'  => $product['product_production_capacity_per_month'],
+                            'product_average_production_per_month'   => $product['product_average_production_per_month'],
+                            'unit'                                   => $product['unit'],
+                        ]);
+                    }
+
+                    $list_of_products_or_by_products[] = $list_of_products->toArray();
                 }
-
-                $list_of_products_or_by_products[] = $list_of_products->toArray();
             }
 
             DB::commit();

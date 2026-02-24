@@ -2731,16 +2731,19 @@ class UserServiceApplicationController extends Controller
             $final_fee = $minimum_fee;
         }
 
-        $late_fee = $this->calculate_late_fee($application, $cycle);
-        $final_fee += $late_fee;
+        $late_fee = $this->calculate_late_fee($application, $cycle, $final_fee);
+        $total_fee = $final_fee + $late_fee;
 
         return [
-            'renewal_fee'        => round($final_fee, 2)
+            'base_fee'         => round($final_fee, 2),
+            'late_fee'          => round($late_fee, 2),
+            'renewal_fee'       => round($total_fee, 2)
         ];
     }
 
-    public function calculate_late_fee($application, $renewal_cycle)
+    public function calculate_late_fee($application, $renewal_cycle, $final_fee)
     {
+
         if (!$renewal_cycle) {
             return 0;
         }
@@ -2798,27 +2801,32 @@ class UserServiceApplicationController extends Controller
         $days_late = $today->diffInDays($late_fee_start_date);
         $months_late = $today->diffInMonths($late_fee_start_date);
 
-        $base_fee = $renewal_cycle->late_fee_fixed_amount ?? 0;
+        $fixed_fee  = $renewal_cycle->late_fee_fixed_amount ?? 0;
+        $multiplier = $renewal_cycle->late_fee_calculated_amount ?? 0;
 
-        if (!empty($renewal_cycle->late_fee_calculated_amount)) {
-            $base_fee *= (float) $renewal_cycle->late_fee_calculated_amount;
+        $late_component = 0;
+
+        if ($multiplier > 0) {
+            $late_component += ($final_fee * $multiplier);
         }
+
+        $late_component += $fixed_fee;
 
         switch ($renewal_cycle->late_fee_calculation_dynamic) {
 
             case 'fixed':
-                return $base_fee;
+                return $late_component;
 
             case 'percentage':
-                $percentage = $base_fee;
-                return ($base_fee * $percentage) / 100;
+                $percentage = $late_component;
+                return ($late_component * $percentage) / 100;
 
             case 'per_day':
-                return $days_late * $base_fee;
+                return $days_late * $late_component;
 
             case 'per_month':
                 $months_late = max($months_late, 1);
-                return $months_late * $base_fee;
+                return $months_late * $late_component;
         }
 
         return 0;

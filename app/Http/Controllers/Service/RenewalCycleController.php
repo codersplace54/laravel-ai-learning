@@ -254,7 +254,18 @@ class RenewalCycleController extends Controller
                 'service_id' => 'required|integer|exists:service_masters,id',
             ]);
 
-            $renewal_cycle = RenewalCycle::where('service_id', $request->service_id)->get();
+            $renewal_cycle = RenewalCycle::with('service:id,service_title_or_description')
+                ->where('service_id', $request->service_id)
+                ->get()
+                ->map(function ($cycle) {
+
+                    $cycle->service_title_or_description =
+                        $cycle->service->service_title_or_description ?? null;
+
+                    unset($cycle->service);
+
+                    return $cycle;
+                });
 
             return response()->json([
                 'status' => 1,

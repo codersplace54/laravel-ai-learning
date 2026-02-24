@@ -40,4 +40,9 @@ class RenewalCycle extends Model
     {
         return $this->hasMany(ServiceFeeRule::class, 'renewal_cycle_id', 'id');
     }
+
+    public function service()
+    {
+        return $this->belongsTo(ServiceMaster::class, 'service_id');
+    }
 }
