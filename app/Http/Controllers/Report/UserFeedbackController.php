@@ -151,7 +151,7 @@ class UserFeedbackController extends Controller
                 return [
                     'id'          => $feedback->id,
                     'user_name'   => $feedback->user?->user_name,
-                    'created_at'  => optional($feedback->created_at)->format('F j, Y \a\t h:i A'),
+                    'created_at'  => optional($feedback->created_at)->format('d/m/Y'),
                     'rating'      => $feedback->satisfaction,
                     'feedback'    => $feedback->feedback,
                     'suggestions' => $feedback->suggestions,
