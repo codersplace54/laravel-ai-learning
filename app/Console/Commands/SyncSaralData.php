@@ -30,9 +30,9 @@ class SyncSaralData extends Command
         'in_progress' => 'H',
         'rejected' => 'R',
         'saved' => 'U',
-        'send_back' => 'X', 
-        'noc_issued' => 'A', 
-        
+        'send_back' => 'X',
+        'noc_issued' => 'A',
+
     ];
 
 
@@ -45,6 +45,8 @@ class SyncSaralData extends Command
                 $q->where('department_id', 6);
             })
             ->whereIn('service_id', array_keys($this->service_code_mapping))
+            ->whereNotIn('status', ['saved', 'draft'])
+            ->orderBy('id', 'desc')
             ->limit(10)
             ->get();
 
@@ -88,8 +90,8 @@ class SyncSaralData extends Command
                 'status'  => $response->status(),
                 'ok'      => $response->successful(),
                 'headers' => $response->headers(),
-                'body'    => $response->body(),          
-                'json'    => $response->json(),        
+                'body'    => $response->body(),
+                'json'    => $response->json(),
             ]);
 
             $this->info("Successfully pushed {$applications->count()} applications to Saral.");
@@ -212,5 +214,4 @@ class SyncSaralData extends Command
 
         return [$location_name, $location_type];
     }
-
 }
