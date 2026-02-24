@@ -43,16 +43,18 @@ class UserIncentiveApplicationController extends Controller
                 'form_answers_json'  => 'required_unless:save_data,1',
             ]);
 
-            $errors = $this->validate_required_questions($request);
+            if (!$is_save_only) {
+                $errors = $this->validate_required_questions($request);
 
-            $this->validate_proforma_file_inputs($request);
+                $this->validate_proforma_file_inputs($request);
 
-            if (!empty($errors)) {
-                return response()->json([
-                    'status'  => 0,
-                    'message' => 'Validation failed.',
-                    'errors'  => $errors,
-                ], 422);
+                if (!empty($errors)) {
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'Validation failed.',
+                        'errors'  => $errors,
+                    ], 422);
+                }
             }
 
             DB::beginTransaction();

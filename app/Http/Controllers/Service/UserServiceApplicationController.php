@@ -1491,7 +1491,7 @@ class UserServiceApplicationController extends Controller
                         'remarks'         => $history->remarks,
                         'status_file'     => $history->status_file ? asset('storage/' . $history->status_file) : null,
                         'action_taken_at' => $history->action_taken_at,
-                        'action_taken_by' => $history->actionTaker->authorized_person_name,
+                        'action_taken_by' => optional($history->actionTaker)->authorized_person_name,
                     ];
                 });
 
@@ -1507,7 +1507,7 @@ class UserServiceApplicationController extends Controller
                         'remarks'         => $assignment->remarks,
                         'status_file'     => $assignment->status_file ? asset('storage/' . $assignment->status_file) : null,
                         'action_taken_at' => $assignment->action_taken_at,
-                        'action_taken_by' => $assignment->actionTaker->authorized_person_name,
+                        'action_taken_by' => optional($assignment->actionTaker)->authorized_person_name,
                     ];
                 });
 
@@ -3373,7 +3373,7 @@ class UserServiceApplicationController extends Controller
                         'remarks'         => $history->remarks,
                         'status_file'     => $history->status_file ? asset('storage/' . $history->status_file) : null,
                         'action_taken_at' => $history->action_taken_at,
-                        'action_taken_by' => $history->actionTaker->authorized_person_name,
+                        'action_taken_by' => optional($history->actionTaker)->authorized_person_name,
                     ];
                 });
 

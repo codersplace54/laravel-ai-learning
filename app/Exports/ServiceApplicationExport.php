@@ -111,7 +111,7 @@ class ServiceApplicationExport implements FromCollection, WithHeadings, WithMapp
                 'step_type' => $workflow->step_type,
                 'department' => $workflow->department->name ?? null,
                 'hierarchy_level' => $workflow->hierarchy_level,
-                'action_taken_by' => $workflow->actionTaker->authorized_person_name ?? null,
+                'action_taken_by' => optional($workflow->actionTaker)->authorized_person_name ?? null,
                 'action_taken_at' => $workflow->action_taken_at,
                 'status' => $workflow->status,
                 'remarks' => $workflow->remarks,

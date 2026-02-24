@@ -479,7 +479,7 @@ class ServiceController extends Controller
                 $search = $request->search;
                 $data->where(function ($q) use ($search) {
 
-                        $q->where('applicationId', 'like', "%{$search}%")
+                    $q->where('applicationId', 'like', "%{$search}%")
 
                         ->orWhereHas('user', function ($u) use ($search) {
                             $u->where('authorized_person_name', 'like', "%{$search}%")
@@ -680,18 +680,20 @@ class ServiceController extends Controller
                 'total_fee'         => $application->total_fee ?? 0,
                 'payment_status'   => $application->payment_status,
                 'workflow' => $application->workflow->map(function ($flow) use ($step_files) {
-
                     $history = $step_files->first(function ($h) use ($flow) {
                         return $h->step_number == $flow->step_number
                             && $h->status === $flow->status;
                     });
+                    $actionTaker = $flow->actionTaker;
 
                     return [
                         'step_number'     => $flow->step_number,
                         'step_type'       => $flow->step_type,
                         'department'      => $flow->department?->name,
                         'status'          => $flow->status,
-                        'action_taken_by' => $flow->actionTaker?->authorized_person_name ? $flow->actionTaker->authorized_person_name . ' (' . $flow->actionTaker->email_id . ')' : null,
+                        'action_taken_by' => $actionTaker
+                            ? "{$actionTaker->authorized_person_name} ({$actionTaker->email_id})"
+                            : null,
                         'action_taken_at' => $flow->action_taken_at,
                         'hierarchy_level'     => $flow->hierarchy_level,
                         'remarks'         => $flow->remarks,
@@ -1119,10 +1121,13 @@ class ServiceController extends Controller
             $data = [];
 
             foreach ($history as $entry) {
+                $actionTaker = $entry->actionTaker;
                 $data[] = [
                     'step_number'    => $entry->step_number,
                     'department'     => $entry->department->name,
-                    'action_taken_by' => $entry->actionTaker ? $entry->actionTaker->authorized_person_name . ' (' . $entry->actionTaker->email_id . ')' : null,
+                    'action_taken_by' => $actionTaker
+                        ? "{$actionTaker->authorized_person_name} ({$actionTaker->email_id})"
+                        : null,
                     'status'         => $entry->status,
                     'hierarchy_level' => $entry->hierarchy_level,
                     'remarks'        => $entry->remarks,
