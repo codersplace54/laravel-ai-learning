@@ -198,8 +198,9 @@ class EntityLockerController extends Controller
             $count++;
 
             $data = UserDocument::updateOrCreate(
-                ['user_id' => $user_id, 'document_id' => $doc['uri']],
+                ['document_id' => $doc['uri']],
                 [
+                    'user_id' => $user_id,
                     'document_type' => $type,
                     'document_name' => $doc['name'] ?? '',
                     'issuer' => $doc['issuer'] ?? null,

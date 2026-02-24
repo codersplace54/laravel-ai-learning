@@ -121,14 +121,14 @@ class SyncSaralData extends Command
         $last_workflow_history = $application->workflowHistory()->orderBy('id', 'desc')->first();
         $last_workflow_assignment = $application->workflow()->orderBy('id', 'desc')->first();
 
-        $last_status_description = $last_workflow_history->status ?? 'NA';
-        $last_action_date = $last_workflow_history->action_taken_at ?? $application->application_date;
-        $last_action_by = optional($last_workflow_history->actionTaker)->authorized_person_name ?? 'System';
-        $remarks_eng = $last_workflow_history->remarks ?? 'NA';
-        $level = $last_workflow_assignment->step_number ?? null;
-        $file_with_user = $last_workflow_assignment->hierarchy_level ?? 'NA';
+        $last_status_description = optional($last_workflow_history)->status ?? 'NA';
+        $last_action_date = optional($last_workflow_history)->action_taken_at ?? $application->application_date;
+        $last_action_by = optional(optional($last_workflow_history)->actionTaker)->authorized_person_name ?? 'System';
+        $remarks_eng = optional($last_workflow_history)->remarks ?? 'NA';
+        $level = optional($last_workflow_assignment)->step_number ?? null;
+        $file_with_user = optional($last_workflow_assignment)->hierarchy_level ?? 'NA';
 
-        $last_action = $this->status_mapping[$last_workflow_history->status ?? 'pending'] ?? 'E';
+        $last_action = $this->status_mapping[optional($last_workflow_history)->status ?? 'pending'] ?? 'E';
 
         [$location_name, $location_type] = $this->get_location_details($file_with_user, $user);
 
@@ -137,14 +137,14 @@ class SyncSaralData extends Command
             'ApplicationCode' => '04',
             'ServiceCode' => $service_code,
             'SubserviceCode' => '',
-            'FileReferenceNo' => $application->applicationId,
-            'ReceiptDate' => $this->format_datetime($application->application_date),
-            'Name' => $this->sanitize_text($user->name_of_enterprise),
+            'FileReferenceNo' => $application->applicationId ?? null,
+            'ReceiptDate' => $this->format_datetime($application->application_date ?? null),
+            'Name' => $this->sanitize_text($user->name_of_enterprise ?? null),
             'Father_HusbandName' => '',
             'gender' => '',
             'Address' => $this->sanitize_text($user->registered_enterprise_address),
             'MobileNo' => $user->mobile_no,
-            'email_id' => $user->email_id ?? '',
+            'email_id' => $user->email_id ?? null,
             'RTSDueDate' => '',
             'DistrictCode' => $user->district_id,
             'LocationCode' => $user->district_id,
@@ -193,22 +193,28 @@ class SyncSaralData extends Command
             $location_name = 'Tripura';
             $location_type = 'STA';
         } elseif (in_array($hierarchy_level, ['district1', 'district2', 'district3'])) {
-            $district = DB::table('tripura_master_data')
-                ->where('district_code', $user->district_id)
-                ->value('district_name');
-            $location_name = $district ?? 'NA';
+            if ($user->district_id) {
+                $district = DB::table('tripura_master_data')
+                    ->where('district_code', $user->district_id)
+                    ->value('district_name');
+                $location_name = $district ?? 'NA';
+            }
             $location_type = 'DIS';
         } elseif (in_array($hierarchy_level, ['subdivision1', 'subdivision2', 'subdivision3'])) {
-            $subdivision = DB::table('tripura_master_data')
-                ->where('sub_lgd_code', $user->subdivision_id)
-                ->value('sub_division');
-            $location_name = $subdivision ?? 'NA';
+            if ($user->subdivision_id) {
+                $subdivision = DB::table('tripura_master_data')
+                    ->where('sub_lgd_code', $user->subdivision_id)
+                    ->value('sub_division');
+                $location_name = $subdivision ?? 'NA';
+            }
             $location_type = 'SDE';
         } elseif ($hierarchy_level === 'block') {
-            $block = DB::table('tripura_master_data')
-                ->where('ulb_lgd_code', $user->ulb_id)
-                ->value('ulb_name');
-            $location_name = $block ?? 'NA';
+            if ($user->ulb_id) {
+                $block = DB::table('tripura_master_data')
+                    ->where('ulb_lgd_code', $user->ulb_id)
+                    ->value('ulb_name');
+                $location_name = $block ?? 'NA';
+            }
             $location_type = 'BLK';
         }
 
