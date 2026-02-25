@@ -96,8 +96,26 @@ class EntityLockerController extends Controller
 
     public function user_documents(Request $request)
     {
-        $user_id = Auth::user()->id;
+        $auth_user = Auth::user();
 
+        $request->validate([
+            'user_id' => 'nullable|integer|exists:users,id',
+        ]);
+
+        $user_id = Auth::user()->id;
+        if ($request->filled('user_id')) {
+
+            if (!in_array($auth_user->user_type, ['admin', 'department'])) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Unauthorized access.'
+                ], 403);
+            }
+
+            $user_id = $request->user_id;
+        } else {
+            $user_id = $auth_user->id;
+        }
         $docs = UserDocument::where('user_id', $user_id)
             ->orderBy('created_at', 'desc')
             ->get()
@@ -108,7 +126,7 @@ class EntityLockerController extends Controller
                     'document_name' => $doc->document_name,
                     'issuer' => $doc->issuer,
                     'issued_date' => $doc->issued_date,
-                    'file_path' => asset('storage/'.$doc->local_path),
+                    'file_path' => asset('storage/' . $doc->local_path),
                     'content_type' => $doc->content_type,
                     'downloaded_at' => $doc->downloaded_at,
                     'created_at' => $doc->created_at,
@@ -198,9 +216,8 @@ class EntityLockerController extends Controller
             $count++;
 
             $data = UserDocument::updateOrCreate(
-                ['document_id' => $doc['uri']],
+                ['user_id' => $user_id, 'document_id' => $doc['uri']],
                 [
-                    'user_id' => $user_id,
                     'document_type' => $type,
                     'document_name' => $doc['name'] ?? '',
                     'issuer' => $doc['issuer'] ?? null,

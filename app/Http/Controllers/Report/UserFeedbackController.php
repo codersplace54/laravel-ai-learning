@@ -123,8 +123,23 @@ class UserFeedbackController extends Controller
         ], 200);
     }
 
-
     public function user_feedback_details(Request $request)
+    {
+        
+        $request->validate([
+            'id' => 'required|integer|exists:user_feedbacks,id',
+        ]);
+
+        $data = UserFeedback::where('id',$request->id)->first();
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'User feedback details fetched successfully.',
+            'data'    => $data,
+        ], 200);
+    }
+
+    public function department_feedback_list(Request $request)
     {
         try {
             $request->validate([
