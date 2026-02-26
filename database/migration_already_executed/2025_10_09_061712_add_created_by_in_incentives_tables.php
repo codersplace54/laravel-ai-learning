@@ -8,15 +8,15 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('schemes', function (Blueprint $table) {
-            $table->string('created_by')->nullable();
-            $table->string('updated_by')->nullable();
-        });
+        // Schema::table('schemes', function (Blueprint $table) {
+        //     $table->string('created_by')->nullable();
+        //     $table->string('updated_by')->nullable();
+        // });
 
-        Schema::table('proformas', function (Blueprint $table) {
-            $table->string('created_by')->nullable();
-            $table->string('updated_by')->nullable();
-        });
+        // Schema::table('proformas', function (Blueprint $table) {
+        //     $table->string('created_by')->nullable();
+        //     $table->string('updated_by')->nullable();
+        // });
 
         Schema::table('proforma_questionnaires', function (Blueprint $table) {
             $table->string('created_by')->nullable();
