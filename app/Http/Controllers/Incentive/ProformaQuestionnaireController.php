@@ -36,7 +36,7 @@ class ProformaQuestionnaireController extends Controller
                 'claim_per_unit'        => 'nullable|numeric|min:0',
                 'claim_percentage'      => 'nullable|numeric|min:0|max:100',
                 'upload_rule'           => 'nullable',
-                'upload_rule.max_size_mb'     => 'nullable|integer|max:5',
+                'upload_rule.max_size_mb'     => 'nullable|integer|max:25',
                 'sample_format'         => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
             ]);
 

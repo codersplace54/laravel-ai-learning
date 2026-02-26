@@ -596,17 +596,28 @@ class ServiceController extends Controller
                 ], 404);
             }
 
+            $auth_user = Auth::user();
+            
             $current_step = ApplicationWorkflowAssignment::where('application_id', $application->id)
                 ->orderByDesc('id')
                 ->first();
 
-            $max_step = ServiceApprovalFlow::where('service_id', $application->service_id)
+            $max_step_number = ServiceApprovalFlow::where('service_id', $application->service_id)
                 ->max('step_number');
+
+            $final_step = ServiceApprovalFlow::where('service_id', $application->service_id)
+                ->where('step_number', $max_step_number)
+                ->first();
+
+            $is_eligible_for_certificate_action = false;
+            if ($auth_user->user_type == 'department' && $final_step && $final_step->department_id == $auth_user->department_user->department_id) {
+                $is_eligible_for_certificate_action = true;
+            }
 
             $is_just_before_final_step = false;
             $is_finally_approved = false;
 
-            if ($current_step && $current_step->step_number == $max_step) {
+            if ($current_step && $current_step->step_number == $max_step_number) {
                 $is_just_before_final_step = true;
                 if ($current_step->status == 'approved') {
                     $is_finally_approved = true;
@@ -728,6 +739,7 @@ class ServiceController extends Controller
                 }),
                 'just_before_final_step'  => $is_just_before_final_step,
                 'is_finally_approved'  => $is_finally_approved,
+                'is_eligible_for_certificate_action' => $is_eligible_for_certificate_action,
                 'history_data'    => $history_data,
                 'is_certificate_generated'    => $application->NOC_certificate ? true : false,
                 'created_at'    => $application->created_at,

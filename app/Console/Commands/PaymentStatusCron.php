@@ -21,7 +21,7 @@ class PaymentStatusCron extends Command
     {
         $this->info('Payment status cron started');
 
-        $orders = PaymentOrder::where('payment_status', 'initiated')
+        $orders = PaymentOrder::whereIn('payment_status', ['initiated', 'pending'])
             ->where('payment_amount', '>', 0)
             ->where('created_at', '>=', Carbon::now()->subDays(3))
             ->orderBy('id', 'desc')
