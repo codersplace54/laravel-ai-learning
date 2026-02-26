@@ -22,10 +22,13 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use setasign\Fpdi\Fpdi;
 use App\Services\SmsService;
 use App\Jobs\SendWhatsAppNotification;
+use App\Models\PaymentOrder;
 use Carbon\Carbon;
+use App\Traits\PaymentMapTrait;
 
 class ServiceController extends Controller
 {
+    use PaymentMapTrait;
     public function get_total_services()
     {
 
@@ -524,13 +527,16 @@ class ServiceController extends Controller
             }
 
             $data = $data->orderByDesc('id');
+            $applications_data = $data->get();
+            $application_ids = $applications_data->pluck('id')->toArray();
+            $payment_map = $this->payment_map_for_applications($application_ids);
 
-            $applications = $data->get()->map(function ($application) {
+            $applications = $applications_data->map(function ($application) use ($payment_map) {
                 return [
                     'application_id'      => $application->id,
                     'application_number'  => $application->applicationId,
                     'service_name'        => $application->service->service_title_or_description,
-                    'applicant_name'      => $application->user->authorized_person_name,
+                    'applicant_name'      => optional($application->user)->authorized_person_name,
                     'applicant_phone'     => $application->user->mobile_no,
                     'status'              => $application->status,
                     'submission_date'     => $application->application_date,
@@ -548,7 +554,8 @@ class ServiceController extends Controller
                     'ulb_name' => $application->user->ulb->ulb_name ?? null,
                     'ward_code'   => $application->user->ward->gp_vc_ward_lgd_code ?? null,
                     'ward_name' => $application->user->ward->name_of_gp_vc_or_ward ?? null,
-                    'hierarchy_level'     => $application->latestWorkflow->hierarchy_level ?? null
+                    'hierarchy_level'     => $application->latestWorkflow->hierarchy_level ?? null,
+                    'payment_details'     => $payment_map[$application->id] ?? [],
                 ];
             });
 
@@ -660,6 +667,23 @@ class ServiceController extends Controller
                 'land_allotment_approved_amount' => $is_land_allotment ? $application->total_fee : null
             ];
 
+            $payment_details = PaymentOrder::whereJsonContains('application_id', $application->id)
+                ->whereNot('payment_status',"initiated")
+                ->get()
+                ->map(function ($p) {
+                    return [
+                        'id'               => $p->id,
+                        'payment_amount'   => $p->payment_amount,
+                        'payment_status'   => $p->payment_status,
+                        'gateway'          => $p->gateway,
+                        'gateway_order_id' => $p->gateway_order_id,
+                        'transaction_id'   => $p->transaction_id,
+                        'GRN_number'       => $p->GRN_number,
+                        'payment_datetime' => $p->payment_datetime,
+                        'created_at'       => $p->created_at,
+                    ];
+                });
+
             $response = [
                 'application_id'  => $application->id,
                 'application_number'  => $application->applicationId,
@@ -710,7 +734,7 @@ class ServiceController extends Controller
                 'updated_at'    => $application->updated_at,
                 'license_details' => $license_details,
                 'land_allotment_details' => $land_allotment_details,
-                'GRN_number' => $application->GRN_number,
+                'payment_details' => $payment_details,
             ];
 
             return response()->json([

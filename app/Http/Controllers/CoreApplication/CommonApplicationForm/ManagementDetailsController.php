@@ -12,10 +12,11 @@ use App\Models\ManagementDetails;
 use App\Models\PartnerSharePresidentOrSecretaryDetail;
 use App\Models\BoardOfDirector;
 use App\Models\ChiefAdministrativeHead;
+use App\Models\EnterpriseDetail;
 
 class ManagementDetailsController extends Controller
 {
-
+    
     public function management_details_store_or_update(Request $request)
     {
 
@@ -28,9 +29,11 @@ class ManagementDetailsController extends Controller
             }
 
             $management_details = ManagementDetails::where('user_id', $user->id)->first();
+            $enterprise_detail = EnterpriseDetail::where('user_id', $user->id)->first();
+            $constitution = $enterprise_detail ? $enterprise_detail->constitution_of_enterprise : null;
 
             if ($request->save_data != 1) {
-                $request->validate([
+                $validationRules = [
                     'owner_details_name' => 'required|string|max:255',
                     'owner_details_fathers_name' => 'required|string|max:255',
                     'owner_details_residential_address' => 'required|string',
@@ -89,36 +92,64 @@ class ManagementDetailsController extends Controller
                         'max:2048'
                     ],
 
-                    'partner_details' => 'required|array',
-                    'partner_details.*.name' => 'required|string|max:255',
-                    'partner_details.*.fathers_name' => 'required|string|max:255',
-                    'partner_details.*.age' => 'nullable|integer',
-                    'partner_details.*.sex' => 'nullable|string',
-                    'partner_details.*.social_status' => 'nullable|string',
-                    'partner_details.*.profession' => 'nullable|string',
-                    'partner_details.*.permanent_address' => 'nullable|string',
-                    'partner_details.*.mobile_no' => 'required|string',
-                    'partner_details.*.date_of_birth' => 'required|date',
-                    'partner_details.*.date_of_joining' => 'nullable|date',
-                    'partner_details.*.id_proof_doc' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
-                    'partner_details.*.signature_image' => 'nullable|file|mimes:jpg,jpeg,png|max:2048',
+                ];
 
-                    'board_of_directors' => 'nullable|array',
-                    'board_of_directors.*.name' => 'required|string|max:255',
-                    'board_of_directors.*.permanent_address' => 'nullable|string|max:255',
-                    'board_of_directors.*.mobile_number' => 'required|string',
+                if (in_array($constitution, ['Society', 'Partnership', 'LLP'])) {
+                    $validationRules['partner_details'] = 'required|array';
+                    $validationRules['partner_details.*.name'] = 'required|string|max:255';
+                    $validationRules['partner_details.*.fathers_name'] = 'required|string|max:255';
+                    $validationRules['partner_details.*.age'] = 'nullable|integer';
+                    $validationRules['partner_details.*.sex'] = 'nullable|string';
+                    $validationRules['partner_details.*.social_status'] = 'nullable|string';
+                    $validationRules['partner_details.*.profession'] = 'nullable|string';
+                    $validationRules['partner_details.*.permanent_address'] = 'nullable|string';
+                    $validationRules['partner_details.*.mobile_no'] = 'required|string';
+                    $validationRules['partner_details.*.date_of_birth'] = 'required|date';
+                    $validationRules['partner_details.*.date_of_joining'] = 'nullable|date';
+                    $validationRules['partner_details.*.id_proof_doc'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048';
+                    $validationRules['partner_details.*.signature_image'] = 'nullable|file|mimes:jpg,jpeg,png|max:2048';
+                } else {
+                    $validationRules['partner_details'] = 'nullable|array';
+                    $validationRules['partner_details.*.name'] = 'nullable|string|max:255';
+                    $validationRules['partner_details.*.fathers_name'] = 'nullable|string|max:255';
+                    $validationRules['partner_details.*.age'] = 'nullable|integer';
+                    $validationRules['partner_details.*.sex'] = 'nullable|string';
+                    $validationRules['partner_details.*.social_status'] = 'nullable|string';
+                    $validationRules['partner_details.*.profession'] = 'nullable|string';
+                    $validationRules['partner_details.*.permanent_address'] = 'nullable|string';
+                    $validationRules['partner_details.*.mobile_no'] = 'nullable|string';
+                    $validationRules['partner_details.*.date_of_birth'] = 'nullable|date';
+                    $validationRules['partner_details.*.date_of_joining'] = 'nullable|date';
+                    $validationRules['partner_details.*.id_proof_doc'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048';
+                    $validationRules['partner_details.*.signature_image'] = 'nullable|file|mimes:jpg,jpeg,png|max:2048';
+                }
 
-                    'chief_administrative_heads' => 'nullable|array',
-                    'chief_administrative_heads.*.name' => 'required|string|max:255',
-                    'chief_administrative_heads.*.permanent_address' => 'nullable|string|max:255',
-                    'chief_administrative_heads.*.mobile_number' => 'required|string',
+                if (in_array($constitution, ['Pvt. Ltd', 'Public Ltd', 'Ltd'])) {
+                    $validationRules['board_of_directors'] = 'required|array';
+                    $validationRules['board_of_directors.*.name'] = 'required|string|max:255';
+                    $validationRules['board_of_directors.*.permanent_address'] = 'nullable|string|max:255';
+                    $validationRules['board_of_directors.*.mobile_number'] = 'required|string';
+                } else {
+                    $validationRules['board_of_directors'] = 'nullable|array';
+                    $validationRules['board_of_directors.*.name'] = 'nullable|string|max:255';
+                    $validationRules['board_of_directors.*.permanent_address'] = 'nullable|string|max:255';
+                    $validationRules['board_of_directors.*.mobile_number'] = 'nullable|string';
+                }
 
-                    'remove_owner_details_photo' => 'nullable|in:delete',
-                    'remove_manager_details_photo' => 'nullable|in:delete',
-                    'remove_signature_authorization_of_owner' => 'nullable|in:delete',
-                    'remove_factory_occupiers_signature' => 'nullable|in:delete',
-                    'remove_factory_managers_signature' => 'nullable|in:delete',
-                ]);
+                $validationRules['chief_administrative_heads'] = 'nullable|array';
+                $validationRules['chief_administrative_heads.*.name'] = 'nullable|string|max:255';
+                $validationRules['chief_administrative_heads.*.permanent_address'] = 'nullable|string|max:255';
+                $validationRules['chief_administrative_heads.*.mobile_number'] = 'nullable|string';
+
+                $validationRules['remove_owner_details_photo'] = 'nullable|in:delete';
+                $validationRules['remove_manager_details_photo'] = 'nullable|in:delete';
+                $validationRules['remove_signature_authorization_of_owner'] = 'nullable|in:delete';
+                $validationRules['remove_factory_occupiers_signature'] = 'nullable|in:delete';
+                $validationRules['remove_factory_managers_signature'] = 'nullable|in:delete';
+
+                $request->validate($validationRules);
+
+
             }
 
 
@@ -489,6 +520,8 @@ class ManagementDetailsController extends Controller
                 ]
             );
 
+            $constitution = EnterpriseDetail::where('user_id', $user->id)->value('constitution_of_enterprise');
+
             $partnerDetails_array = $this->get_file_urls(
                 $partnerDetails,
                 ['id_proof_doc', 'signature_image']
@@ -500,6 +533,7 @@ class ManagementDetailsController extends Controller
                 'partner_details' => $partnerDetails_array,
                 'board_of_directors' => $boardDirectors,
                 'chief_administrative_heads' => $chiefHeads,
+                'constitution_of_enterprise' => $constitution,
             ], 200);
         } catch (\Exception $e) {
 

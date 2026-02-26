@@ -31,10 +31,11 @@ use App\Models\Department;
 use App\Models\IndustrialEstate;
 use App\Models\User;
 use App\Traits\LogsActivity;
+use App\Traits\PaymentMapTrait;
 
 class UserServiceApplicationController extends Controller
 {
-    use LogsActivity;
+    use LogsActivity, PaymentMapTrait;
 
     public function user_service_application_store(Request $request)
     {
@@ -1400,6 +1401,7 @@ class UserServiceApplicationController extends Controller
                     'service_mode' => $service->service->service_mode ?? null,
                     'already_rated' => $service->my_feedback ? true : false,
                     'rating' => $service->my_feedback->satisfaction ?? null,
+                    'feedback_id' => $service->my_feedback->id ?? null,
                     'is_certificate' => $service->NOC_certificate ? true : false,
 
                     'appeal_for' => $appeal_for
@@ -2341,6 +2343,9 @@ class UserServiceApplicationController extends Controller
                 ], 404);
             }
 
+            $application_ids = $applications->pluck('id')->toArray();
+            $payment_map = $this->payment_map_for_applications($application_ids);
+
             $response_data = [];
 
             foreach ($applications as $app) {
@@ -2361,6 +2366,7 @@ class UserServiceApplicationController extends Controller
                     'GRN_number'         => $app->GRN_number,
                     'method'             => null,
                     'comments'           => $app->comments,
+                    'payment_details'    => $payment_map[$app->id] ?? [],
                 ];
             }
 
@@ -2384,7 +2390,6 @@ class UserServiceApplicationController extends Controller
             ], 500);
         }
     }
-
 
     public function export_filtered_applications(Request $request)
     {

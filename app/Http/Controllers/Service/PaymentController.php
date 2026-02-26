@@ -484,18 +484,18 @@ class PaymentController extends Controller
 
             $service_user_applications = UserServiceApplication::where('user_id', $user_id)
                 ->where('payment_status', $request->payment_status)
-                ->where(function($query) {
-                    $query->where(function($q) {
+                ->where(function ($query) {
+                    $query->where(function ($q) {
                         $q->whereNotNull('extra_payment')
-                          ->where('extra_payment', '>', 0);
+                            ->where('extra_payment', '>', 0);
                     })
-                    ->orWhere(function($q) {
-                        $q->whereNull('extra_payment')
-                          ->where(function($subq) {
-                              $subq->where('effective_fee', '>', 0)
-                                   ->orWhere('total_fee', '>', 0);
-                          });
-                    });
+                        ->orWhere(function ($q) {
+                            $q->whereNull('extra_payment')
+                                ->where(function ($subq) {
+                                    $subq->where('effective_fee', '>', 0)
+                                        ->orWhere('total_fee', '>', 0);
+                                });
+                        });
                 })
                 ->orderByDesc('created_at')
                 ->paginate($request->per_page);
@@ -516,9 +516,14 @@ class PaymentController extends Controller
                     $amount = $application->extra_payment;
                     $payment_type = 'Extra Payment Raised';
                 } else {
-                    $amount = $application->effective_fee ?? $application->total_fee ?? 0;
+                    $amount = $application->effective_fee > 0 ? $application->effective_fee : ($application->total_fee ?? 0);
                     $payment_type = 'Application Fee Payment';
                 }
+
+                $payment_orders_grns = PaymentOrder::whereJsonContains('application_id', $application->id)
+                    ->whereNotNull('GRN_number')
+                    ->pluck('GRN_number')
+                    ->toArray();
 
                 $response_data[] = [
                     'user_service_application_id' => $application->id,
@@ -528,7 +533,7 @@ class PaymentController extends Controller
                     'payment_type' => $payment_type,
                     'amount' => $amount,
                     'payment_status'  => $application->payment_status ?? null,
-                    'grn_number'  => $application->GRN_number ?? null,
+                    'grn_number'  => $payment_orders_grns ?? null,
                     'payment_date'  => $application->payment_datetime ?? null,
                 ];
             }

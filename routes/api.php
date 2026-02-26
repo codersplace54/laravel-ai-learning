@@ -386,6 +386,7 @@ Route::prefix('report')->group(function () {
 
 Route::post('user-feedback-store', [UserFeedbackController::class, 'user_feedback_store']);
 Route::post('user-feedback-list', [UserFeedbackController::class, 'user_feedback_list']);
+Route::post('department-feedback-list', [UserFeedbackController::class, 'department_feedback_list']);
 Route::post('user-feedback-details', [UserFeedbackController::class, 'user_feedback_details']);
 
 Route::post('unit-list', [InspectionController::class, 'unit_list']);
