@@ -64,12 +64,15 @@ class DashboardController extends Controller
 
                 $total_application = UserServiceApplication::whereNotIn('status', ['expired', 'draft', 'saved'])->count();
 
-                $total_applications_for_this_department = ApplicationWorkflowAssignment::where('department_id', $department_id)
-                    ->whereHas('application', function ($query) {
-                        $query->whereNotIn('status', ['expired', 'draft', 'saved']);
-                    })
-                    ->distinct('application_id')
-                    ->count('application_id');
+                $total_applications_for_this_department = UserServiceApplication::join(
+                    'service_masters as sm',
+                    'sm.id',
+                    '=',
+                    'user_service_applications.service_id'
+                )
+                    ->where('sm.department_id', $department_id)
+                    ->whereNotIn('user_service_applications.status', ['expired', 'draft', 'saved'])
+                    ->count();
 
 
                 $percentage_total_application = $total_applications_for_this_department > 0
@@ -121,8 +124,12 @@ class DashboardController extends Controller
                     })
                     ->count();
 
-                $services = ServiceMaster::withCount('applications')
-                    ->where('department_id', $department_id)
+                $services = ServiceMaster::where('department_id', $department_id)
+                    ->withCount([
+                        'applications as applications_count' => function ($query) {
+                            $query->whereNotIn('status', ['expired', 'draft', 'saved']);
+                        }
+                    ])
                     ->orderByRaw('applications_count = 0')
                     ->orderBy('id', 'desc')
                     ->get(['id', 'service_title_or_description']);
@@ -139,6 +146,7 @@ class DashboardController extends Controller
                     ->join('users', 'users.id', '=', 'user_service_applications.user_id')
                     ->join('tripura_master_data as tmd', 'tmd.id', '=', 'users.district_id')
                     ->where('service_masters.department_id', $department_id)
+                    ->whereNotIn('user_service_applications.status', ['expired', 'draft', 'saved'])
                     ->selectRaw('tmd.district_name, COUNT(*) as count')
                     ->groupBy('tmd.district_name')
                     ->get();
@@ -148,6 +156,7 @@ class DashboardController extends Controller
                     ->join('users', 'users.id', '=', 'user_service_applications.user_id')
                     ->join('tripura_master_data as tmd', 'tmd.id', '=', 'users.district_id')
                     ->where('service_masters.department_id', $department_id)
+                    ->whereNotIn('user_service_applications.status', ['expired', 'draft', 'saved'])
                     ->selectRaw('
             service_masters.service_title_or_description as service_name,
             tmd.district_name,
@@ -516,7 +525,7 @@ class DashboardController extends Controller
 
             return response()->json([
                 'status'            => 1,
-                'message'           => 'Total count applications under this department fetched successfully',
+                'message'           => 'User dashboard data fetched successfully',
                 'total_applications_for_this_user' => $data['total_applications_for_this_user'],
                 'percentage_total_application' => $data['percentage_total_application'],
                 'total_count_pending_application_in_user' => $data['total_count_pending_application_in_user'],
@@ -578,10 +587,13 @@ class DashboardController extends Controller
                 ? min(100, round(($total_count_rejected_application / $total_applications) * 100, 2))
                 : 0;
 
-            $services = ServiceMaster::withCount('applications')
-                ->orderByRaw('applications_count = 0')
-                ->orderBy('id', 'desc')
-                ->get(['id', 'service_title_or_description']);
+            $services = ServiceMaster::withCount([
+                'applications as applications_count' => function ($query) {
+                    $query->whereNotIn('status', ['expired', 'draft', 'saved']);
+                }
+            ])
+                ->orderByDesc('applications_count')
+                ->get(['id as service_id', 'service_title_or_description as service_name']);
 
             $application_count_per_service = $services->map(function ($service) {
                 return [
@@ -595,7 +607,7 @@ class DashboardController extends Controller
                 ->where('user_type', 'individual')
                 ->count();
 
-            $total_new_applications = UserServiceApplication::whereHas('user', function ($q) {
+            $total_new_applications = UserServiceApplication::whereNotIn('status', ['expired', 'draft', 'saved'])->whereHas('user', function ($q) {
                 $q->whereNull('old_id');
             })
                 ->count();
@@ -603,7 +615,7 @@ class DashboardController extends Controller
 
             return response()->json([
                 'status'            => 1,
-                'message'           => 'Total count applications under this department fetched successfully',
+                'message'           => 'Admin dashboard data fetched successfully',
                 'total_applications' => $total_applications,
                 'percentage_total_application' => $percentage_total_application,
                 'total_count_pending_application' => $total_count_pending_application,
@@ -725,11 +737,11 @@ class DashboardController extends Controller
             $to_date   = $request->to_date;
 
             $date_filter = function ($query) use ($from_date, $to_date) {
-                $query->when($from_date, fn($q) => $q->whereDate('created_at', '>=', $from_date))
-                    ->when($to_date, fn($q) => $q->whereDate('created_at', '<=', $to_date));
+                $query->when($from_date, fn($q) => $q->where('created_at', '>=', $from_date))
+                    ->when($to_date, fn($q) => $q->where('created_at', '<=', $to_date));
             };
 
-            $total_applications = UserServiceApplication::whereNotIn('status', ['expired', 'draft','saved'])->tap($date_filter)->count();
+            $total_applications = UserServiceApplication::whereNotIn('status', ['expired', 'draft', 'saved'])->tap($date_filter)->count();
 
             $new_users_last_30_days = User::where('created_at', '>=', Carbon::now()->subDays(30))
                 ->count();
@@ -737,7 +749,7 @@ class DashboardController extends Controller
 
             $total_queries = UserFeedback::count();
 
-            $noc_issued = UserServiceApplication::whereIN('status', ['noc_issued','approved'])->count();
+            $noc_issued = UserServiceApplication::whereIN('status', ['noc_issued', 'approved'])->count();
 
 
             $total_count_pending_application = UserServiceApplication::whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review', 'extra_payment', 'send_back'])
@@ -749,18 +761,18 @@ class DashboardController extends Controller
                 ->tap($date_filter)
                 ->count();
 
-            $upcoming_holidays = Holiday::whereDate('holiday_date', '>=', now()->toDateString())
+            $upcoming_holidays = Holiday::where('holiday_date', '>=', now()->toDateString())
                 ->orderBy('holiday_date', 'asc')
                 ->limit(2)
                 ->get(['holiday_date', 'description']);
 
-            $noc_expired_last_90_days = UserServiceApplication::whereDate('NOC_expiry_date', '>=', now()->subDays(90))
-                ->whereDate('NOC_expiry_date', '<=', now())
+            $noc_expired_last_90_days = UserServiceApplication::where('NOC_expiry_date', '>=', now()->subDays(90))
+                ->where('NOC_expiry_date', '<=', now())
                 ->count();
 
             $rejected_application = UserServiceApplication::where('status', 'rejected')->tap($date_filter)->count();
 
-            $received_applications = UserServiceApplication::whereIn('status', ['submitted', 'under_process', 'approved'])->tap($date_filter)->count();
+            $received_applications = UserServiceApplication::whereIn('status', ['submitted', 'under_review', 'approved', 'noc_issued'])->tap($date_filter)->count();
 
             $total_individual_users = User::whereNull('old_id')
                 ->where('user_type', 'individual')
@@ -769,26 +781,25 @@ class DashboardController extends Controller
 
             $total_inspections = Inspection::tap($date_filter)->count();
 
-            $department_wise_application = Department::leftJoin('application_workflow_assignments as awa', 'departments.id', '=', 'awa.department_id')
-                ->leftJoin('user_service_applications as usa', 'awa.application_id', '=', 'usa.id')
-                ->when($from_date, fn($q) => $q->whereDate('usa.created_at', '>=', $from_date))
-                ->when($to_date, fn($q) => $q->whereDate('usa.created_at', '<=', $to_date))
+            $department_wise_application = Department::leftJoin('service_masters as sm', 'departments.id', '=', 'sm.department_id')
+                ->leftJoin('user_service_applications as usa', 'sm.id', '=', 'usa.service_id')
+                ->when($from_date, fn($q) => $q->where('usa.created_at', '>=', $from_date . ' 00:00:00'))
+                ->when($to_date, fn($q) => $q->where('usa.created_at', '<=', $to_date . ' 23:59:59'))
+                ->whereNotIn('usa.status', ['expired', 'draft', 'saved'])
                 ->select(
                     'departments.id as department_id',
                     'departments.name as department_name',
-                    DB::raw('COUNT(DISTINCT usa.id) as application_count'),
-                    DB::raw('COUNT(DISTINCT CASE WHEN usa.status = "noc_issued" THEN usa.id END) as noc_issued_count')
+                    DB::raw('COUNT(usa.id) as application_count'),
+                    DB::raw('SUM(usa.status IN ("noc_issued","approved")) as noc_issued_count')
                 )
                 ->groupBy('departments.id', 'departments.name')
-                ->orderByRaw(
-                    'COUNT(DISTINCT usa.id) +
-         COUNT(DISTINCT CASE WHEN usa.status = "noc_issued" THEN usa.id END) DESC'
-                )
+                ->orderByDesc('application_count')
                 ->get();
 
             $service_wise_application = ServiceMaster::leftJoin('user_service_applications as usa', 'service_masters.id', '=', 'usa.service_id')
-                ->when($from_date, fn($q) => $q->whereDate('usa.created_at', '>=', $from_date))
-                ->when($to_date, fn($q) => $q->whereDate('usa.created_at', '<=', $to_date))
+                ->when($from_date, fn($q) => $q->where('usa.created_at', '>=', $from_date))
+                ->when($to_date, fn($q) => $q->where('usa.created_at', '<=', $to_date))
+                ->whereNotIn('usa.status', ['expired', 'draft', 'saved'])
                 ->select(
                     'service_masters.id as service_id',
                     'service_masters.service_title_or_description as service_name',
@@ -819,6 +830,7 @@ class DashboardController extends Controller
 
                     $query->whereIn('service_masters.id', $serviceIds);
                 })
+                ->whereNotIn('user_service_applications.status', ['expired', 'draft', 'saved'])
                 ->selectRaw('
             service_masters.id as service_id,
             service_masters.service_title_or_description as service_name,
@@ -849,6 +861,7 @@ class DashboardController extends Controller
         SUM(CASE WHEN status IN ("submitted","re_submitted","pending","under_review","extra_payment","send_back") THEN 1 ELSE 0 END) as pending_count,
         SUM(CASE WHEN status = "rejected" THEN 1 ELSE 0 END) as rejected_count
     ')
+                ->whereNotIn('status', ['expired', 'draft', 'saved'])
                 ->whereYear('created_at', $year)
                 ->tap($date_filter)
                 ->groupBy(DB::raw('MONTH(created_at)'))
@@ -868,7 +881,7 @@ class DashboardController extends Controller
 
             return response()->json([
                 'status'            => 1,
-                'message'           => 'Total count applications under this department fetched successfully',
+                'message'           => 'Admin analytical dashboard data fetched successfully',
                 'total_applications' => $total_applications,
                 'new_users_last_30_days' => $new_users_last_30_days,
                 'total_queries' => $total_queries,
