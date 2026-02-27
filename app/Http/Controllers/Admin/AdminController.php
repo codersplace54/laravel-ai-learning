@@ -26,7 +26,7 @@ class AdminController extends Controller
             }
 
             $admin = User::where('id', $admin->id)
-                ->where('user_type', 'admin')
+                ->whereIn('user_type', ['admin','support'])
                 ->first();
 
             if (!$admin) {
@@ -140,7 +140,7 @@ class AdminController extends Controller
             }
 
             $admin = User::where('id', $admin->id)
-                ->where('user_type', 'admin')
+                ->whereIn('user_type', ['admin','support'])
                 ->first();
 
             if (!$admin) {
