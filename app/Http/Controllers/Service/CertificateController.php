@@ -19,6 +19,7 @@ use App\Models\UserServiceApplication;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use App\Models\Clearance;
 use Illuminate\Support\Facades\Log;
+use App\Jobs\SendWhatsAppNotification;
 
 class CertificateController extends Controller
 {
@@ -250,7 +251,7 @@ class CertificateController extends Controller
             $qr_data_uri = $base['qr_data_uri'];
 
 
-            $verify_url      = 'https://swaagat.tripura.gov.in/verify';
+            $verify_url      = 'https://swaagat.tripura.gov.in/new';
             $name_for_qr     = $request?->name ?? $user->name_of_enterprise ?? '—';
             $license_for_qr  = $request?->license_id ?? ($application->license_id ?? '');
             $issue_for_qr    = $request?->issue_date ?? ($application->application_date ?? '');
@@ -370,6 +371,8 @@ class CertificateController extends Controller
                 $application->update($update_data);
                 // $clearance_response = $this->store_clearance($application);
 
+                // Send WhatsApp notification
+                $this->send_certificate_whatsapp_notification($application, $user, $path);
 
                 $application->NOC_certificate = asset('storage/' . $application->NOC_certificate);
 
@@ -1130,6 +1133,33 @@ class CertificateController extends Controller
                 'error'   => $e->getMessage(),
             ], 500);
             
+        }
+    }
+
+    private function send_certificate_whatsapp_notification($application, $user, $certificate_path)
+    {
+        try {
+            if (empty($user->mobile_no)) {
+                return;
+            }
+
+            $certificate_url = config('app.url') . '/storage/' . $certificate_path;
+            $filename = basename($certificate_path);
+
+            SendWhatsAppNotification::dispatch(
+                $user->mobile_no,
+                'certificate_generated_v1',
+                [
+                    'document_url' => $certificate_url,
+                    'filename' => $filename,
+                    'service_name' => $application->service->service_title_or_description,
+                    'license_id' => $application->license_id ?? 'N/A',
+                    'issue_date' => Carbon::parse($application->NOC_generationDate)->format('d M Y')
+                ],
+                'application_id=' . $application->id
+            );
+        } catch (\Exception $e) {
+            Log::error('Certificate WhatsApp notification failed: ' . $e->getMessage());
         }
     }
 }

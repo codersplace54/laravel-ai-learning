@@ -23,6 +23,43 @@ class WhatsAppService
         
         $to = $phone;
 
+        $components = [];
+        $body_params = [];
+        $header_param = null;
+
+        foreach ($parameters as $key => $value) {
+            if ($key === 'document_url') {
+                $header_param = [
+                    'type' => 'header',
+                    'parameters' => [
+                        [
+                            'type' => 'document',
+                            'document' => [
+                                'link' => (string) $value,
+                                'filename' => $parameters['filename'] ?? 'certificate.pdf'
+                            ]
+                        ]
+                    ]
+                ];
+            } elseif ($key !== 'filename') {
+                $body_params[] = [
+                    'type' => 'text',
+                    'text' => (string) $value,
+                ];
+            }
+        }
+
+        if ($header_param) {
+            $components[] = $header_param;
+        }
+
+        if (!empty($body_params)) {
+            $components[] = [
+                'type' => 'body',
+                'parameters' => $body_params,
+            ];
+        }
+
         $payload = [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
@@ -31,27 +68,20 @@ class WhatsAppService
             'template' => [
                 'name' => $template_name,
                 'language' => ['code' => 'en'],
-                'components' => [
-                    [
-                        'type' => 'body',
-                        'parameters' => array_map(fn($text) => [
-                            'type' => 'text',
-                            'text' => (string) $text,
-                        ], $parameters),
-                    ],
-                ],
+                'components' => $components,
             ],
         ];
 
         if ($opaque) {
-            $payload['biz_opaque_callback_data'] = $opaque; // e.g. application_id=123
+            $payload['biz_opaque_callback_data'] = $opaque;
         }
 
-        Log::info('WHATSAPP_REQUEST', [
-            'to' => $to,
-            'template' => $template_name,
-            'param_count' => count($parameters),
-        ]);
+        // Log::info('WHATSAPP_REQUEST', [
+        //     'to' => $to,
+        //     'template' => $template_name,
+        //     'param_count' => count($parameters),
+        //     'payload' => $payload,
+        // ]);
 
         try {
             $res = Http::withToken($token)
