@@ -1216,7 +1216,7 @@ class UserIncentiveApplicationController extends Controller
         $answers     = json_decode($answers, true);
 
         $questions = ProformaQuestionnaire::query()
-            ->select('id', 'question_label', 'display_order', 'is_required')
+            ->select('id', 'question_label', 'display_order', 'is_required', 'question_type')
             ->where('proforma_id', $proforma_id)
             ->where('status', 1)
             ->where('is_required', 'yes')
@@ -1236,6 +1236,9 @@ class UserIncentiveApplicationController extends Controller
             $is_empty = ($value === null) || ($value === '') || (is_array($value) && count($value) === 0);
 
             if ($is_empty) {
+                if ($q->question_type === 'file' && $request->hasFile("files.$qid")) {
+                    continue;
+                }
 
                 $errors["answers.$qid.value"] = "The '{$q->question_label}' field is required.";
             }
