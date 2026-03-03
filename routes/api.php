@@ -50,6 +50,7 @@ use App\Http\Controllers\InvestorQueryController;
 use App\Http\Controllers\Service\ClearanceController;
 use App\Http\Controllers\TestingFacilityCapabilityController;
 use App\Http\Controllers\PublicNotificationController;
+use App\Http\Controllers\InformationWizardController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -437,3 +438,5 @@ Route::post('previous-investor-query', [InvestorQueryController::class, 'get_pre
 Route::post('government-orders-list', [GovernmentOrderController::class, 'government_orders_list']);
 
 Route::post('public-certificate-download', [CertificateController::class, 'public_certificate_download']);
+
+Route::post('get-all-information-wizards', [InformationWizardController::class, 'get_all_information_wizards']);
