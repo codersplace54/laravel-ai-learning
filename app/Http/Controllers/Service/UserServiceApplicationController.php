@@ -1246,7 +1246,7 @@ class UserServiceApplicationController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            if ($admin->user_type !== 'admin') {
+            if (!in_array($admin->user_type, ['admin', 'support'])) {
                 return response()->json([
                     'status' => 0,
                     'message' => 'Only admin can delete applications.'
