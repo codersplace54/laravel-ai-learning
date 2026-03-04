@@ -140,6 +140,8 @@ class InspectionController extends Controller
                         'inspection_type'           => 'On Request',
                         'industry_name'             => $inspection->unit->unit_name ?? null,
                         'inspector'                 => null,
+                        'remarks'                   => $inspection->remarks,
+                        'reason_for_request'        => $inspection->reason_for_request,
                         'status'                    => $inspection->status,
                         'created_by'                => $inspection->created_by,
                         'updated_by'                => $inspection->updated_by,

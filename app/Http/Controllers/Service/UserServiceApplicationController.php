@@ -2324,7 +2324,7 @@ class UserServiceApplicationController extends Controller
                         'amount'             => $amount,
                         'payment_time'       => $app->payment_time ?? null,
                         'expiry_date'        => $app->NOC_expiry_date ?? null,
-                        'status'             => $app->payment_status,
+                        'payment_status'     => $app->payment_status,
                         'GRN_number'         => $app->GRN_number,
                         'method'             => null,
                         'comments'           => $app->comments,
@@ -2550,7 +2550,7 @@ class UserServiceApplicationController extends Controller
     private function get_renewal_details($application)
     {
         $service = $application->service;
-        
+
         if (!empty($service->noc_validity) && !empty($application->NOC_expiry_date)) {
             $expiry_date = Carbon::parse($application->NOC_expiry_date);
         } elseif (!empty($service->fixed_expiry_date)) {
@@ -2574,7 +2574,7 @@ class UserServiceApplicationController extends Controller
 
                 if (!empty($cycle->renewal_window_days) && $expiry_date) {
                     $window_days = (int)$cycle->renewal_window_days;
-                    
+
                     if ($window_days >= 0) {
                         $renewal_start = $expiry_date->copy()->subDays($window_days);
                         if ($renewal_end === null) {
@@ -2590,7 +2590,7 @@ class UserServiceApplicationController extends Controller
 
                 if (!empty($cycle->renewal_target_days) && $expiry_date) {
                     $target_days = (int)$cycle->renewal_target_days;
-                    
+
                     if ($target_days >= 0) {
                         if ($renewal_start === null) {
                             $renewal_start = $expiry_date->copy();
@@ -2605,7 +2605,7 @@ class UserServiceApplicationController extends Controller
                 }
             }
             $can_renew = false;
-            
+
             if ($renewal_start && $renewal_end) {
                 if ($today->between($renewal_start, $renewal_end)) {
                     $can_renew = true;

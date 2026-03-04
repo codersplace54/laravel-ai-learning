@@ -158,9 +158,9 @@ class ActivityController extends Controller
 
             $activities = Activity::where('user_id', $user->id)->get();
 
-            if (!$activities) {
+            if ($activities->isEmpty()) {
                 return response()->json([
-                    'status' => 1,
+                    'status' => 0,
                     'message' => 'No activities found for this user.'
                 ], 404);
             }

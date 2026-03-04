@@ -756,7 +756,7 @@ class DashboardController extends Controller
                 ->tap($date_filter)
                 ->count();
 
-            $total_payments = UserServiceApplication::where('payment_status', 'paid')
+            $total_payments = UserServiceApplication::whereIN('payment_status', ['paid','success'])
                 ->where('paid_amount', '>', 0)
                 ->tap($date_filter)
                 ->count();
