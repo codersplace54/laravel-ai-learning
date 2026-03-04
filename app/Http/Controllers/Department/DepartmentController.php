@@ -8,9 +8,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Exception;
 use App\Models\Department;
+use App\Traits\LogsActivity;
 
 class DepartmentController extends Controller
 {
+    use LogsActivity;
     public function all_departments(Request $request)
     {
         try {
@@ -84,6 +86,8 @@ class DepartmentController extends Controller
                 'is_inspection_dept' => $request->is_inspection_dept ?? 'no',
                 'created_by' => $admin->email_id
             ]);
+
+            $department->logAs($admin->user_name . ' created department: ' . $department->name, 'Department Created');
 
             DB::commit();
 
@@ -184,6 +188,8 @@ class DepartmentController extends Controller
 
             $department = Department::findOrFail($request->id);
 
+            $department->logAs($admin->user_name . ' updated department: ' . $department->name, 'Department Updated');
+
             $department->update([
                 'name' => $request->name,
                 'details' => $request->details,
@@ -247,6 +253,9 @@ class DepartmentController extends Controller
                 ], 400);
             }
 
+            $admin = Auth::user();
+            $department->logAs($admin->user_name . ' deleted department: ' . $department->name, 'Department Deleted');
+
             $department->delete();
 
             DB::commit();
@@ -286,7 +295,10 @@ class DepartmentController extends Controller
 
             DB::beginTransaction();
 
+            $admin = Auth::user();
             $department = Department::findOrFail($id);
+
+            $department->logAs($admin->user_name . ' changed department status from ' . $department->status . ' to ' . ($department->status === "active" ? "disabled" : "active"), 'Department Status Updated');
 
             $department->status = $department->status === "active" ? "disabled" : "active";
             $department->save();

@@ -13,6 +13,7 @@ use App\Models\ServiceMaster;
 use App\Models\RenewalFeeRule;
 use App\Models\ServiceFeeRule;
 use App\Models\UserServiceApplication;
+use App\Traits\LogsActivity;
 
 
 class ServiceQuestionnaireController extends Controller
@@ -78,7 +79,7 @@ class ServiceQuestionnaireController extends Controller
                 }
 
                 foreach ($conditionLabels as $label) {
-                    $service_questionnaire[] = ServiceQuestionnaire::create([
+                    $questionnaire_item = ServiceQuestionnaire::create([
                         'service_id' => $questionnaire['service_id'],
                         'approved_services' => $questionnaire['approved_services'] ?? null,
                         'question_label' => $questionnaire['question_label'],
@@ -101,6 +102,8 @@ class ServiceQuestionnaireController extends Controller
                         'sample_format' => $sample_format,
                         'display_rule' => json_encode($questionnaire['display_rule'] ?? null),
                     ]);
+                    $questionnaire_item->logAs($admin->user_name . ' created service questionnaire', 'Service Questionnaire Created');
+                    $service_questionnaire[] = $questionnaire_item;
                 }
             }
 
@@ -189,6 +192,8 @@ class ServiceQuestionnaireController extends Controller
                     $filename = str_replace(' ', '_', $file->getClientOriginalName());
                     $sample_format = $file->storeAs("uploads/service_questions/{$questionnaire['id']}/sample_format", $filename, 'public');
                 }
+
+                $service_question->logAs($admin->user_name . ' updated service questionnaire', 'Service Questionnaire Updated');
 
                 $service_question->update([
                     'service_id' => $questionnaire['service_id'],
@@ -297,6 +302,8 @@ class ServiceQuestionnaireController extends Controller
                 ], 404);
             }
 
+            $admin = Auth::user();
+            $service_questionnaire->logAs($admin->user_name . ' deleted service questionnaire', 'Service Questionnaire Deleted');
             $service_questionnaire->delete();
 
             DB::commit();

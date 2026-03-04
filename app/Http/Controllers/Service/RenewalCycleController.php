@@ -7,9 +7,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\RenewalCycle;
+use App\Traits\LogsActivity;
 
 class RenewalCycleController extends Controller
 {
+    use LogsActivity;
     public function renewal_cycle_store(Request $request)
     {
 
@@ -48,7 +50,7 @@ class RenewalCycleController extends Controller
             $renewal_cycles = [];
 
             foreach ($request->renewals as $renewal) {
-                $renewal_cycles[] = RenewalCycle::create([
+                $renewal_cycle = RenewalCycle::create([
                     'service_id' => $renewal['service_id'],
                     'renewal_title' => $renewal['renewal_title'],
                     'renewal_period' => $renewal['renewal_period'],
@@ -68,6 +70,8 @@ class RenewalCycleController extends Controller
                     'before_date_of_expiry' => $renewal['before_date_of_expiry'] ?? null,
                     'created_by' => $admin->email_id
                 ]);
+                $renewal_cycle->logAs($admin->user_name . ' created renewal cycle', 'Renewal Cycle Created');
+                $renewal_cycles[] = $renewal_cycle;
             }
 
             DB::commit();
@@ -130,6 +134,8 @@ class RenewalCycleController extends Controller
 
             foreach ($request->renewals as $renewal) {
                 $renewal_cycle = RenewalCycle::findOrFail($renewal['id']);
+
+                $renewal_cycle->logAs($admin->user_name . ' updated renewal cycle', 'Renewal Cycle Updated');
 
                 $renewal_cycle->update([
                     'service_id' => $renewal['service_id'],
@@ -211,6 +217,8 @@ class RenewalCycleController extends Controller
                 ], 404);
             }
 
+            $admin = Auth::user();
+            $renewal_cycle->logAs($admin->user_name . ' deleted renewal cycle', 'Renewal Cycle Deleted');
             $renewal_cycle->delete();
 
             DB::commit();

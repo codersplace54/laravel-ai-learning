@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\ServiceApprovalFlow;
 use App\Models\ServiceMaster;
+use App\Traits\LogsActivity;
 
 class ServiceApprovalFlowController extends Controller
 {
@@ -50,6 +51,7 @@ class ServiceApprovalFlowController extends Controller
                     'hierarchy_level' => $flow['hierarchy_level'],
                     'created_by'      => $admin->email_id
                 ]);
+                $service_approval_flow->logAs($admin->user_name . ' created service approval flow', 'Service Approval Flow Created');
 
                 $service_approval_flows[] = $service_approval_flow;
             }
@@ -116,6 +118,7 @@ class ServiceApprovalFlowController extends Controller
                     ->first();
 
                 $service_approval_flow = ServiceApprovalFlow::findOrFail($flow['id']);
+                $service_approval_flow->logAs($admin->user_name . ' updated service approval flow', 'Service Approval Flow Updated');
 
                 $step_number = $flow['step_number'] ?? $service_approval_flow->step_number;
                 if (!$step_number) {
@@ -239,6 +242,7 @@ class ServiceApprovalFlowController extends Controller
 
             DB::beginTransaction();
 
+            $admin = Auth::user();
             $service_approval_flow = ServiceApprovalFlow::where('id', $request->id)->first();
 
             if (!$service_approval_flow) {
@@ -251,6 +255,7 @@ class ServiceApprovalFlowController extends Controller
                 ], 404);
             }
 
+            $service_approval_flow->logAs($admin->user_name . ' deleted service approval flow', 'Service Approval Flow Deleted');
             $service_approval_flow->delete();
 
             DB::commit();

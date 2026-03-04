@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\ServiceFeeRule;
 use App\Models\RenewalCycle;
 use App\Models\ServiceQuestionnaire;
+use App\Traits\LogsActivity;
 
 class ServiceFeeRuleController extends Controller
 {
@@ -83,6 +84,7 @@ class ServiceFeeRuleController extends Controller
                     'multi_condition' => $rule['multi_condition'] ?? "no",
                     'minimum_fee' => $rule['minimum_fee'] ?? null,
                 ]);
+                $service_fee_rule->logAs($admin->user_name . ' created service fee rule', 'Service Fee Rule Created');
 
                 $service_fee_rules[] = $service_fee_rule;
                 // }
@@ -152,6 +154,7 @@ class ServiceFeeRuleController extends Controller
             foreach ($request->rules as $rule) {
 
                 $service_fee_rule = ServiceFeeRule::findOrFail($rule['id']);
+                $service_fee_rule->logAs($admin->user_name . ' updated service fee rule', 'Service Fee Rule Updated');
 
                 $service_fee_rule->update([
                     'service_id' => $rule['service_id'] ?? null,
@@ -288,6 +291,7 @@ class ServiceFeeRuleController extends Controller
 
             DB::beginTransaction();
 
+            $admin = Auth::user();
             $service_fee_rule = ServiceFeeRule::where('id', $request->id)->first();
 
             if (!$service_fee_rule) {
@@ -300,6 +304,7 @@ class ServiceFeeRuleController extends Controller
                 ], 404);
             }
 
+            $service_fee_rule->logAs($admin->user_name . ' deleted service fee rule', 'Service Fee Rule Deleted');
             $service_fee_rule->delete();
 
             DB::commit();

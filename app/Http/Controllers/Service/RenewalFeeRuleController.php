@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\RenewalFeeRule;
 use App\Models\RenewalCycle;
 use App\Models\ServiceQuestionnaire;
+use App\Traits\LogsActivity;
 
 class RenewalFeeRuleController extends Controller
 {
@@ -77,6 +78,7 @@ class RenewalFeeRuleController extends Controller
                     'multi_condition' => $rule['multi_condition'] ?? "no",
                     'minimum_fee' => $rule['minimum_fee'] ?? null,
                 ]);
+                $renewal_fee_rule->logAs($admin->user_name . ' created renewal fee rule', 'Renewal Fee Rule Created');
 
                 $renewal_fee_rules[] = $renewal_fee_rule;
             }
@@ -144,6 +146,7 @@ class RenewalFeeRuleController extends Controller
             foreach ($request->rules as $rule) {
 
                 $renewal_fee_rule = RenewalFeeRule::findOrFail($rule['id']);
+                $renewal_fee_rule->logAs($admin->user_name . ' updated renewal fee rule', 'Renewal Fee Rule Updated');
 
                 $renewal_fee_rule->update([
                     'service_id' => $rule['service_id'] ?? null,
@@ -280,6 +283,7 @@ class RenewalFeeRuleController extends Controller
 
             DB::beginTransaction();
 
+            $admin = Auth::user();
             $renewal_fee_rule = RenewalFeeRule::where('id', $request->id)->first();
 
             if (!$renewal_fee_rule) {
@@ -292,6 +296,7 @@ class RenewalFeeRuleController extends Controller
                 ], 404);
             }
 
+            $renewal_fee_rule->logAs($admin->user_name . ' deleted renewal fee rule', 'Renewal Fee Rule Deleted');
             $renewal_fee_rule->delete();
 
             DB::commit();

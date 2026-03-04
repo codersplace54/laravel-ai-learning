@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\LogsModelActivity;
 
 class Appeal extends Model
 {
+    use LogsModelActivity;
     protected $fillable = [
         'id',
         'application_id',
