@@ -2324,7 +2324,7 @@ class UserServiceApplicationController extends Controller
                         'amount'             => $amount,
                         'payment_time'       => $app->payment_time ?? null,
                         'expiry_date'        => $app->NOC_expiry_date ?? null,
-                        'status'             => $app->payment_status,
+                        'payment_status'     => $app->payment_status,
                         'GRN_number'         => $app->GRN_number,
                         'method'             => null,
                         'comments'           => $app->comments,
