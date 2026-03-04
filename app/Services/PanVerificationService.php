@@ -45,7 +45,7 @@ class PanVerificationService
             return $response;
             
         } catch (Exception $e) {
-            Log::error('PAN verification failed', [
+            Log::channel('pan_verification')->error('PAN verification failed', [
                 'error' => $e->getMessage(),
                 'pan_data' => $pan_data
             ]);
@@ -130,8 +130,11 @@ class PanVerificationService
             ->post($this->config['api_url'], $payload['body']);
 
         if ($response->failed()) {
+            Log::channel('pan_verification')->error('PAN API request failed', ['response' => $response->body()]);
             throw new Exception('PAN API request failed: ' . $response->body());
         }
+
+        Log::channel('pan_verification')->info('PAN API response received', ['status' => $response->status()]);
 
         $decoded_response = $response->json();
         

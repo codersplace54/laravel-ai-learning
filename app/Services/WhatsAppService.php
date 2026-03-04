@@ -17,7 +17,7 @@ class WhatsAppService
         $url  = config('whatsapp.api_url') ?: "{$base}/{$ver}/{$pid}/messages";
 
         if (!$url || !$token) {
-            Log::error('whatsapp_config_missing');
+            Log::channel('whatsapp')->error('whatsapp_config_missing');
             return ['success' => false, 'status_code' => 500, 'response' => 'WhatsApp configuration missing'];
         }
         
@@ -93,7 +93,7 @@ class WhatsAppService
 
             $body = $res->json() ?? $res->body();
 
-            Log::info('WHATSAPP_RESPONSE', [
+            Log::channel('whatsapp')->info('WHATSAPP_RESPONSE', [
                 'to' => $to,
                 'status_code' => $res->status(),
                 'body' => $res->body(),
@@ -106,7 +106,7 @@ class WhatsAppService
                 'response' => $body,
             ];
         } catch (\Throwable $e) {
-            Log::error('whatsapp_error', [
+            Log::channel('whatsapp')->error('whatsapp_error', [
                 'to' => $to,
                 'error' => $e->getMessage(),
             ]);

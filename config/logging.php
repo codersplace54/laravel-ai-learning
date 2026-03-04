@@ -127,6 +127,70 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
+        'payment_cron' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/payment_cron.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
+        'saral_sync' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/saral_sync.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
+        'external_sms' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/external_sms.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
+        'sms' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/sms.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
+        'whatsapp' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/whatsapp.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
+        'pan_verification' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/pan_verification.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
+        'entity_locker' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/entity_locker.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
+        'payment' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/payment.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];
