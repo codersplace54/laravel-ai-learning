@@ -38,6 +38,7 @@ class SyncSaralData extends Command
 
     public function handle()
     {
+        Log::channel('saral_sync')->info('Starting Saral sync...');
         $this->info('Starting Saral sync...');
 
         $applications = UserServiceApplication::with(['user', 'service.department'])
@@ -51,6 +52,7 @@ class SyncSaralData extends Command
             ->get();
 
         if ($applications->isEmpty()) {
+            Log::channel('saral_sync')->warning('No applications found to sync.');
             $this->warn('No applications found to sync.');
             return 0;
         }
@@ -69,24 +71,26 @@ class SyncSaralData extends Command
                     'application_id' => $app->id,
                     'error' => $e->getMessage()
                 ];
+                Log::channel('saral_sync')->error("Error processing application {$app->id}: {$e->getMessage()}");
                 $this->error("Error processing application {$app->id}: {$e->getMessage()}");
             }
         }
 
         if (empty($saral_data)) {
+            Log::channel('saral_sync')->error('No valid data to push to Saral.');
             $this->error('No valid data to push to Saral.');
             return 1;
         }
 
         try {
-            Log::info('SARAL_BULK_UPLOAD_REQUEST', [
+            Log::channel('saral_sync')->info('SARAL_BULK_UPLOAD_REQUEST', [
                 'url'   => $this->saral_api_url,
                 'count' => is_array($saral_data) ? count($saral_data) : null,
                 'payload_preview' => is_array($saral_data) ? array_slice($saral_data, 0, 2) : null,
             ]);
             $response = Http::post($this->saral_api_url, $saral_data);
 
-            Log::info('SARAL_BULK_UPLOAD_RESPONSE', [
+            Log::channel('saral_sync')->info('SARAL_BULK_UPLOAD_RESPONSE', [
                 'status'  => $response->status(),
                 'ok'      => $response->successful(),
                 'headers' => $response->headers(),
@@ -94,14 +98,26 @@ class SyncSaralData extends Command
                 'json'    => $response->json(),
             ]);
 
-            $this->info("Successfully pushed {$applications->count()} applications to Saral.");
+            $response_data = $response->json();
+            $status_id = $response_data['RESPONSE']['STATUS_ID'] ?? null;
+            $status_msg = $response_data['RESPONSE']['STATUS_MSG'] ?? 'Unknown response';
+
+            if ($status_id === '001') {
+                Log::channel('saral_sync')->info("Successfully pushed {$applications->count()} applications to Saral.");
+                $this->info("Successfully pushed {$applications->count()} applications to Saral.");
+            } else {
+                Log::channel('saral_sync')->error("Saral API Error (STATUS_ID: {$status_id}): {$status_msg}");
+                $this->error("Saral API Error: {$status_msg}");
+            }
 
             if (!empty($errors)) {
+                Log::channel('saral_sync')->warning("Failed to process " . count($errors) . " applications.", ['errors' => $errors]);
                 $this->warn("Failed to process " . count($errors) . " applications.");
             }
 
-            return 0;
+            return $status_id === '001' ? 0 : 1;
         } catch (\Exception $e) {
+            Log::channel('saral_sync')->error("Failed to push data to Saral: {$e->getMessage()}");
             $this->error("Failed to push data to Saral: {$e->getMessage()}");
             return 1;
         }

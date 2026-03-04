@@ -16,7 +16,7 @@ class SmsService
             $dlt_entity_id = config('sms.dlt_entity_id');
 
         if (! $gateway_url || ! $user_name || ! $pin || ! $signature || ! $dlt_entity_id) {
-            Log::error('sms_config_missing');
+            Log::channel('sms')->error('sms_config_missing');
             return [
                 'status_code' => 500,
                 'response' => 'SMS configuration missing',
@@ -58,7 +58,7 @@ class SmsService
         // ]);
 
         if ($error) {
-            Log::error('sms_error', ['error' => $error]);
+            Log::channel('sms')->error('sms_error', ['error' => $error, 'mobile' => $mobile_no]);
         }
 
         return [

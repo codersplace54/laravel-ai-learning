@@ -19,6 +19,7 @@ class PaymentStatusCron extends Command
 
     public function handle()
     {
+        Log::channel('payment_cron')->info('Payment status cron started');
         $this->info('Payment status cron started');
 
         $orders = PaymentOrder::whereIn('payment_status', ['initiated', 'pending'])
@@ -27,6 +28,8 @@ class PaymentStatusCron extends Command
             ->orderBy('id', 'desc')
             ->limit(200)
             ->get();
+        
+        Log::channel('payment_cron')->info('Fetched orders for processing', ['count' => $orders->count()]);
 
         $processed_order_ids = [];
         $updated_order_ids = [];
@@ -45,7 +48,7 @@ class PaymentStatusCron extends Command
 
             if (!$response) {
                 $api_error_orders[] = $order->order_id;
-                Log::error("API error for order {$order->order_id}: No response from SOAP API");
+                Log::channel('payment_cron')->error("API error for order {$order->order_id}: No response from SOAP API");
                 continue;
             }
 
@@ -61,7 +64,7 @@ class PaymentStatusCron extends Command
                 if ($xml === false) {
                     $invalid_response_orders[] = $order->order_id;
                     libxml_clear_errors();
-                    Log::error("Invalid XML response for order {$order->order_id}");
+                    Log::channel('payment_cron')->error("Invalid XML response for order {$order->order_id}");
                     continue;
                 }
 
@@ -71,7 +74,7 @@ class PaymentStatusCron extends Command
 
                 if (!$result || !isset($result[0])) {
                     $invalid_response_orders[] = $order->order_id;
-                    Log::error("Missing GetGrnDetails_identityResult for order {$order->order_id}");
+                    Log::channel('payment_cron')->error("Missing GetGrnDetails_identityResult for order {$order->order_id}");
                     continue;
                 }
 
@@ -79,7 +82,7 @@ class PaymentStatusCron extends Command
 
                 if (!$json_data || !is_array($json_data)) {
                     $invalid_response_orders[] = $order->order_id;
-                    Log::error("Invalid JSON data for order {$order->order_id}: " . (string) $result[0]);
+                    Log::channel('payment_cron')->error("Invalid JSON data for order {$order->order_id}: " . (string) $result[0]);
                     continue;
                 }
 
@@ -104,9 +107,10 @@ class PaymentStatusCron extends Command
                     $has_success = collect($json_data)->contains('Status', 'Success');
                     if ($has_success) {
                         $amount_mismatch_skipped[] = $order->order_id;
-                        Log::warning("Amount mismatch for order {$order->order_id}: DB={$order->payment_amount}, Response=" . json_encode($json_data));
+                        Log::channel('payment_cron')->warning("Amount mismatch for order {$order->order_id}: DB={$order->payment_amount}, Response=" . json_encode($json_data));
                     } elseif (collect($json_data)->contains('Status', 'Fail')) {
                         $fail_skipped[] = $order->order_id;
+                        Log::channel('payment_cron')->info("Order {$order->order_id} marked as failed by payment gateway");
                     } else {
                         $not_found_skipped[] = $order->order_id;
                     }
@@ -124,6 +128,7 @@ class PaymentStatusCron extends Command
                     ]);
 
                     $updated_order_ids[] = $order->order_id;
+                    Log::channel('payment_cron')->info("Order {$order->order_id} updated successfully", ['GRN' => $matched_record['GRN'] ?? null]);
 
                     $application_ids = json_decode($order->application_id, true);
 
@@ -138,19 +143,32 @@ class PaymentStatusCron extends Command
                             ]);
 
                         $updated_applications += $updated;
+                        Log::channel('payment_cron')->info("Updated {$updated} applications for order {$order->order_id}");
                     }
 
                     DB::commit();
                 } catch (\Exception $e) {
                     DB::rollBack();
                     $db_error_orders[] = $order->order_id;
-                    Log::error("DB error updating order {$order->order_id}: " . $e->getMessage());
+                    Log::channel('payment_cron')->error("DB error updating order {$order->order_id}: " . $e->getMessage());
                 }
             } catch (\Exception $e) {
                 $invalid_response_orders[] = $order->order_id;
-                Log::error("Error processing order {$order->order_id}: " . $e->getMessage() . " | Line: " . $e->getLine());
+                Log::channel('payment_cron')->error("Error processing order {$order->order_id}: " . $e->getMessage() . " | Line: " . $e->getLine());
             }
         }
+        
+        Log::channel('payment_cron')->info('Payment status cron completed', [
+            'processed' => count($processed_order_ids),
+            'updated' => count($updated_order_ids),
+            'applications_updated' => $updated_applications,
+            'amount_mismatch' => count($amount_mismatch_skipped),
+            'not_found' => count($not_found_skipped),
+            'failed' => count($fail_skipped),
+            'api_errors' => count($api_error_orders),
+            'invalid_responses' => count($invalid_response_orders),
+            'db_errors' => count($db_error_orders)
+        ]);
 
         $this->info("\n=== Payment Status Cron Summary ===");
         $this->info("Processed orders: " . count($processed_order_ids) . " (" . implode(',', $processed_order_ids) . ")");
@@ -213,14 +231,14 @@ class PaymentStatusCron extends Command
             $response = curl_exec($ch);
 
             if (curl_error($ch)) {
-                Log::error('SOAP API Error: ' . curl_error($ch));
+                Log::channel('payment_cron')->error('SOAP API Error: ' . curl_error($ch));
                 return false;
             }
 
             curl_close($ch);
             return $response;
         } catch (\Exception $e) {
-            Log::error('SOAP API Exception: ' . $e->getMessage());
+            Log::channel('payment_cron')->error('SOAP API Exception: ' . $e->getMessage());
             return false;
         }
     }

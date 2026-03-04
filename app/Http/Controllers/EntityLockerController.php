@@ -76,6 +76,7 @@ class EntityLockerController extends Controller
             ]);
 
         if (!$token_response->successful()) {
+            Log::channel('entity_locker')->error('Token exchange failed', ['response' => $token_response->body()]);
             return $this->callback_response($request, false, 'Token exchange failed');
         }
 
@@ -83,11 +84,14 @@ class EntityLockerController extends Controller
         $access_token = $token_data['access_token'] ?? null;
 
         if (!$access_token) {
+            Log::channel('entity_locker')->error('No access token received');
             return $this->callback_response($request, false, 'No access token');
         }
 
         $user_id = $cached['user_id'];
         Cache::put('entity_locker_token_' . $user_id, $access_token, now()->addSeconds($token_data['expires_in'] ?? 3600));
+
+        Log::channel('entity_locker')->info('Entity locker connected', ['user_id' => $user_id]);
 
         $sync = $this->sync_documents($access_token, $user_id);
 
@@ -234,7 +238,7 @@ class EntityLockerController extends Controller
                 $saved = $this->download_file($access_token, $user_id, $doc['uri'], $type, $doc['doctype'] ?? null);
                 $data->update($saved);
             } catch (\Throwable $e) {
-                Log::warning('File download failed', ['uri' => $doc['uri']]);
+                Log::channel('entity_locker')->warning('File download failed', ['uri' => $doc['uri'], 'error' => $e->getMessage()]);
             }
         }
 
