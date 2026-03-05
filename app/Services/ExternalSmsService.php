@@ -15,7 +15,7 @@ class ExternalSmsService
         $dlt_entity_id = $gateway_config['dlt_entity_id'];
 
         if (! $gateway_url || ! $user_name || ! $pin || ! $signature || ! $dlt_entity_id) {
-            Log::error('external_sms_config_missing');
+            Log::channel('external_sms')->error('external_sms_config_missing');
             return [
                 'status_code' => 500,
                 'response' => 'SMS configuration missing',
@@ -46,6 +46,7 @@ class ExternalSmsService
         curl_close($ch);
 
         if ($error) {
+            Log::channel('external_sms')->error('cURL Error', ['error' => $error, 'mobile' => $mobile_no]);
             return [
                 'status_code' => 500,
                 'response' => 'cURL Error: ' . $error,

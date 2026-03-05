@@ -175,15 +175,6 @@ class PaymentController extends Controller
 
             DB::rollBack();
 
-            // Log payment initiation error
-            $user = Auth::user();
-            if ($user) {
-                $this->logActivity('Payment initiation failed', null, $user, [
-                    'error_message' => $e->getMessage(),
-                    'error_line' => $e->getLine()
-                ], 'Payment Initiation Failed');
-            }
-
             return response()->json([
                 'status' => 0,
                 'status_message' => $e->getMessage(),
@@ -194,7 +185,7 @@ class PaymentController extends Controller
 
     public function payment_callback(Request $request)
     {
-        Log::info("Payment callback req: " . json_encode($request->all()));
+        Log::channel('payment')->info("Payment callback received", ['request_data' => $request->all()]);
 
         try {
 
@@ -227,12 +218,9 @@ class PaymentController extends Controller
             $payment_datetime = $dt ? Carbon::createFromFormat('d/m/Y H:i:s', $dt) : null;
 
             if (!$order_id) {
-                $this->logActivity('Payment callback failed - Order ID not found', null, null, [
-                    'callback_data' => $request->all()
-                ], 'Payment Callback Failed');
 
-                $msg = 'Order ID not found';
-                Log::info($msg);
+                $msg = $status && stripos($status, 'These schemes are not') !== false ? $status : 'Order ID not found';
+                Log::channel('payment')->error('Order ID not found in callback');
                 return redirect()->away(
                     $frontendurl . '?status=failed&message=' . urlencode($msg)
                 );
@@ -243,14 +231,9 @@ class PaymentController extends Controller
 
 
             if ($generated_hash !== $hash) {
-                $this->logActivity('Payment callback failed - Hash verification failed', null, null, [
-                    'order_id' => $order_id,
-                    'expected_hash' => $generated_hash,
-                    'received_hash' => $hash
-                ], 'Payment Verification Failed');
 
                 $msg = 'Hash verification failed';
-                Log::info($msg);
+                Log::channel('payment')->error('Hash verification failed', ['order_id' => $order_id]);
                 return redirect()->away(
                     $frontendurl . '?status=failed&message=' . urlencode($msg)
                 );
@@ -261,13 +244,9 @@ class PaymentController extends Controller
                 ->first();
 
             if (!$payment) {
-                $this->logActivity('Payment callback failed - Already processed or invalid order', null, null, [
-                    'order_id' => $order_id,
-                    'callback_status' => $status
-                ], 'Payment Order Invalid');
 
                 $msg = 'Already processed or invalid order';
-                Log::info($msg);
+                Log::channel('payment')->warning('Payment order not found or already processed', ['order_id' => $order_id]);
                 return redirect()->away(
                     $frontendurl . '?status=failed&order_id=' . $order_id . '&message=' . urlencode($msg)
                 );
@@ -291,13 +270,9 @@ class PaymentController extends Controller
                 $ids = json_decode($payment->application_id, true);
 
                 if (!is_array($ids) || count($ids) === 0) {
-                    $this->logActivity('Payment callback failed - Invalid application IDs', null, null, [
-                        'order_id' => $order_id,
-                        'application_ids' => $ids
-                    ], 'Payment Data Invalid');
 
                     $msg = 'Invalid application IDs';
-                    Log::info($msg);
+                    Log::channel('payment')->error('Invalid application IDs', ['order_id' => $order_id]);
                     return redirect()->away(
                         $frontendurl . '?status=failed&order_id=' . $order_id . '&message=' . urlencode($msg)
                     );
@@ -352,24 +327,18 @@ class PaymentController extends Controller
 
                             $result = $response->json();
 
-                            Log::info('Third-party pwdwrtripura success response', [
+                            Log::channel('payment')->info('Third-party pwdwrtripura success response', [
                                 'status_code' => $response->status(),
                                 'response'    => $result,
                             ]);
                         } else {
 
-                            Log::error('Third-party API pwdwrtripura failed response', [
+                            Log::channel('payment')->error('Third-party API pwdwrtripura failed response', [
                                 'status_code' => $response->status(),
                                 'response'    => $response->body(),
                             ]);
                         }
                     }
-
-                    // Log payment success
-                    $this->logActivity('Payment completed successfully', $application, User::find($application->user_id), [
-                        'grn_number' => $grn,
-                        'transaction_id' => $CIN,
-                    ], 'Payment Success');
 
                     $user = User::find($application->user_id);
 
@@ -403,7 +372,7 @@ class PaymentController extends Controller
 
             if ($status_lower == 'success') {
                 $msg = 'Payment processed successfully';
-                Log::info($msg);
+                Log::channel('payment')->info('Payment success', ['order_id' => $order_id, 'amount' => $total]);
                 return redirect()->away(
                     $frontendurl
                         . '?status=success'
@@ -418,14 +387,8 @@ class PaymentController extends Controller
 
                 $user = $application?->user;
 
-                $this->logActivity('Payment failed', null, $user, [
-                    'application_ids' => $ids,
-                    'failure_reason' => $status,
-                ], 'Payment Failed');
-
-
                 $msg = 'Payment failed with status: ' . $status;
-                Log::info($msg);
+                Log::channel('payment')->warning('Payment failed', ['order_id' => $order_id, 'status' => $status]);
                 return redirect()->away(
                     $frontendurl
                         . '?status=failed'
@@ -438,15 +401,8 @@ class PaymentController extends Controller
 
             DB::rollBack();
 
-            // Log payment callback error
-            $this->logActivity('Payment callback processing failed', null, null, [
-                'error_message' => $e->getMessage(),
-                'error_line' => $e->getLine(),
-                'order_id' => $order_id ?? 'unknown'
-            ], 'Payment Processing Failed');
-
             $msg = 'Exception: ' . $e->getMessage();
-            Log::info($msg);
+            Log::channel('payment')->error('Payment callback exception', ['error' => $e->getMessage(), 'line' => $e->getLine()]);
             return redirect()->away(
                 config('payment.frontendurl')
                     . '?status=failed'
@@ -702,14 +658,14 @@ class PaymentController extends Controller
             $response = curl_exec($ch);
 
             if (curl_error($ch)) {
-                Log::error('SOAP API Error: ' . curl_error($ch));
+                Log::channel('payment')->error('SOAP API Error', ['error' => curl_error($ch)]);
                 return false;
             }
 
             curl_close($ch);
             return $response;
         } catch (\Exception $e) {
-            Log::error('SOAP API Exception: ' . $e->getMessage());
+            Log::channel('payment')->error('SOAP API Exception', ['error' => $e->getMessage()]);
             return false;
         }
     }
