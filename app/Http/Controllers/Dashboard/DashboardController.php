@@ -95,8 +95,7 @@ class DashboardController extends Controller
                         'under_review',
                         're_submitted',
                         'submitted',
-                        'extra_payment',
-                        'send_back'
+                        'extra_payment'
                     ])
                     ->count('user_service_applications.id');
 
