@@ -367,6 +367,7 @@ class UserServiceApplicationController extends Controller
                     DB::commit();
 
                     if ($status === 're_submitted') {
+                        $user_service_application->logAs($user->user_name . ' re-submitted application', 'Application Re-submitted');
                         $sms = SmsService::buildSmsMessage('application_resubmitted', [
                             'APP_NO' => $user_service_application->applicationId,
                             'DEPT_NAME' => $department_name ?? 'the department',
@@ -499,6 +500,13 @@ class UserServiceApplicationController extends Controller
                             [$param_1, $param_2, $param_3, $param_4],
                             "application_id={$user_service_application->id}"
                         );
+
+                        if ($status !== 'draft') {
+                            $this->logActivity('Application created with status: ' . $status, $user_service_application, $user, [
+                                'application_id' => $user_service_application->applicationId,
+                                'status' => $status,
+                            ], 'Application created');
+                        }
                     }
 
 
@@ -875,6 +883,8 @@ class UserServiceApplicationController extends Controller
                 'action_taken_at'    => null,
                 'remarks'            => null,
             ]);
+
+            $user_service_application->logAs($user->user_name . ' updated application', 'Application Updated');
 
             DB::commit();
 
@@ -1982,6 +1992,15 @@ class UserServiceApplicationController extends Controller
                 }
             }
 
+            $user_obj = User::find($user_id);
+            if ($user_obj) {
+                $this->logActivity('Third party application callback', $data, $user_obj, [
+                    'external_application_id' => $external_id,
+                    'status' => $status,
+                    'payment_status' => $payment_status,
+                ], 'Third party callback');
+            }
+
             try {
                 ThirdPartyStatusLog::create([
                     'service_id'         => $service_id,
@@ -2519,10 +2538,7 @@ class UserServiceApplicationController extends Controller
             ]);
 
             $admin = Auth::user();
-            // Log payment mark
-            $this->logActivity($admin->user_name . ' marked the application as paid', $application, User::find($application->user_id), [
-                'grn_number' => $application->GRN_number,
-            ], 'Admin marked paid');
+            $application->logAs($admin->user_name . ' marked application as paid', 'Admin Marked Paid');
 
             return response()->json([
                 'status' => 1,
@@ -3011,6 +3027,19 @@ class UserServiceApplicationController extends Controller
             $old_application->update([
                 'status' => 'expired'
             ]);
+
+            $old_data_json = json_encode($old_data);
+            $final_data_json = json_encode($final_data);
+            $data_diff = ($old_data_json !== $final_data_json) ? 'Data modified' : 'No data changes';
+
+            $this->logActivity('Application renewed', $new_application, Auth::user(), [
+                'new_application_id' => $new_application->applicationId,
+                'previous_application_id' => $old_application->applicationId,
+                'renewal_year' => now()->year,
+                'status' => $status,
+                'data_changes' => $data_diff,
+                'renewal_fee' => $calculated_fee['renewal_fee'],
+            ], 'Application renewal');
 
             if ($status == "re_submitted") {
                 ApplicationWorkflowAssignment::create([
