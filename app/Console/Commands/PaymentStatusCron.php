@@ -8,12 +8,10 @@ use Illuminate\Support\Facades\Log;
 use App\Models\PaymentOrder;
 use App\Models\UserServiceApplication;
 use App\Models\User;
-use App\Traits\LogsActivity;
 use Carbon\Carbon;
 
 class PaymentStatusCron extends Command
 {
-    use LogsActivity;
     protected $signature = 'payment:check-status';
     protected $description = 'Check payment status from eGrass server and update applications';
 
@@ -180,19 +178,6 @@ class PaymentStatusCron extends Command
         $this->info("API errors: " . count($api_error_orders) . (count($api_error_orders) ? " (" . implode(',', $api_error_orders) . ")" : ""));
         $this->info("Invalid responses: " . count($invalid_response_orders) . (count($invalid_response_orders) ? " (" . implode(',', $invalid_response_orders) . ")" : ""));
         $this->info("DB errors: " . count($db_error_orders) . (count($db_error_orders) ? " (" . implode(',', $db_error_orders) . ")" : ""));
-
-        $user = User::first();
-        $this->logActivity('Payment status Cron runned', null, $user, [
-            'processed_order_ids' => implode(',', $processed_order_ids),
-            'updated_order_ids' => implode(',', $updated_order_ids),
-            'updated_applications' => $updated_applications,
-            'amount_mismatch_order_ids' => implode(',', $amount_mismatch_skipped),
-            'not_found_order_ids' => implode(',', $not_found_skipped),
-            'fail_order_ids' => implode(',', $fail_skipped),
-            'api_error_order_ids' => implode(',', $api_error_orders),
-            'invalid_response_order_ids' => implode(',', $invalid_response_orders),
-            'db_error_order_ids' => implode(',', $db_error_orders)
-        ], 'Payment status Cron');
 
         return Command::SUCCESS;
     }

@@ -11,9 +11,11 @@ use App\Models\Appeal;
 use App\Models\UserServiceApplication;
 use App\Models\ApplicationWorkflowAssignment;
 use App\Models\User;
+use App\Traits\LogsActivity;
 
 class AppealController extends Controller
 {
+    use LogsActivity;
     public function user_appeal_store(Request $request)
     {
         try {
@@ -251,6 +253,8 @@ class AppealController extends Controller
                     'message' => 'Appeal not found or access denied'
                 ], 404);
             }
+
+            $appeal->logAs($user->user_name . ' ' . $request->status . ' appeal for application: ' . $appeal->application->applicationId, 'Appeal Status Updated');
 
             $appeal->update([
                 'status' => $request->status,

@@ -11,9 +11,11 @@ use App\Models\User;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\DepartmentUsersExport;
 use App\Exports\BussinessUsersExport;
+use App\Traits\LogsActivity;
 
 class AdminController extends Controller
 {
+    use LogsActivity;
     public function fetch_all_business_users(Request $request)
     {
 
@@ -273,7 +275,10 @@ class AdminController extends Controller
 
             DB::beginTransaction();
 
+            $admin = Auth::user();
             $user = User::findOrFail($id);
+
+            $user->logAs($admin->user_name . ' changed user status from ' . $user->status . ' to ' . ($user->status === 'active' ? 'blocked' : 'active'), 'User block/unblock');
 
             $user->status = $user->status === 'active' ? 'blocked' : 'active';
             $user->save();
@@ -329,6 +334,8 @@ class AdminController extends Controller
                     'message' => 'You can only update user type department or individual.'
                 ], 403);
             }
+
+            $user->logAs($admin->user_name . ' updated user profile for ' . $user->user_name, 'User Profile Updated');
 
             $user->update([
                 'mobile_no' => $request->mobile_no,

@@ -11,9 +11,11 @@ use App\Models\Department;
 use App\Models\DepartmentUser;
 use App\Models\User;
 use App\Models\UnitDetail;
+use App\Traits\LogsActivity;
 
 class InspectionController extends Controller
 {
+    use LogsActivity;
 
     public function inspection_store(Request $request)
     {
@@ -70,6 +72,8 @@ class InspectionController extends Controller
 
             $inspection->proposed_date = json_decode($inspection->proposed_date, true);
             $inspection->inspection_for = json_decode($inspection->inspection_for, true);
+
+            $inspection->logAs($user->user_name . ' created inspection request: ' . $inspection->request_id, 'Inspection Created');
 
             DB::commit();
 
@@ -290,6 +294,8 @@ class InspectionController extends Controller
             $inspection->proposed_date = json_decode($inspection->proposed_date, true);
             $inspection->inspection_for = json_decode($inspection->inspection_for, true);
 
+            $inspection->logAs($user->user_name . ' updated inspection: ' . $inspection->request_id, 'Inspection Updated');
+
             DB::commit();
 
             return response()->json([
@@ -350,6 +356,8 @@ class InspectionController extends Controller
                 ], 404);
             }
 
+            $request_id = $inspection->request_id;
+            $inspection->logAs($user->user_name . ' deleted inspection: ' . $request_id, 'Inspection Deleted');
             $inspection->delete();
 
             DB::commit();
@@ -491,6 +499,8 @@ class InspectionController extends Controller
                     'message' => 'Inspection not found.',
                 ], 404);
             }
+
+            $inspection->logAs($user->user_name . ' updated inspection status to ' . $request->status, 'Inspection Status Updated');
 
             $inspection->update([
                 'inspector'     => $request->inspector,
