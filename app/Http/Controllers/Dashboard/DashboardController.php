@@ -83,8 +83,13 @@ class DashboardController extends Controller
                     ->pluck('application_id')
                     ->unique();
 
-                $total_count_pending_application_in_department = UserServiceApplication::join('application_workflow_assignments as awa', 'awa.application_id', '=', 'user_service_applications.id')
-                    ->where('awa.department_id', $department_id)
+                $total_count_pending_application_in_department = UserServiceApplication::join(
+                    'service_masters as sm',
+                    'sm.id',
+                    '=',
+                    'user_service_applications.service_id'
+                )
+                    ->where('sm.department_id', $department_id)
                     ->whereIn('user_service_applications.status', [
                         'pending',
                         'under_review',
@@ -93,12 +98,17 @@ class DashboardController extends Controller
                         'extra_payment',
                         'send_back'
                     ])
-                    ->distinct()
                     ->count('user_service_applications.id');
 
-                $total_count_approved_application_in_department = UserServiceApplication::whereIn('id', $department_app_ids)
-                    ->whereIn('status', ['approved', 'noc_issued'])
-                    ->count();
+                $total_count_approved_application_in_department = UserServiceApplication::join(
+                    'service_masters as sm',
+                    'sm.id',
+                    '=',
+                    'user_service_applications.service_id'
+                )
+                    ->where('sm.department_id', $department_id)
+                    ->whereIn('user_service_applications.status', ['approved', 'noc_issued'])
+                    ->count('user_service_applications.id');
 
                 $percentage_pending_application = $total_applications_for_this_department > 0
                     ? min(100, round(($total_count_pending_application_in_department / $total_applications_for_this_department) * 100, 2))
@@ -109,9 +119,15 @@ class DashboardController extends Controller
                     ? min(100, round(($total_count_approved_application_in_department / $total_applications_for_this_department) * 100, 2))
                     : 0;
 
-                $total_count_rejected_application_in_department = UserServiceApplication::whereIn('id', $department_app_ids)
-                    ->where('status', 'rejected')
-                    ->count();
+                $total_count_rejected_application_in_department = UserServiceApplication::join(
+                    'service_masters as sm',
+                    'sm.id',
+                    '=',
+                    'user_service_applications.service_id'
+                )
+                    ->where('sm.department_id', $department_id)
+                    ->where('user_service_applications.status', 'rejected')
+                    ->count('user_service_applications.id');
 
                 $percentage_rejected_application = $total_applications_for_this_department > 0
                     ? min(100, round(($total_count_rejected_application_in_department / $total_applications_for_this_department) * 100, 2))
@@ -756,7 +772,7 @@ class DashboardController extends Controller
                 ->tap($date_filter)
                 ->count();
 
-            $total_payments = UserServiceApplication::whereIN('payment_status', ['paid','success'])
+            $total_payments = UserServiceApplication::whereIN('payment_status', ['paid', 'success'])
                 ->where('paid_amount', '>', 0)
                 ->tap($date_filter)
                 ->count();
