@@ -45,10 +45,10 @@ class SyncSaralData extends Command
             ->whereHas('service', function ($q) {
                 $q->where('department_id', 6);
             })
+            ->whereDate('created_at', '>=', '2026-02-23')
             ->whereIn('service_id', array_keys($this->service_code_mapping))
             ->whereNotIn('status', ['saved', 'draft'])
             ->orderBy('id', 'desc')
-            ->limit(10)
             ->get();
 
         if ($applications->isEmpty()) {
