@@ -41,6 +41,7 @@ class ServiceMaster extends Model
         'service_mode',
         'third_party_portal_name',
         'third_party_redirect_url',
+        'third_party_method',
         'third_party_return_url',
         'third_party_status_api_url',
         'third_party_payment_mode',
