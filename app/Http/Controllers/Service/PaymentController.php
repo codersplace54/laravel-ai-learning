@@ -61,7 +61,7 @@ class PaymentController extends Controller
                 if ($application->extra_payment !== null && $application->payment_status === 'pending') {
                     $amount = $application->extra_payment;
                 } else {
-                    $amount = $application->effective_fee ?? $application->total_fee ?? 0;
+                    $amount = ($application->effective_fee !== null && $application->effective_fee > 0) ? $application->effective_fee : ($application->total_fee ?? 0);
                 }
 
                 if ($amount <= 0) {
@@ -286,7 +286,7 @@ class PaymentController extends Controller
                         $amount = $application->extra_payment;
                         $status = 're_submitted';
                     } else {
-                        $amount = $application->effective_fee ?? $application->total_fee ?? 0;
+                        $amount = ($application->effective_fee !== null && $application->effective_fee > 0) ? $application->effective_fee : ($application->total_fee ?? 0);
                         $status = 'submitted';
                     }
 
@@ -472,7 +472,7 @@ class PaymentController extends Controller
                     $amount = $application->extra_payment;
                     $payment_type = 'Extra Payment Raised';
                 } else {
-                    $amount = $application->effective_fee > 0 ? $application->effective_fee : ($application->total_fee ?? 0);
+                    $amount = ($application->effective_fee !== null && $application->effective_fee > 0) ? $application->effective_fee : ($application->total_fee ?? 0);
                     $payment_type = 'Application Fee Payment';
                 }
 
