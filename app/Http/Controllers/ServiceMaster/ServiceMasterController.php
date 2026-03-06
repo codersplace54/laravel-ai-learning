@@ -65,6 +65,7 @@ class ServiceMasterController extends Controller
                 'service_mode' => 'nullable|in:native,third_party',
                 'third_party_portal_name' => 'nullable|string',
                 'third_party_redirect_url' => 'nullable|string',
+                'third_party_method' => 'nullable|in:GET,POST',
                 'third_party_return_url' => 'nullable|string',
                 'third_party_status_api_url' => 'nullable|string',
                 'third_party_payment_mode' => 'nullable|in:unified,external',
@@ -111,6 +112,7 @@ class ServiceMasterController extends Controller
                 'third_party_portal_name' => $request->third_party_portal_name,
                 'third_party_payment_mode' => $request->third_party_payment_mode ?? "unified",
                 'third_party_redirect_url' => $request->third_party_redirect_url,
+                'third_party_method' => $request->third_party_method ?? 'POST',
                 'third_party_return_url' => $request->third_party_return_url,
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? 1,
@@ -187,6 +189,7 @@ class ServiceMasterController extends Controller
                 'service_mode' => 'nullable|in:native,third_party',
                 'third_party_portal_name' => 'nullable|string',
                 'third_party_redirect_url' => 'nullable|string',
+                'third_party_method' => 'nullable|in:GET,POST',
                 'third_party_return_url' => 'nullable|string',
                 'third_party_status_api_url' => 'nullable|string',
                 'third_party_payment_mode' => 'nullable|in:unified,external',
@@ -239,6 +242,7 @@ class ServiceMasterController extends Controller
                 'third_party_portal_name' => $request->third_party_portal_name,
                 'third_party_payment_mode' => $request->third_party_payment_mode ?? $service->third_party_payment_mode,
                 'third_party_redirect_url' => $request->third_party_redirect_url,
+                'third_party_method' => $request->third_party_method ?? $service->third_party_method,
                 'third_party_return_url' => $request->third_party_return_url,
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? $service->is_active,
@@ -918,9 +922,10 @@ class ServiceMasterController extends Controller
                 $post_params['returnUrl'] = $service->third_party_return_url;
             }
 
+            $method = strtoupper($service->third_party_method ?? 'POST');
 
             $html = '<html><body onload="document.forms[0].submit()">';
-            $html .= '<form method="POST" action="' . e($service->third_party_redirect_url) . '">';
+            $html .= '<form method="' . e($method) . '" action="' . e($service->third_party_redirect_url) . '">';
 
             foreach ($post_params as $key => $value) {
                 $html .= '<input type="hidden" name="' . e($key) . '" value="' . e($value) . '">';
