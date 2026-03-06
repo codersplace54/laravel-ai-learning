@@ -500,13 +500,6 @@ class UserServiceApplicationController extends Controller
                             [$param_1, $param_2, $param_3, $param_4],
                             "application_id={$user_service_application->id}"
                         );
-
-                        if ($status !== 'draft') {
-                            $this->logActivity('Application created with status: ' . $status, $user_service_application, $user, [
-                                'application_id' => $user_service_application->applicationId,
-                                'status' => $status,
-                            ], 'Application created');
-                        }
                     }
 
 

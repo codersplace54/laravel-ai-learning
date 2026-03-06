@@ -319,10 +319,10 @@ class AdminController extends Controller
             ]);
 
             $admin = Auth::user();
-            if (!$admin || $admin->user_type !== 'admin') {
+            if (!$admin || !in_array($admin->user_type, ['admin', 'support'])) {
                 return response()->json([
                     'status' => 0,
-                    'message' => 'Only admin can update these details.'
+                    'message' => 'Only admin or support can update these details.'
                 ], 403);
             }
 
@@ -341,6 +341,11 @@ class AdminController extends Controller
                 'mobile_no' => $request->mobile_no,
                 'password' => Hash::make($request->new_password)
             ]);
+
+            $log_message = $admin->user_type === 'support' 
+                ? "Support updated {$user->user_name} user password" 
+                : "Admin updated {$user->user_name} user password";
+            $this->logActivity($log_message, $user, $admin, [], 'Password Updated');
 
             return response()->json([
                 'status' => 1,
