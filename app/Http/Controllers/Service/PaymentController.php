@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Models\ApplicationWorkflowHistory;
 use App\Services\SmsService;
 use App\Jobs\SendWhatsAppNotification;
+use App\Models\ServiceApprovalFlow;
 use App\Traits\LogsActivity;
 use Illuminate\Support\Facades\Http;
 
@@ -290,10 +291,11 @@ class PaymentController extends Controller
                         $status = 'submitted';
                     }
 
-                    if ($application->current_step_number == 0) {
+                    $has_approval_flow = ServiceApprovalFlow::where('service_id', $application->service_id)->exists();
+
+                    if (!$has_approval_flow) {
                         $status = 'approved';
                     }
-
 
                     $user_service_application =  UserServiceApplication::where('id', $application->id)->update([
                         'payment_status'   => 'paid',
@@ -306,6 +308,10 @@ class PaymentController extends Controller
                     ]);
 
                     $application->refresh();
+
+                    if (!$has_approval_flow && $status === 'approved') {
+                        app(CertificateController::class)->auto_generate_certificate($application);
+                    }
 
                     if ($application->is_third_party == 1) {
 
