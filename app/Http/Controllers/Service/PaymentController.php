@@ -305,6 +305,7 @@ class PaymentController extends Controller
                         'updated_at'       => now(),
                     ]);
 
+                    $application->refresh();
 
                     if ($application->is_third_party == 1) {
 

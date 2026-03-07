@@ -47,7 +47,7 @@ class ServiceMasterController extends Controller
                 'depends_on_services.*' => 'string',
                 'generate_id' => 'required|in:yes,no',
                 'generate_pdf' => 'required|in:yes,no',
-                'generated_id_format' => 'required|string|max:255',
+                'generated_id_format' => 'required_if:service_mode,native|nullable|string|max:255',
                 'label_noc_date' => 'nullable|string|max:255',
                 'label_noc_doc' => 'nullable|string|max:255',
                 'label_noc_no' => 'nullable|string|max:255',
@@ -71,7 +71,7 @@ class ServiceMasterController extends Controller
                 'third_party_payment_mode' => 'nullable|in:unified,external',
                 'is_active' => 'nullable|integer',
                 'fixed_expiry_date' => 'nullable|date',
-                'egras_scheme_code' => 'nullable|string',
+                'egras_scheme_code' => 'required_if:service_mode,native|nullable|string',
                 'caf_depends' => 'nullable|in:yes,no',
             ]);
 
@@ -117,7 +117,7 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? 1,
                 'created_by' => $admin->email_id,
-                'egras_scheme_code' => $request->egras_scheme_code ?? "1475-00-106-21-06",
+                'egras_scheme_code' => $request->egras_scheme_code,
                 'caf_depends' => $request->caf_depends,
             ]);
 
@@ -170,7 +170,7 @@ class ServiceMasterController extends Controller
                 'depends_on_services.*' => 'string',
                 'generate_id' => 'required|in:yes,no',
                 'generate_pdf' => 'required|in:yes,no',
-                'generated_id_format' => 'required|string|max:255',
+                'generated_id_format' => 'required_if:service_mode,native|nullable|string|max:255',
                 'label_noc_date' => 'nullable|string|max:255',
                 'label_noc_doc' => 'nullable|string|max:255',
                 'label_noc_no' => 'nullable|string|max:255',
@@ -194,7 +194,7 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => 'nullable|string',
                 'third_party_payment_mode' => 'nullable|in:unified,external',
                 'is_active' => 'nullable|integer',
-                'egras_scheme_code' => 'nullable|string',
+                'egras_scheme_code' => 'required_if:service_mode,native|nullable|string',
                 'caf_depends' => 'nullable|in:yes,no',
             ]);
 
@@ -247,7 +247,7 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? $service->is_active,
                 'updated_by' => $admin->email_id,
-                'egras_scheme_code' => $request->egras_scheme_code ?? $service->egras_scheme_code ?? "1475-00-106-21-06",
+                'egras_scheme_code' => $request->egras_scheme_code ?? $service->egras_scheme_code ,
                 'caf_depends' => $request->caf_depends,
             ]);
 
