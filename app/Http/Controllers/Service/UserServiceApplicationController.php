@@ -1211,7 +1211,21 @@ class UserServiceApplicationController extends Controller
                     'message' => 'User Service application not found.'
                 ], 404);
             }
+
+            if (!in_array($service_user_application->status, ['draft', 'saved'])) {
+
+                DB::rollBack();
+
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Only draft or saved applications can be deleted.'
+                ], 403);
+            }
+
             $applicationid = $service_user_application->applicationId;
+
+            ApplicationWorkflowAssignment::where('application_id', $service_user_application->id)->delete();
+
             $service_user_application->delete();
 
             DB::commit();

@@ -440,7 +440,7 @@ class ServiceMasterController extends Controller
                     'department_id' => $service->department_id,
                     'department_name' =>  $service->department->name,
                     'noc_type' => $service->noc_type,
-                    'target_days' => $service->target_days,
+                    'target_days' => $service->target_days .' days',
                     'noc_payment_type' => $service->noc_payment_type,
                     'application_id' => $service->applications->first() ? $service->applications->first()->id : null,
                     'application_status' => $service->applications->first() ? $service->applications->first()->status : null,
