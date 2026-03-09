@@ -61,6 +61,7 @@ class UserServiceApplication extends Model
         'external_valid_till',
         'external_remarks',
         'is_third_party',
+        'egras_scheme_code',
         'license_id',
         'NOC_mode',
     ];

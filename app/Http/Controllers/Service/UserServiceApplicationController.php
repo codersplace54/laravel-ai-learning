@@ -2094,7 +2094,8 @@ class UserServiceApplicationController extends Controller
                     'external_status'         => $request->service_status,
                     'external_payment_status' => $external_payment_status,
                     'external_remarks'        => $request->remark,
-                    'NOC_certificate'         => $request->noc_url
+                    'NOC_certificate'         => $request->noc_url,
+                    'egras_scheme_code'       => $request->egras_account_head,
                 ]);
             }
 
