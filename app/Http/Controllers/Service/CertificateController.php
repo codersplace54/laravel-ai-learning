@@ -250,12 +250,16 @@ class CertificateController extends Controller
             $template    = $base['template'];
             $qr_data_uri = $base['qr_data_uri'];
 
-
-            $verify_url      = 'https://swaagat.tripura.gov.in/new';
             $name_for_qr     = $request?->name ?? $user->name_of_enterprise ?? '—';
             $license_for_qr  = $request?->license_id ?? ($application->license_id ?? '');
             $issue_for_qr    = $request?->issue_date ?? ($application->application_date ?? '');
             $valid_for_qr    = $request?->valid_upto ?? ($application->NOC_expiry_date ?? '');
+            
+            // dd($valid_for_qr);
+
+            $filename = $application->applicationId . '.pdf';
+            $certificate_path = "uploads/{$user->id}/application/{$filename}";
+            $verify_url = 'https://swaagat.tripura.gov.in/new/' . $certificate_path;
 
             $qr_payload = "Name: {$name_for_qr}\n"
                 . "License ID: {$license_for_qr}\n"
@@ -323,13 +327,48 @@ class CertificateController extends Controller
 
 
             $logo_path = storage_path('app/public/images/logo/state_emblem_english.jpg');
+            
+            // to correct table format
+            $finalHtml = '
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    table {
+                        width: 100%;
+                        border-collapse: collapse !important;
+                        border-spacing: 0 !important;
+                        table-layout: fixed;
+                    }
 
-            $pdf = Pdf::loadHTML($filled)
+                    td, th {
+                        margin: 0 !important;
+                        padding: 4px 6px !important;
+                        line-height: 1.1 !important;
+                    }
+
+                    td p, th p {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        line-height: 2.0 !important;
+                    }
+
+                    td span, th span, td strong, th strong {
+                        line-height: 2.0 !important;
+                    }
+                </style>
+            </head>
+            <body>
+            ' . $filled . '
+            </body>
+            </html>';
+
+            $pdf = Pdf::loadHTML($finalHtml)
                 ->setPaper('a4', 'portrait')
                 ->setOptions([
-                    // 'isHtml5ParserEnabled' => true,
+                    'isHtml5ParserEnabled' => true,
                     'isRemoteEnabled'      => true,
-                    // 'defaultFont'          => 'DejaVu Sans',
                     'dpi'                  => 150,
                 ]);
 
@@ -432,14 +471,16 @@ class CertificateController extends Controller
         $template = preg_replace('/\{\{\s*\}\}/', '', $template); // remove {{}} if any
         $template = '<style>@page { margin: 18mm 18mm 18mm 18mm; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #000; padding: 8px; text-align: left; }</style>' . $template;
 
-        $verify_url = 'https://swaagat.tripura.gov.in/verify';
-
         $name = $request?->name ?? $user->name_of_enterprise ?? '—';
 
         // Handle both generate and view payloads
         $license_for_qr = $request?->license_id ?? ($application->license_id ?? '');
         $issue_for_qr   = $request?->issue_date ?? ($application->application_date ?? '');
         $valid_for_qr   = $request?->valid_upto ?? ($application->NOC_expiry_date ?? '');
+        
+        $filename = $application->applicationId . '.pdf';
+        $certificate_path = "uploads/{$user->id}/application/{$filename}";
+        $verify_url = 'https://swaagat.tripura.gov.in/new/' . $certificate_path;
 
         $qr_payload = "Name: {$name}\n"
             . "License ID: {$license_for_qr}\n"
@@ -1044,12 +1085,14 @@ class CertificateController extends Controller
             }
 
             $application_data = json_decode($application->application_data, true) ?? [];
-            
+            $license_id = $application->license_id ?? $this->generate_application_number($application->service_id, $application->id);
+
             $request = new Request([
                 'is_preview' => 'no',
                 'application_id' => $application->id,
                 'add_watermark' => 'yes',
-                'application_data' => $application_data
+                'application_data' => $application_data,
+                'license_id' => $license_id
             ]);
 
             $this->user_certificate_generate($request);
@@ -1135,7 +1178,6 @@ class CertificateController extends Controller
                 'message' => 'Failed to fetch certificate',
                 'error'   => $e->getMessage(),
             ], 500);
-            
         }
     }
 
