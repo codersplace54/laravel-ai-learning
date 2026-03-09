@@ -1043,10 +1043,13 @@ class CertificateController extends Controller
                 return;
             }
 
+            $application_data = json_decode($application->application_data, true) ?? [];
+            
             $request = new Request([
                 'is_preview' => 'no',
                 'application_id' => $application->id,
-                'add_watermark' => 'yes'
+                'add_watermark' => 'yes',
+                'application_data' => $application_data
             ]);
 
             $this->user_certificate_generate($request);
