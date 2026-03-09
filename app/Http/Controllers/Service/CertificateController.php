@@ -255,7 +255,7 @@ class CertificateController extends Controller
             $issue_for_qr    = $request?->issue_date ?? ($application->application_date ?? '');
             $valid_for_qr    = $request?->valid_upto ?? ($application->NOC_expiry_date ?? '');
             
-            dd($valid_for_qr);
+            // dd($valid_for_qr);
 
             $filename = $application->applicationId . '.pdf';
             $certificate_path = "uploads/{$user->id}/application/{$filename}";
