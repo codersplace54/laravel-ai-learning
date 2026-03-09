@@ -249,19 +249,17 @@ class CertificateController extends Controller
             $user        = $base['user'];
             $template    = $base['template'];
             $qr_data_uri = $base['qr_data_uri'];
-
+// dd($application);
             $name_for_qr     = $request?->name ?? $user->name_of_enterprise ?? '—';
             $license_for_qr  = $request?->license_id ?? ($application->license_id ?? '');
             $issue_for_qr    = $request?->issue_date ?? ($application->application_date ?? '');
             $valid_for_qr    = $request?->valid_upto ?? ($application->NOC_expiry_date ?? '');
             
-            // dd($valid_for_qr);
-
             $filename = $application->applicationId . '.pdf';
             $certificate_path = "uploads/{$user->id}/application/{$filename}";
-            $verify_url = 'https://swaagat.tripura.gov.in/new/' . $certificate_path;
+            $verify_url = 'https://swaagatbackend.tripura.gov.in/new/storage/' . $certificate_path;
 
-            $qr_payload = "Name: {$name_for_qr}\n"
+            $qr_payload = "Name: {$verify_url}\n"
                 . "License ID: {$license_for_qr}\n"
                 . "Issue Date: {$issue_for_qr}\n"
                 . "Valid Upto: {$valid_for_qr}\n"
@@ -480,7 +478,7 @@ class CertificateController extends Controller
         
         $filename = $application->applicationId . '.pdf';
         $certificate_path = "uploads/{$user->id}/application/{$filename}";
-        $verify_url = 'https://swaagat.tripura.gov.in/new/' . $certificate_path;
+        $verify_url = 'https://swaagatbackend.tripura.gov.in/new/storage/' . $certificate_path;
 
         $qr_payload = "Name: {$name}\n"
             . "License ID: {$license_for_qr}\n"
