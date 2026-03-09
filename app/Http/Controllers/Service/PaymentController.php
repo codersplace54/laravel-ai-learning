@@ -133,6 +133,11 @@ class PaymentController extends Controller
 
             $secret_key = config('egras.secret_key');
 
+            if (empty($user->registered_enterprise_address)) {
+                $user->registered_enterprise_address = 'TRIPURA';
+                $user->save();
+            }
+
             $hash_parts = [
                 $dto_code,
                 $sto_code,
