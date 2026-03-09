@@ -32,6 +32,7 @@ use App\Models\IndustrialEstate;
 use App\Models\User;
 use App\Traits\LogsActivity;
 use App\Traits\PaymentMapTrait;
+use App\Http\Controllers\Service\CertificateController;
 
 class UserServiceApplicationController extends Controller
 {
