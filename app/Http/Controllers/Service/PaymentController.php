@@ -20,6 +20,7 @@ use App\Services\SmsService;
 use App\Jobs\SendWhatsAppNotification;
 use App\Models\ServiceApprovalFlow;
 use App\Traits\LogsActivity;
+use App\Models\ThirdPartyStatusLog;
 use Illuminate\Support\Facades\Http;
 
 class PaymentController extends Controller
@@ -59,6 +60,25 @@ class PaymentController extends Controller
             $fee_amounts  = [];
 
             foreach ($applications as $application) {
+                if ($application->is_third_party == 1) {
+                    $third_party_log = ThirdPartyStatusLog::where('application_id', $application->id)->exists();
+                    if (!$third_party_log) {
+                        DB::rollBack();
+                        return response()->json([
+                            'status' => 0,
+                            'message' => 'Your application is being processed. Please wait a few moments before proceeding with payment.',
+                        ], 400);
+                    }
+
+                    if (!$application->egras_scheme_code) {
+                        DB::rollBack();
+                        return response()->json([
+                            'status' => 0,
+                            'message' => 'Payment details are not yet available. Please contact support for assistance.',
+                        ], 400);
+                    }
+                }
+
                 if ($application->extra_payment !== null && $application->payment_status === 'pending') {
                     $amount = $application->extra_payment;
                 } else {
@@ -73,7 +93,11 @@ class PaymentController extends Controller
                     ], 400);
                 }
 
-                $scheme_names[] = $application->service->egras_scheme_code ?? 'NA';
+                if ($application->is_third_party == 1 && $application->egras_scheme_code) {
+                    $scheme_names[] = $application->egras_scheme_code;
+                } else {
+                    $scheme_names[] = $application->service->egras_scheme_code ?? 'NA';
+                }
                 $fee_amounts[]  = $amount;
             }
 
@@ -498,6 +522,7 @@ class PaymentController extends Controller
                     'payment_status'  => $application->payment_status ?? null,
                     'grn_number'  => $payment_orders_grns ?? null,
                     'payment_date'  => $application->payment_datetime ?? null,
+                    'is_third_party' => $application->is_third_party ?? 0,
                 ];
             }
 
