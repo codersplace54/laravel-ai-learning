@@ -22,6 +22,7 @@ use App\Models\ServiceApprovalFlow;
 use App\Traits\LogsActivity;
 use App\Models\ThirdPartyStatusLog;
 use Illuminate\Support\Facades\Http;
+use App\Http\Controllers\Service\CertificateController;
 
 class PaymentController extends Controller
 {
