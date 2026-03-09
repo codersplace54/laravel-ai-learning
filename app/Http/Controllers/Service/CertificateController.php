@@ -808,7 +808,7 @@ class CertificateController extends Controller
             'signature_note'       => $request->signature_note ?? 'Not Required',
             'user_name'            => $request->name ?? ($user->authorized_person_name ?? null),
             'user_id'              => $user->id,
-            'business_pan_no'      => $request->business_pan_no ?? optional($user->enterprise_details)->business_pan_no,
+            'business_pan_no'      => $request->business_pan_no ?? $user->pan,
 
             'qr_code'              => $qr_data_uri,
             'field_1'              => $request->field_1 ?? null,
