@@ -4,11 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Concerns\LogsModelActivity;
 use App\Traits\LogsActivity;
 
 class UserServiceApplication extends Model
 {
-    use LogsActivity;
+    use LogsModelActivity, LogsActivity;
     protected $fillable = [
         'id',
         'user_id',
