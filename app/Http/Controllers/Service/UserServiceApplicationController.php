@@ -380,12 +380,6 @@ class UserServiceApplicationController extends Controller
                             $sms['template_id']
                         );
 
-                        // app(WhatsAppService::class)->sendTemplate(
-                        //     $user->whatsapp_no ?? $user->mobile_no,
-                        //     'application_temp',
-                        //     [$user_service_application->applicationId, $service_data->noc_name ?? 'Service', $department_name ?? 'Department'],
-                        //     "application_id={$user_service_application->id}"
-                        // );
                     }
 
                     $message = $status === 'draft' ? 'Application saved as draft successfully.' : 'Application updated successfully.';
