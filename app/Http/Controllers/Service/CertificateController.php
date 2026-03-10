@@ -259,7 +259,7 @@ class CertificateController extends Controller
             $certificate_path = "uploads/{$user->id}/application/{$filename}";
             $verify_url = 'https://swaagatbackend.tripura.gov.in/new/storage/' . $certificate_path;
 
-            $qr_payload = "Name: {$verify_url}\n"
+            $qr_payload = "Name: {$name_for_qr}\n"
                 . "License ID: {$license_for_qr}\n"
                 . "Issue Date: {$issue_for_qr}\n"
                 . "Valid Upto: {$valid_for_qr}\n"
@@ -474,7 +474,8 @@ class CertificateController extends Controller
         // Handle both generate and view payloads
         $license_for_qr = $request?->license_id ?? ($application->license_id ?? '');
         $issue_for_qr   = $request?->issue_date ?? ($application->application_date ?? '');
-        $valid_for_qr   = $request?->valid_upto ?? ($application->NOC_expiry_date ?? '');
+        $noc_expiry = $this->calculate_noc_expiry_date($application->service);
+        $valid_for_qr   = $application->service->noc_validity == 0 ? 'Lifetime' : ($request?->valid_upto ?? ($application->NOC_expiry_date ?? ($noc_expiry ? $noc_expiry->format('Y-m-d') : '')));
         
         $filename = $application->applicationId . '.pdf';
         $certificate_path = "uploads/{$user->id}/application/{$filename}";
@@ -548,12 +549,12 @@ class CertificateController extends Controller
                 : null
             );
 
-        $valid_upto = $request?->input('valid_upto')
+        $valid_upto = $service->noc_validity == 0 ? null : ($request?->input('valid_upto')
             ?? (
                 $application->NOC_expiry_date
                 ? Carbon::parse($application->NOC_expiry_date)->format('d-m-Y')
                 : Carbon::parse($noc_expiry_date)->format('d-m-Y')
-            );
+            ));
 
         $fee_paid = $request?->input('fee_paid') ?? $application->final_fee;
 
@@ -561,7 +562,7 @@ class CertificateController extends Controller
             'license_id'        => $license_id,
             'issue_date'        => Carbon::parse($issue_date)->format('Y-m-d'),
             'registration_date' => $registration_date ? Carbon::parse($registration_date)->format('Y-m-d') : null,
-            'valid_upto'        => Carbon::parse($valid_upto)->format('Y-m-d'),
+            'valid_upto'        => $valid_upto ? Carbon::parse($valid_upto)->format('Y-m-d') : null,
             'fee_paid'          => $fee_paid,
         ];
     }
@@ -837,7 +838,7 @@ class CertificateController extends Controller
 
             'registration_no'      => $request->registration_no ?? ($application->id ?? null),
             'registration_date'    => $request->registration_date ?? $meta['registration_date'],
-            'valid_upto'           => $request->valid_upto ?? $meta['valid_upto'],
+            'valid_upto'           => $application->service->noc_validity == 0 ? 'Lifetime' : ($request->valid_upto ?? $meta['valid_upto']),
 
             'max_contract_labour'  => $request->max_contract_labour ?? null,
             'fee_paid'             => $request->fee_paid ?? $meta['fee_paid'],
