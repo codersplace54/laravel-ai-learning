@@ -1188,17 +1188,16 @@ class CertificateController extends Controller
             }
 
             $certificate_url = config('app.url') . '/storage/' . $certificate_path;
-            $filename = basename($certificate_path);
 
             SendWhatsAppNotification::dispatch(
                 $user->mobile_no,
                 'certificate_generated_v1',
                 [
+                    'filename' => 'certificate.pdf',
                     'document_url' => $certificate_url,
-                    'filename' => $filename,
-                    'service_name' => $application->service->service_title_or_description,
-                    'license_id' => $application->license_id ?? 'N/A',
-                    'issue_date' => Carbon::parse($application->NOC_generationDate)->format('d M Y')
+                    $application->applicationId,
+                    $application->service->service_title_or_description,
+                    $application->license_id ?? 'N/A'
                 ],
                 'application_id=' . $application->id
             );
