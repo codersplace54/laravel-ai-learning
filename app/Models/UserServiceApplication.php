@@ -135,8 +135,15 @@ class UserServiceApplication extends Model
             return null;
         }
 
-        return $this->is_third_party
-            ? $this->NOC_certificate
-            : url(Storage::url($this->NOC_certificate));
+        if ($this->is_third_party) {
+            return $this->NOC_certificate;
+        }
+
+        $path = $this->NOC_certificate;
+        if (str_starts_with($path, 'uploads/') || str_starts_with($path, 'sites/')) {
+            return config('app.url') . 'storage/' . $path;
+        }
+
+        return $path;
     }
 }

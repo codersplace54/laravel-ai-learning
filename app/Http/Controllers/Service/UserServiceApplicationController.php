@@ -3598,13 +3598,7 @@ class UserServiceApplicationController extends Controller
             ];
         } 
         elseif ((float) $total_fee === 0.0 && !$has_approval_flow) {
-            $template_name = 'certificate_generated_no_approval_and_fee';
-            $params = [
-                $application->applicationId ?? $application->id,
-                $service_data->service_title_or_description ?? '',
-                ucfirst($status),
-                Carbon::parse($application->application_date)->format('d M Y, g:i A')
-            ];
+            // sending template "certificate_generated_v1" from certificateController
         } elseif ((float) $total_fee > 0.0) {
             $template_name = 'payment_required_v1';
             $params = [
