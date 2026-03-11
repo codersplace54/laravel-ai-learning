@@ -922,6 +922,21 @@ class ServiceController extends Controller
                             'current_step_number' => $next_step_flow->step_number,
                             'status'              => 'under_review',
                         ]);
+
+                        $next_department_name = Department::where('id', $next_step_flow->department_id)
+                            ->value('name');
+
+                        SendWhatsAppNotification::dispatch(
+                            $application->user->mobile_no,
+                            'application_forwarded_v1',
+                            [
+                                $application->applicationId,
+                                $application->service->service_title_or_description,
+                                'Under Review',
+                                $next_department_name ?? 'Next Department',
+                                Carbon::parse($application->updated_at)->format('d M Y, g:i A')
+                            ]
+                        );
                     }
                 }
             } elseif ($request->status === 'rejected') {

@@ -379,10 +379,11 @@ class UserServiceApplicationController extends Controller
                             $sms['message'],
                             $sms['template_id']
                         );
-
                     }
 
                     $message = $status === 'draft' ? 'Application saved as draft successfully.' : 'Application updated successfully.';
+
+                    $this->send_application_whatsapp_notification($user, $user_service_application, $service_data, $status, $total_fee, $has_approval_flow);
 
                     return response()->json([
                         'status'  => 1,
@@ -483,20 +484,7 @@ class UserServiceApplicationController extends Controller
                         );
                     }
 
-                    if (in_array($status, ['saved', 'submitted', 'approved'], true)) {
-                        $param_1 = $user_service_application->applicationId ?? $user_service_application->id;
-                        $param_2 = $service_data->service_title_or_description ?? '';
-                        $param_3 = ucfirst($status);
-                        $param_4 = Carbon::parse($user_service_application->application_date)->format('d M Y, g:i A');
-
-                        SendWhatsAppNotification::dispatch(
-                            $user->mobile_no,
-                            'application_submitted_v3',
-                            [$param_1, $param_2, $param_3, $param_4],
-                            "application_id={$user_service_application->id}"
-                        );
-                    }
-
+                    $this->send_application_whatsapp_notification($user, $user_service_application, $service_data, $status, $total_fee, $has_approval_flow);
 
                     $message = $status === 'draft' ? 'Application saved as draft successfully.' : 'Application created successfully.';
 
@@ -3592,6 +3580,48 @@ class UserServiceApplicationController extends Controller
             } elseif (is_array($value)) {
                 $this->convert_file_urls_recursive($value, $file_question_ids);
             }
+        }
+    }
+
+    private function send_application_whatsapp_notification($user, $application, $service_data, $status, $total_fee, $has_approval_flow): void
+    {
+        $template_name = null;
+        $params = [];
+
+        if ((float) $total_fee === 0.0 && $has_approval_flow) {
+            $template_name = 'application_submitted_v3';
+            $params = [
+                $application->applicationId ?? $application->id,
+                $service_data->service_title_or_description ?? '',
+                ucfirst($status),
+                Carbon::parse($application->application_date)->format('d M Y, g:i A')
+            ];
+        } 
+        elseif ((float) $total_fee === 0.0 && !$has_approval_flow) {
+            $template_name = 'certificate_generated_no_approval_and_fee';
+            $params = [
+                $application->applicationId ?? $application->id,
+                $service_data->service_title_or_description ?? '',
+                ucfirst($status),
+                Carbon::parse($application->application_date)->format('d M Y, g:i A')
+            ];
+        } elseif ((float) $total_fee > 0.0) {
+            $template_name = 'payment_required_v1';
+            $params = [
+                $application->applicationId ?? $application->id,
+                $service_data->service_title_or_description ?? '',
+                number_format($total_fee, 2),
+                Carbon::parse($application->application_date)->format('d M Y, g:i A')
+            ];
+        }
+
+        if ($template_name) {
+            SendWhatsAppNotification::dispatch(
+                $user->mobile_no,
+                $template_name,
+                $params,
+                "application_id={$application->id}"
+            );
         }
     }
 }
