@@ -99,10 +99,10 @@ class SyncSaralData extends Command
             ]);
 
             $response_data = $response->json();
-            $status_id = $response_data['RESPONSE']['STATUS_ID'] ?? null;
-            $status_msg = $response_data['RESPONSE']['STATUS_MSG'] ?? 'Unknown response';
+            $status_id = $response_data['RESPONSE']['Success']['STATUS_ID'] ?? null;
+            $status_msg = $response_data['RESPONSE']['Success']['STATUS_MSG'] ?? 'Unknown response';
 
-            if ($status_id === '001') {
+            if ($status_id === '000') {
                 Log::channel('saral_sync')->info("Successfully pushed {$applications->count()} applications to Saral.");
                 $this->info("Successfully pushed {$applications->count()} applications to Saral.");
             } else {
@@ -115,7 +115,7 @@ class SyncSaralData extends Command
                 $this->warn("Failed to process " . count($errors) . " applications.");
             }
 
-            return $status_id === '001' ? 0 : 1;
+            return $status_id === '000' ? 0 : 1;
         } catch (\Exception $e) {
             Log::channel('saral_sync')->error("Failed to push data to Saral: {$e->getMessage()}");
             $this->error("Failed to push data to Saral: {$e->getMessage()}");
