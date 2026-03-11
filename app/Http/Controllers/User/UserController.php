@@ -24,6 +24,7 @@ use App\Traits\LogsActivity;
 use App\Models\Concerns\LogsModelActivity;
 use App\Models\EnterpriseDetail;
 use Laravel\SerializableClosure\Signers\Hmac;
+use App\Jobs\SendWhatsAppNotification;
 
 class UserController extends Controller
 {
@@ -227,6 +228,12 @@ class UserController extends Controller
 
             if ($request->user_type === 'individual') {
                 session()->forget('verified_mobile_no');
+                SendWhatsAppNotification::dispatch(
+                    $user->whatsapp_no,
+                    'welcome_user_v2',
+                    [$user->authorized_person_name],
+                    'user_id=' . $user->id
+                );
             }
 
             if (in_array($request->user_type, ['department', 'admin'])) {

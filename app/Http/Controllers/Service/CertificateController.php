@@ -1187,7 +1187,7 @@ class CertificateController extends Controller
                 return;
             }
 
-            $certificate_url = $application->noc_certificate_url_attribute;
+            $certificate_url = $application->noc_certificate_url;
 
             SendWhatsAppNotification::dispatch(
                 $user->mobile_no,
