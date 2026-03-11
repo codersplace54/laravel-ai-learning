@@ -141,7 +141,7 @@ class UserServiceApplication extends Model
 
         $path = $this->NOC_certificate;
         if (str_starts_with($path, 'uploads/') || str_starts_with($path, 'sites/')) {
-            return config('app.url') . 'storage/' . $path;
+            return config('app.url') . '/storage/' . $path;
         }
 
         return $path;
