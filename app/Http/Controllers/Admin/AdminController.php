@@ -28,7 +28,7 @@ class AdminController extends Controller
             }
 
             $admin = User::where('id', $admin->id)
-                ->whereIn('user_type', ['admin','support'])
+                ->whereIn('user_type', ['admin', 'support'])
                 ->first();
 
             if (!$admin) {
@@ -142,7 +142,7 @@ class AdminController extends Controller
             }
 
             $admin = User::where('id', $admin->id)
-                ->whereIn('user_type', ['admin','support'])
+                ->whereIn('user_type', ['admin', 'support'])
                 ->first();
 
             if (!$admin) {
@@ -186,6 +186,22 @@ class AdminController extends Controller
 
                 $query->whereHas('department_user_location', function ($q) use ($district_ids) {
                     $q->whereIn('district_id', $district_ids);
+                });
+            }
+
+            if ($request->filled('hierarchy_level')) {
+                $hierarchy_level = $request->hierarchy_level;
+
+                $query->whereHas('department_user', function ($q) use ($hierarchy_level) {
+                    $q->where('hierarchy_level', $hierarchy_level);
+                });
+            }
+
+            if ($request->filled('is_inspector')) {
+                $isInspector = $request->is_inspector;
+
+                $query->whereHas('department_user', function ($q) use ($isInspector) {
+                    $q->where('inspector', $isInspector);
                 });
             }
 
@@ -342,8 +358,8 @@ class AdminController extends Controller
                 'password' => Hash::make($request->new_password)
             ]);
 
-            $log_message = $admin->user_type === 'support' 
-                ? "Support updated {$user->user_name} user password" 
+            $log_message = $admin->user_type === 'support'
+                ? "Support updated {$user->user_name} user password"
                 : "Admin updated {$user->user_name} user password";
             $this->logActivity($log_message, $user, $admin, [], 'Password Updated');
 

@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\Holiday;
+use Carbon\Carbon;
 
 class HolidayController extends Controller
 {
@@ -209,6 +210,33 @@ class HolidayController extends Controller
             return response()->json([
                 'status' => 0,
                 'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function holiday_disabled_dates()
+    {
+
+
+        try {
+
+            $dates = Holiday::orderBy('holiday_date', 'asc')
+                ->pluck('holiday_date')
+                ->map(function ($date) {
+                    return Carbon::parse($date)->format('Y-m-d');
+                })
+                ->values();
+
+            return response()->json([
+                'disabled_dates' => $dates
+            ], 200);
+
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

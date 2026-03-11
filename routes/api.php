@@ -265,7 +265,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         });
 
         Route::post('/get-total-applications-by-user', [DashboardController::class, 'get_total_applications_by_user']);
-        
+
         Route::post('calculate-renewal-fee', [UserServiceApplicationController::class, 'calculate_renewal_fee']);
         Route::post('update-renewed-application', [UserServiceApplicationController::class, 'update_renewed_application']);
         Route::post('get-applications-ready-for-renewal', [UserServiceApplicationController::class, 'get_applications_ready_for_renewal']);
@@ -440,3 +440,5 @@ Route::post('government-orders-list', [GovernmentOrderController::class, 'govern
 Route::post('public-certificate-download', [CertificateController::class, 'public_certificate_download']);
 
 Route::post('get-all-information-wizards', [InformationWizardController::class, 'get_all_information_wizards']);
+
+Route::post('public-holiday-disabled-dates', [HolidayController::class, 'holiday_disabled_dates']);
