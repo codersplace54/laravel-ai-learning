@@ -20,6 +20,7 @@ use App\Services\SmsService;
 use App\Services\ExternalSmsService;
 use App\Traits\LogsActivity;
 use Spatie\Activitylog\Facades\LogActivity;
+use App\Jobs\SendWhatsAppNotification;
 
 class AuthController extends Controller
 {
@@ -701,6 +702,16 @@ class AuthController extends Controller
 
             // Log password reset success
             $this->logActivity($user->user_name . " changed password successfully.", $user, null, [], "Password changed");
+
+            SendWhatsAppNotification::dispatch(
+                $user->whatsapp_no,
+                'password_changed_v1',
+                [
+                    $user->authorized_person_name,
+                    now()->format('d/m/Y H:i')
+                ],
+                'user_id=' . $user->id
+            );
 
             $old_tokens = JWTToken::where('user_id', $user->id)->get();
             foreach ($old_tokens as $row) {
