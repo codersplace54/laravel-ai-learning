@@ -905,7 +905,7 @@ class ServiceMasterController extends Controller
 
             if (!empty($service->verification_token)) {
                 $secret_key = $service->verification_token;
-                $application_date = now()->format('d-m-Y H:i:s');
+                $application_date = today()->format('d-m-Y');
                 $payload = "phone={$phone}&application_date={$application_date}";
 
                 $hmac_hash = hash_hmac('sha256', $payload, $secret_key);
