@@ -62,15 +62,6 @@ class PaymentController extends Controller
 
             foreach ($applications as $application) {
                 if ($application->is_third_party == 1) {
-                    $third_party_log = ThirdPartyStatusLog::where('application_id', $application->id)->exists();
-                    if (!$third_party_log) {
-                        DB::rollBack();
-                        return response()->json([
-                            'status' => 0,
-                            'message' => 'Your application is being processed. Please wait a few moments before proceeding with payment.',
-                        ], 400);
-                    }
-
                     if (!$application->egras_scheme_code) {
                         DB::rollBack();
                         return response()->json([
