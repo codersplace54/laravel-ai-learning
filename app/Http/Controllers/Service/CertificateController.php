@@ -409,7 +409,7 @@ class CertificateController extends Controller
                 // $clearance_response = $this->store_clearance($application);
 
                 // Send WhatsApp notification
-                // $this->send_certificate_whatsapp_notification($application, $user, $path);
+                $this->send_certificate_whatsapp_notification($application, $user, $path);
 
                 $application->NOC_certificate = asset('storage/' . $application->NOC_certificate);
 

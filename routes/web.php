@@ -43,6 +43,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('import-legal-metrology', [ImportController::class, 'import_legal_metrology_form'])->name('import.legal_metrology.form');
     Route::post('import-legal-metrology', [ImportController::class, 'import_legal_metrology'])->name('import.legal_metrology');
 
+    Route::get('import-user-incentive-applications', [ImportController::class, 'import_user_incentive_applications_form'])->name('import.user_incentive_applications.form');
+    Route::post('import-user-incentive-applications', [ImportController::class, 'import_user_incentive_applications'])->name('import.user_incentive_applications');
+
     Route::get('application-data-correction', [ApplicationDataCorrectionController::class, 'correction_form'])->name('correction.form');
     Route::post('update-partnership-application-data', [ApplicationDataCorrectionController::class, 'update_partnership_application_data'])->name('correction.partnership_application');
     Route::post('update-partnership-partner-data', [ApplicationDataCorrectionController::class, 'update_partnership_partner_data'])->name('correction.partnership_partner');

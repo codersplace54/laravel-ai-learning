@@ -20,6 +20,7 @@ use App\Imports\ProfessionTaxApplicationImport;
 use App\Imports\ProfessionTaxQuestionImport;
 use App\Imports\ProfessionTaxCertificateImport;
 use App\Imports\CommonApplicationImport;
+use App\Imports\UserIncentiveApplicationImport;
 
 class ImportController extends Controller
 {
@@ -539,6 +540,41 @@ class ImportController extends Controller
             'assignment_skipped_rows'    => $all_assignment_skipped_rows,
             'assignment_skipped_count'   => count($all_assignment_skipped_rows),
             'assignment_skipped_grouped' => $assignment_skipped_grouped,
+        ]);
+    }
+
+    public function import_user_incentive_applications_form()
+    {
+        return view('admin.import.user_incentive_applications');
+    }
+
+    public function import_user_incentive_applications(Request $request)
+    {
+        $request->validate([
+            'excel_file' => 'required|file|mimes:xlsx,xls,csv',
+        ]);
+
+        $file = $request->file('excel_file');
+
+        $import = new UserIncentiveApplicationImport();
+        Excel::import($import, $file);
+
+        $skipped_rows = $import->skipped_rows ?? [];
+        $skipped_count = count($skipped_rows);
+
+        $grouped = collect($skipped_rows)
+            ->groupBy(fn($r) => $r['reason'] ?? 'unknown')
+            ->map(fn($items) => [
+                'count' => $items->count(),
+                'rows'  => $items->values()->all(),
+            ])
+            ->toArray();
+
+        return back()->with([
+            'success'        => 'User incentive applications import completed successfully.',
+            'skipped_count'  => $skipped_count,
+            'skipped_rows'   => $skipped_rows,
+            'skipped_grouped' => $grouped,
         ]);
     }
 }
