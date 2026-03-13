@@ -26,7 +26,7 @@ class UserIncentiveApplicationImport implements ToCollection, WithHeadingRow
             ->get()
             ->mapWithKeys(function ($proforma) {
                 return [
-                    strtolower($proforma->title) => [
+                    strtolower($proforma->code) => [
                         'id' => $proforma->id,
                         'scheme_id' => $proforma->scheme_id,
                     ]
