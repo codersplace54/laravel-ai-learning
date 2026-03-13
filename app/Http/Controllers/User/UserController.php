@@ -672,6 +672,16 @@ class UserController extends Controller
 
 
             $user = Auth::user();
+            $user = User::where('id',$user->id)->with([
+                'district',
+                'subdivision',
+                'ulb',
+                'ward',
+                'department_user',
+                'department_user_location.district',
+                'department_user_location.subdivision',
+                'department_user_location.ulb'
+            ])->first();
 
             if (!$user) {
                 return response()->json([

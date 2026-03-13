@@ -203,6 +203,7 @@ class UserIncentiveApplicationController extends Controller
             $application->proforma_id = $proforma->id;
             $application->scheme_id = $proforma->scheme->id;
             $application->user_id = Auth::id();
+            $application->application_date = now();
             $application->save();
 
             if (!$is_save_only) {

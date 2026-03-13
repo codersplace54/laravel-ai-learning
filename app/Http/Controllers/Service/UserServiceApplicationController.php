@@ -1211,6 +1211,12 @@ class UserServiceApplicationController extends Controller
 
             $service_user_application->delete();
 
+            $admin = Auth::user();
+
+            $this->logActivity($admin->user_name . ' deleted the application', $service_user_application, User::find($service_user_application->user_id), [
+                'application_id' => $service_user_application->applicationId,
+            ], 'Admin deleted application');
+
             DB::commit();
 
             return response()->json([

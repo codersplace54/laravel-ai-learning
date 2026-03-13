@@ -27,6 +27,10 @@ class UserIncentiveApplication extends Model
         'claim_calculated',
         'form_answers_json',
         'subsidy_report',
+        'old_id',
+        'certificate_upload_date',
+        'application_date',
+        'completion_date'
     ];
 
     protected $casts = [
@@ -38,6 +42,8 @@ class UserIncentiveApplication extends Model
         'form_answers_json' => 'array',
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
+        'certificate_upload_date' => 'date',
+        'application_date' => 'date',
     ];
     
     public function proforma(){
