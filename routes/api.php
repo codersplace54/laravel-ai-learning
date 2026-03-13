@@ -316,6 +316,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/workflow-history/{application_id}', [ServiceController::class, 'get_work_flow_history']);
         Route::post('/user/{id}/assigned-applications', [ServiceController::class, 'get_department_user_assigned_applications']);
         Route::post('/preview-certificate/{application_id}', [ServiceController::class, 'preview_certificate']);
+        Route::post('get-user-approved-applications', [ServiceController::class, 'get_user_approved_applications']);
 
         Route::post('certificate-variables-list',  [CertificateController::class, 'certificate_variables_list']);
         Route::post('user-certificate-view',  [CertificateController::class, 'user_certificate_view']);

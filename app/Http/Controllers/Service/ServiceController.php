@@ -486,7 +486,8 @@ class ServiceController extends Controller
 
                         ->orWhereHas('user', function ($u) use ($search) {
                             $u->where('authorized_person_name', 'like', "%{$search}%")
-                                ->orWhere('mobile_no', 'like', "%{$search}%");
+                                ->orWhere('mobile_no', 'like', "%{$search}%")
+                                ->orWhere('name_of_enterprise', 'like', "%{$search}%");
                         });
                 });
             }
@@ -537,6 +538,7 @@ class ServiceController extends Controller
                     'application_number'  => $application->applicationId,
                     'service_name'        => $application->service->service_title_or_description,
                     'applicant_name'      => optional($application->user)->authorized_person_name,
+                    'name_of_enterprise'  => optional($application->user)->name_of_enterprise,
                     'applicant_phone'     => $application->user->mobile_no,
                     'status'              => $application->status,
                     'submission_date'     => $application->application_date,
@@ -597,7 +599,7 @@ class ServiceController extends Controller
             }
 
             $auth_user = Auth::user();
-            
+
             $current_step = ApplicationWorkflowAssignment::where('application_id', $application->id)
                 ->orderByDesc('id')
                 ->first();
@@ -679,7 +681,7 @@ class ServiceController extends Controller
             ];
 
             $payment_details = PaymentOrder::whereJsonContains('application_id', $application->id)
-                ->whereNot('payment_status',"initiated")
+                ->whereNot('payment_status', "initiated")
                 ->get()
                 ->map(function ($p) {
                     return [
@@ -1240,7 +1242,7 @@ class ServiceController extends Controller
 
             $query = ApplicationWorkflowAssignment::with([
                 'application.service:id,service_title_or_description,department_id',
-                'application.user:id,authorized_person_name,email_id,mobile_no,district_id,subdivision_id,ulb_id'
+                'application.user:id,authorized_person_name,name_of_enterprise,email_id,mobile_no,district_id,subdivision_id,ulb_id'
             ])
                 ->whereIn('id', $latest_assignments)
                 ->where('status', 'pending')
@@ -1273,7 +1275,8 @@ class ServiceController extends Controller
                     $q->where('applicationId', 'like', "%{$search}%")
                         ->orWhereHas('user', function ($u) use ($search) {
                             $u->where('authorized_person_name', 'like', "%{$search}%")
-                                ->orWhere('mobile_no', 'like', "%{$search}%");
+                                ->orWhere('mobile_no', 'like', "%{$search}%")
+                                ->orWhere('name_of_enterprise', 'like', "%{$search}%");
                         });
                 });
             }
@@ -1312,6 +1315,7 @@ class ServiceController extends Controller
                     'applicant_name'   => $assignment->application->user->authorized_person_name ?? null,
                     'applicant_email'  => $assignment->application->user->email_id ?? null,
                     'applicant_mobile' => $assignment->application->user->mobile_no ?? null,
+                    'name_of_enterprise' => $assignment->application->user->name_of_enterprise ?? null,
                     'department'       => $assignment->department?->name ?? null,
                     'status'           => $assignment->application->status ?? null,
                     'current_step'     => $assignment->application->current_step_number ?? null,
@@ -1501,6 +1505,150 @@ class ServiceController extends Controller
                 @unlink($tmp_qr_path);
             }
             return null;
+        }
+    }
+
+    public function get_user_approved_applications(Request $request)
+    {
+
+        try {
+
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $user = User::where('id', $user->id)
+                ->where('user_type', 'department')
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or non-departmental user.'
+                ], 404);
+            }
+
+            $user_id =  $user->id;
+
+            $request->validate([
+                'department_id' => 'nullable|integer|exists:departments,id',
+                'service_id'    => 'nullable|integer|exists:service_masters,id',
+                'step_type'      => 'nullable|string',
+                'date_from'     => 'nullable|date',
+                'date_to'       => 'nullable|date|after_or_equal:date_from',
+                'search'        => 'nullable|string'
+            ]);
+
+            $data = UserServiceApplication::with(['service', 'user'])
+
+                ->whereHas('workflow', function ($q) use ($user_id, $request) {
+
+                    $q->where('status', 'approved')
+                        ->where('action_taken_by', $user_id);
+
+                    if ($request->filled('step_type')) {
+                        $q->where('step_type', $request->step_type);
+                    }
+                })
+
+                ->orderByDesc('id');
+
+            if ($request->filled('department_id')) {
+
+                $data->whereHas('service', function ($q) use ($request) {
+                    $q->where('department_id', $request->department_id);
+                });
+            }
+
+            if ($request->filled('service_id')) {
+                $data->where('service_id', $request->service_id);
+            }
+
+            if ($request->filled('status')) {
+                $data->where('status', $request->status);
+            }
+
+            if ($request->filled('district_id')) {
+                $data->whereHas('user', function ($q) use ($request) {
+                    $q->where('district_id', $request->district_id);
+                });
+            }
+
+            if ($request->filled('subdivision_id')) {
+                $data->whereHas('user', function ($q) use ($request) {
+                    $q->where('subdivision_id', $request->subdivision_id);
+                });
+            }
+
+            if ($request->filled('search')) {
+
+                $search = $request->search;
+
+                $data->where(function ($q) use ($search) {
+
+                    $q->where('applicationId', 'like', "%{$search}%")
+
+                        ->orWhereHas('user', function ($u) use ($search) {
+                            $u->where('authorized_person_name', 'like', "%{$search}%")
+                                ->orWhere('mobile_no', 'like', "%{$search}%")
+                                ->orWhere('name_of_enterprise', 'like', "%{$search}%");
+                        });
+                });
+            }
+
+            if ($request->date_from && $request->date_to) {
+
+                $data->whereBetween('application_date', [
+                    $request->date_from,
+                    $request->date_to
+                ]);
+            } elseif ($request->date_from) {
+
+                $data->whereDate('application_date', '>=', $request->date_from);
+            } elseif ($request->date_to) {
+
+                $data->whereDate('application_date', '<=', $request->date_to);
+            }
+
+            $applications_data = $data->orderByDesc('id')->get();
+
+            $applications = $applications_data->map(function ($application) {
+
+                $workflow = $application->workflow->first();
+
+                return [
+
+                    'application_id'      => $application->id,
+                    'application_number'  => $application->applicationId,
+                    'service_name'        => $application->service->service_title_or_description ?? null,
+                    'applicant_name'      => optional($application->user)->authorized_person_name,
+                    'enterprise_name'     => optional($application->user)->name_of_enterprise,
+                    'mobile_no'           => optional($application->user)->mobile_no,
+                    'application_status'  => $application->status,
+                    'submission_date'     => $application->application_date,
+                    'approved_step'       => $workflow->step_number ?? null,
+                    'step_type'           => $workflow->step_type ?? null,
+                    'status'              => $application->status,
+                    'approved_date'       => $workflow->updated_at ?? null,
+                    'remarks'             => $workflow->remarks ?? null
+
+                ];
+            });
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Applications approved by the logged-in user fetched successfully.',
+                'data'    => $applications
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong while fetching applications.',
+                'error'   => $e->getMessage()
+            ], 500);
         }
     }
 }
