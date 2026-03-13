@@ -779,14 +779,14 @@ class UserServiceApplicationController extends Controller
             $target_days = $service->target_days ?? 0;
             $max_processing_date = $this->add_working_days($application_date, $target_days);
 
-            // if ($user_service_application->extra_payment != null && $user_service_application->payment_status == "pending") {
-            //     if ($request->extra_payment == null || $request->extra_payment != $user_service_application->extra_payment) {
-            //         return response()->json([
-            //             'status' => 0,
-            //             'message' => "An extra payment of Rs. $user_service_application->extra_payment has been raised. Please make the payment."
-            //         ], 403);
-            //     }
-            // }
+            if ($user_service_application->extra_payment != null && $user_service_application->payment_status == "pending") {
+                if ($request->extra_payment == null || $request->extra_payment != $user_service_application->extra_payment) {
+                    return response()->json([
+                        'status' => 0,
+                        'message' => "An extra payment of Rs. $user_service_application->extra_payment has been raised. Please make the payment."
+                    ], 403);
+                }
+            }
 
             $total_fee =  $final_fee;
             $previous_paid = $user_service_application->paid_amount ?? 0;
@@ -3605,7 +3605,7 @@ class UserServiceApplicationController extends Controller
                 ucfirst($status),
                 Carbon::parse($application->application_date)->format('d M Y, g:i A')
             ];
-        } 
+        }
         elseif ((float) $total_fee === 0.0 && !$has_approval_flow) {
             // sending template "certificate_generated_v1" from certificateController
         } elseif ((float) $total_fee > 0.0) {
