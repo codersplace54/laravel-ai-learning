@@ -409,7 +409,7 @@ class CertificateController extends Controller
                 // $clearance_response = $this->store_clearance($application);
 
                 // Send WhatsApp notification
-                $this->send_certificate_whatsapp_notification($application, $user, $path);
+                // $this->send_certificate_whatsapp_notification($application, $user, $path);
 
                 $application->NOC_certificate = asset('storage/' . $application->NOC_certificate);
 
@@ -1203,6 +1203,84 @@ class CertificateController extends Controller
             );
         } catch (\Exception $e) {
             Log::error('Certificate WhatsApp notification failed: ' . $e->getMessage());
+        }
+    }
+
+
+    public function regenerate_wrong_certificates(Request $request)
+    {
+        try {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $user = Auth::user();
+            if (!$user->user_type == "admin") {
+                return response()->json(['status' => 0, 'message' => 'Unauthorized access.'], 403);
+            }
+
+            DB::beginTransaction();
+
+            $applications = UserServiceApplication::where('service_id', 12)
+                ->whereNull('old_id')
+                ->where('status','noc_issued')
+                ->get();
+
+            if ($applications->isEmpty()) {
+                DB::commit();
+                return response()->json([
+                    'status' => 1,
+                    'message' => 'No applications found matching criteria.',
+                    'regenerated_count' => 0,
+                    'regenerated_applications' => []
+                ]);
+            }
+
+            $regenerated_count = 0;
+            $regenerated_applications = [];
+            $failed_applications = [];
+
+            foreach ($applications as $application) {
+                try {
+                    $old_certificate = $application->NOC_certificate;
+
+                    if (!empty($old_certificate) && Storage::disk('public')->exists($old_certificate)) {
+                        Storage::disk('public')->delete($old_certificate);
+                    }
+
+                    $this->auto_generate_certificate($application);
+                    $regenerated_count++;
+                    $regenerated_applications[] = [
+                        'application_id' => $application->id,
+                        'user_id' => $application->user_id
+                    ];
+                } catch (\Exception $e) {
+                    $failed_applications[] = [
+                        'application_id' => $application->id,
+                        'user_id' => $application->user_id,
+                        'error' => $e->getMessage()
+                    ];
+                    Log::error('Certificate regeneration failed for application ' . $application->id . ': ' . $e->getMessage());
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Certificate regeneration completed.',
+                'regenerated_count' => $regenerated_count,
+                'total_applications' => $applications->count(),
+                'regenerated_applications' => $regenerated_applications,
+                'failed_applications' => $failed_applications
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 }

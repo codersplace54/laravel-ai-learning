@@ -982,13 +982,13 @@ class ServiceController extends Controller
 
                     SendWhatsAppNotification::dispatch(
                         $application->user->mobile_no,
-                        'application_returned_v1',
+                        'application_sent_back_v1',
                         [
-                            $application->applicationId,
                             $application->service->service_title_or_description,
                             'Returned',
                             Carbon::parse($application->updated_at)->format('d M Y, g:i A'),
                             $request->remarks ?? 'No reason provided',
+                            $application->applicationId,
                         ]
                     );
                 }
@@ -1030,7 +1030,7 @@ class ServiceController extends Controller
 
                     SendWhatsAppNotification::dispatch(
                         $application->user->mobile_no,
-                        'additional_payment_required_v1',
+                        'application_extra_payment_raised_v1',
                         [
                             $application->applicationId,
                             $application->service->service_title_or_description,

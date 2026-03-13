@@ -1908,7 +1908,8 @@ class UserServiceApplicationController extends Controller
             $extra_payment       = $request->input('extra_payment');
             $application_date    = $request->input('application_date');
             $updation_date       = $request->input('updation_date');
-
+            $egras_account_head  = $request->input('egras_account_head');
+            
             $data = UserServiceApplication::where('external_application_id', $external_id)->first();
 
             if ($data) {
@@ -1930,6 +1931,7 @@ class UserServiceApplicationController extends Controller
                     'external_noc_number'          => $noc_number ?? $data->external_noc_number,
                     'external_valid_till'          => $noc_valid_till ?? $data->external_valid_till,
                     'external_remarks'             => $remarks ?? $data->external_remarks,
+                    'egras_scheme_code'            => $egras_account_head,
                 ]);
             } else {
 
@@ -1944,7 +1946,7 @@ class UserServiceApplicationController extends Controller
                     'license_id'              => $noc_number,
                     'NOC_expiry_date'         => $noc_valid_till,
                     'remarks'                 => $remarks,
-                    'bin'                     => $request->input('bin'),
+                    // 'bin'                  => $request->input('bin'), // there is no column named bin in user_service_applications
                     'approved_fee'            => $approved_fee,
                     'total_fee'               => $approved_fee,
                     'extra_payment'           => $extra_payment,
@@ -1956,6 +1958,7 @@ class UserServiceApplicationController extends Controller
                     'external_valid_till'          => $noc_valid_till,
                     'external_remarks'             => $remarks,
                     'is_third_party'               => 1,
+                    'egras_scheme_code'            => $egras_account_head,
                 ]);
             }
 
