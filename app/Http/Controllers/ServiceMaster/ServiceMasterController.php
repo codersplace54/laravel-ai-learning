@@ -247,7 +247,7 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? $service->is_active,
                 'updated_by' => $admin->email_id,
-                'egras_scheme_code' => $request->egras_scheme_code ?? $service->egras_scheme_code ,
+                'egras_scheme_code' => $request->egras_scheme_code ?? $service->egras_scheme_code,
                 'caf_depends' => $request->caf_depends,
             ]);
 
@@ -440,7 +440,7 @@ class ServiceMasterController extends Controller
                     'department_id' => $service->department_id,
                     'department_name' =>  $service->department->name,
                     'noc_type' => $service->noc_type,
-                    'target_days' => $service->target_days .' days',
+                    'target_days' => $service->target_days . ' days',
                     'noc_payment_type' => $service->noc_payment_type,
                     'application_id' => $service->applications->first() ? $service->applications->first()->id : null,
                     'application_status' => $service->applications->first() ? $service->applications->first()->status : null,
@@ -969,9 +969,11 @@ class ServiceMasterController extends Controller
 
         try {
 
-            $query = ServiceMaster::select(
+            $query = ServiceMaster::with('department:id,name')->select(
                 'id',
                 'service_title_or_description as service_name',
+                'noc_type',
+                'department_id',
             )
                 ->where('status', 1);
 
@@ -981,7 +983,16 @@ class ServiceMasterController extends Controller
 
             $services = $query
                 ->orderBy('id', 'asc')
-                ->get();
+                ->get()
+                ->map(function ($service) {
+                    return [
+                        'id' => $service->id,
+                        'service_name' => $service->service_name,
+                        'noc_type' => $service->noc_type,
+                        'department_id' => $service->department_id,
+                        'department_name' => $service->department->name ?? null,
+                    ];
+                });
 
             return response()->json([
                 'status' => 1,

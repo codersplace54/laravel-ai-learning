@@ -192,7 +192,8 @@ class InspectionController extends Controller
                 'inspection_id' => 'required|integer|exists:inspections,id',
             ]);
 
-            $inspection = Inspection::where('id', $request->inspection_id)->first();
+            $inspection = Inspection::with(['department', 'user'])
+                ->where('id', $request->inspection_id)->first();
 
             $data = [
                 'id'                          => $inspection->id,
@@ -206,6 +207,21 @@ class InspectionController extends Controller
                 'inspection_for'              => json_decode($inspection->inspection_for) ?? '',
                 'status'                      => $inspection->status,
                 'remarks'                     => $inspection->remarks ?? '',
+                'user' => $inspection->user ? [
+                    'id'    => $inspection->user->id,
+                    'name'  => $inspection->user->authorized_person_name,
+                    'phone' => $inspection->user->mobile_no,
+                    'email' => $inspection->user->email_id,
+                    'name_of_enterprise' => $inspection->user->name_of_enterprise,
+                    'district_code'   => $inspection->user->district->district_code ?? null,
+                    'district_name' => $inspection->user->district->district_name ?? null,
+                    'subdivision_code'   => $inspection->user->subdivision->sub_lgd_code ?? null,
+                    'subdivision_name' =>  $inspection->user->subdivision->sub_division ?? null,
+                    'ulb_code'   => $inspection->user->ulb->ulb_lgd_code ?? null,
+                    'ulb_name' => $inspection->user->ulb->ulb_name ?? null,
+                    'ward_code'   => $inspection->user->ward->gp_vc_ward_lgd_code ?? null,
+                    'ward_name' => $inspection->user->ward->name_of_gp_vc_or_ward ?? null,
+                ] : null,
                 'created_at'                  => $inspection->created_at,
                 'updated_at'                  => $inspection->updated_at,
                 'created_by'                  => $inspection->created_by,
