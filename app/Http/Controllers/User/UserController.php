@@ -1384,7 +1384,7 @@ class UserController extends Controller
             ], 401);
         }
 
-        $user = User::where('pan', $pan)->first();
+        $user = User::with(['district', 'subdivision', 'ulb'])->where('pan', $pan)->first();
 
         if (!$user) {
             $enterprise_details = EnterpriseDetail::where('business_pan_no', $pan)->first();
@@ -1397,6 +1397,10 @@ class UserController extends Controller
                         'authorized_person_name' => $enterprise_details->authorized_representative_name,
                         'mobile_no' => $enterprise_details->authorized_representative_mobile_no,
                         'email_id' => $enterprise_details->authorized_representative_email_id,
+                        'address' => $enterprise_details->enterprise_address,
+                        'district_lgd_code' => null,
+                        'subdivision_lgd_code' => null,
+                        'block_lgd_code' => null,
                         'is_pan_verified' => 0,
                     ],
                 ]);
@@ -1419,6 +1423,10 @@ class UserController extends Controller
                 'authorized_person_name' => $user->authorized_person_name,
                 'mobile_no' => $user->mobile_no,
                 'email_id' => $user->email_id,
+                'address' => $user->registered_enterprise_address,
+                'district_lgd_code' => $user->district_id,
+                'subdivision_lgd_code' => $user->subdivision_id,
+                'block_lgd_code' => $user->ulb_id,
                 'is_pan_verified' => $user->is_pan_verified,
             ],
         ]);
