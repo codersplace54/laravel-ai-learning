@@ -704,7 +704,7 @@ class AuthController extends Controller
             $this->logActivity($user->user_name . " changed password successfully.", $user, null, [], "Password changed");
 
             SendWhatsAppNotification::dispatch(
-                $user->whatsapp_no,
+                $user->mobile_no,
                 'password_changed_v1',
                 [
                     $user->authorized_person_name,
