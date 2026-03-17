@@ -82,7 +82,9 @@ class UserIncentiveApplicationController extends Controller
                 }
             }
 
-            $application = UserIncentiveApplication::where('id', $request->application_id)->first();
+            $application = UserIncentiveApplication::where('id', $request->application_id)
+            ->where('user_id', Auth::id())
+            ->first();
 
             if (!$application) {
                 $application = new UserIncentiveApplication();
@@ -241,7 +243,11 @@ class UserIncentiveApplicationController extends Controller
 
                 $previous_workflow_status = $application->workflow_status ?? 'draft';
 
-                $application->workflow_status = 'submitted';
+                if (in_array($previous_workflow_status, ['sent_back_by_da', 'sent_back_by_gm', 'sent_back_by_slc'])) {
+                    $application->workflow_status = 're_submitted';
+                } else {
+                    $application->workflow_status = 'submitted';
+                }
                 $application->submitted_at    = now();
                 $application->user_id = Auth::id();
                 $application->save();
@@ -260,7 +266,7 @@ class UserIncentiveApplicationController extends Controller
                 IncentiveWorkflowHistory::insert([
                     'application_id' => $application->id,
                     'from_status'    => $previous_workflow_status,
-                    'to_status'      => 'submitted',
+                    'to_status'      => $application->workflow_status,
                     'action_taken_by' => $user->id,
                     'remarks'        => $request->input('remarks'),
                     'action_taken_at' => now(),
@@ -392,7 +398,7 @@ class UserIncentiveApplicationController extends Controller
                     'application_no'   => $application?->application_no,
                     'applied_on'       => $application?->submitted_at?->format('d/m/Y'),
                     'certificate_issued_or_rejected_on' => $application?->decided_at?->format('d/m/Y'),
-                    'workflow_status' => $application?->workflow_status,
+                    'workflow_status'  => $this->status_label($application->workflow_status),
                     'is_editable'     => $application  ? $this->is_application_editable($application) : true,
                 ];
             });
@@ -424,7 +430,7 @@ class UserIncentiveApplicationController extends Controller
             $user_eligibility_applications = UserIncentiveApplication::query()
                 ->where('user_id', $user_id)
                 ->where('application_type', 'eligibility')
-                ->whereIn('workflow_status', ['approved_by_gm', 'approved_by_slc'])
+                ->where('workflow_status', 'noc_issued')
                 ->orderByDesc('decided_at')
                 ->get();
 
@@ -616,8 +622,8 @@ class UserIncentiveApplicationController extends Controller
             }
 
             $request->validate([
-                'department'     => 'nullable|string|in:DA,GM',
-                'status'         => 'nullable|string|in:submitted,approved_by_da,rejected_by_da,sent_back_by_da,approved_by_gm,rejected_by_gm,sent_back_by_gm',
+                'department'     => 'nullable|string|in:DA,GM,SLC',
+                'status' => 'nullable|string|in:submitted,re_submitted,approved_by_da,rejected_by_da,sent_back_by_da,noc_issued,claim_approved_by_gm,rejected_by_gm,sent_back_by_gm,under_review_slc,claim_approved_by_slc,rejected_by_slc,sent_back_by_slc',                
                 'scheme_id'      => 'nullable|integer|exists:schemes,id',
                 'proforma_id'    => 'nullable|integer|exists:proformas,id',
                 'applicant_name' => 'nullable|string|max:255',
@@ -652,13 +658,13 @@ class UserIncentiveApplicationController extends Controller
 
             if ($designation == 'Dealing Assistant') {
 
-                $applications->whereIn('workflow_status', ['submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da']);
+                $applications->whereIn('workflow_status', ['submitted','re_submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da']);
             } elseif ($designation == "General Manager") {
 
-                $applications->whereIn('workflow_status', ['approved_by_da', 'approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm']);
+                $applications->whereIn('workflow_status', ['approved_by_da', 'noc_issued', 'claim_approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm']);
             } elseif ($designation == "State Level Committee") {
 
-                $applications->whereIn('workflow_status', ['under_review_slc', 'approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc']);
+                $applications->whereIn('workflow_status', ['under_review_slc', 'claim_approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc']);
             } else {
 
                 return response()->json([
@@ -728,10 +734,10 @@ class UserIncentiveApplicationController extends Controller
                 $allowed_statuses = ['approved_by_da', 'rejected_by_da', 'sent_back_by_da'];
             } elseif ($designation === 'General Manager') {
 
-                $allowed_statuses = ['approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm'];
+                $allowed_statuses = ['noc_issued', 'claim_approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm'];
             } elseif ($designation === 'State Level Committee') {
 
-                $allowed_statuses = ['approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc'];
+                $allowed_statuses = ['claim_approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc'];
             } else {
 
                 return response()->json([
@@ -757,18 +763,18 @@ class UserIncentiveApplicationController extends Controller
 
             $application->current_reviewer_user_id = Auth::id();
 
-            $final_statuses = ['approved_by_slc', 'rejected_by_slc', 'rejected_by_da', 'rejected_by_gm'];
+            $final_statuses = ['rejected_by_slc', 'rejected_by_da', 'rejected_by_gm', 'noc_issued', 'claim_approved_by_slc','claim_approved_by_gm'];
             if (in_array($new_status, $final_statuses, true)) {
                 $application->decided_at = now();
             }
 
-            if ($new_status === 'approved_by_gm' && $application->application_type === 'eligibility') {
+            if (($new_status === 'noc_issued') && $application->application_type === 'eligibility') {
                 if (empty($application->eligibility_certificate_no)) {
                     $application->eligibility_certificate_no = 'ELG-' . date('y') . '-' . str_pad((string)$application->id, 6, '0', STR_PAD_LEFT);
                 }
             }
 
-            if ($new_status === 'approved_by_gm' && $application->application_type === 'claim') {
+            if (($new_status === 'claim_approved_by_gm') && $application->application_type === 'claim') {
 
                 if ($application->subsidy_report) {
                     $report = json_decode($application->subsidy_report, true) ?: [];
@@ -801,7 +807,7 @@ class UserIncentiveApplicationController extends Controller
 
 
             if (
-                in_array($new_status, ['approved_by_gm', 'approved_by_slc', 'approved_by_da'], true)
+                in_array($new_status, ['claim_approved_by_gm', 'claim_approved_by_slc', 'approved_by_da'], true)
                 && $application->application_type === 'claim'
                 && $application->subsidy_report
             ) {
@@ -837,7 +843,7 @@ class UserIncentiveApplicationController extends Controller
                     $application->subsidy_report  = json_encode($report, JSON_UNESCAPED_UNICODE);
                 }
 
-                if ($new_status === 'approved_by_gm' && $approved_total > 500000) {
+                if ($new_status === 'claim_approved_by_gm' && $approved_total > 500000) {
                     $new_status = 'under_review_slc';
                 }
             }
@@ -915,7 +921,6 @@ class UserIncentiveApplicationController extends Controller
                     return [
                         'date'        => $history->action_taken_at->format('d/m/Y'),
                         'user_name'   => optional($history->user)->authorized_person_name,
-                        'from_status' => $status_labels[$history->from_status] ?? $history->from_status,
                         'from_status' => $this->status_label($history->from_status),
                         'to_status'   => $this->status_label($history->to_status),
                         'remarks'     => $history->remarks ?? null,
@@ -961,11 +966,11 @@ class UserIncentiveApplicationController extends Controller
             $application = UserIncentiveApplication::where('id', $request->application_id)->with(['proforma', 'user'])->first();
 
             if ($designation === 'Dealing Assistant') {
-                $allowed = ['submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da'];
+                $allowed = ['submitted', 're_submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da'];
             } elseif ($designation === 'General Manager') {
-                $allowed = ['approved_by_da', 'approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm'];
+                $allowed = ['approved_by_da', 'noc_issued', 'claim_approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm'];
             } elseif ($designation === 'State Level Committee') {
-                $allowed = ['under_review_slc', 'approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc'];
+                $allowed = ['under_review_slc', 'claim_approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc'];
             } else {
                 return response()->json([
                     'status'  => 0,
@@ -1189,18 +1194,20 @@ class UserIncentiveApplicationController extends Controller
         }
 
         static $labels = [
-            'draft'             => 'Draft',
-            'submitted'         => 'Submitted to DA',
-            'approved_by_da'    => 'Forwarded to GM',
-            'sent_back_by_da'   => 'Query raised by DA',
-            'rejected_by_da'    => 'Rejected by DA',
-            'approved_by_gm'    => 'Approved',
-            'sent_back_by_gm'   => 'Query raised by GM',
-            'rejected_by_gm'    => 'Rejected by GM',
-            'under_review_slc'  => 'Under Review SLC',
-            'approved_by_slc'   => 'Approved',
-            'sent_back_by_slc'  => 'Query raised by SLC',
-            'rejected_by_slc'   => 'Rejected by SLC',
+            'draft'                 => 'Draft',
+            'submitted'             => 'Submitted to DA',
+            're_submitted'          => 'Re-submitted to DA',
+            'approved_by_da'        => 'Forwarded to GM',
+            'sent_back_by_da'       => 'Query raised by DA',
+            'rejected_by_da'        => 'Rejected by DA',
+            'noc_issued'            => 'Noc Issued',
+            'sent_back_by_gm'       => 'Query raised by GM',
+            'rejected_by_gm'        => 'Rejected by GM',
+            'claim_approved_by_gm'  => 'Approved by GM',
+            'under_review_slc'      => 'Under Review SLC',
+            'claim_approved_by_slc' => 'Approved by SLC',
+            'sent_back_by_slc'      => 'Query raised by SLC',
+            'rejected_by_slc'       => 'Rejected by SLC',
         ];
 
         return isset($labels[$status]) ? $labels[$status] : $status;
@@ -1301,11 +1308,11 @@ class UserIncentiveApplicationController extends Controller
             ->where('user_id', $user_id)
             ->whereIn('proforma_id', $proforma_depends_on)
             ->where('application_type', 'eligibility')
-            ->whereIn('workflow_status', ['approved_by_gm', 'approved_by_slc'])
+            ->whereIn('workflow_status', ['noc_issued'])
             ->select('proforma_id')
             ->distinct()
             ->count('proforma_id');
 
-        return $approved_eligibilty > 0 ? true : false;
+        return $approved_eligibilty === count($proforma_depends_on);
     }
 }
