@@ -324,7 +324,7 @@ class AdminController extends Controller
         try {
             $request->validate([
                 'user_id' => 'required|exists:users,id',
-                'mobile_no' => 'nullable|string|max:15|unique:users,mobile_no,' . $request->user_id,
+                'mobile_no' => 'required|string|max:15|unique:users,mobile_no,' . $request->user_id,
                 'new_password' => 'nullable|string|min:6',
             ], [
                 'user_id.required' => 'User ID is required.',
