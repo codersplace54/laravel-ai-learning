@@ -803,6 +803,7 @@ class ServiceController extends Controller
 
             $current_step = ApplicationWorkflowAssignment::where('application_id', $application->id)
                 ->where('step_number', $application->current_step_number)
+                ->latest('id')
                 ->firstOrFail();
 
             if ($current_step->hierarchy_level !== $user->department_user->hierarchy_level) {
@@ -862,6 +863,7 @@ class ServiceController extends Controller
                 }
 
                 if ($current_step->step_number == $max_step) {
+
                     $application->update([
                         'status'       => 'approved',
                         'updated_at' => now(),
@@ -892,6 +894,8 @@ class ServiceController extends Controller
                             ]
                         );
                     }
+
+                    DB::commit();
 
                     return response()->json([
                         'status' => 1,
