@@ -287,7 +287,7 @@ class UserServiceApplicationController extends Controller
 
                     $user_service_application->application_data = json_encode($application_data);
 
-                    if ((float) $total_fee === 0.0 && $request->save_data != 1 && $user_service_application->status != "draft") {
+                    if ((float) $total_fee === 0.0 && (float) $total_fee === (float) $previous_paid && $request->save_data != 1 && $user_service_application->status != "draft") {
                         $status = 're_submitted';
                     }
 
@@ -805,6 +805,12 @@ class UserServiceApplicationController extends Controller
                 $payment_status = 'paid';
                 $paid_amount = 0;
                 $payment_time = now();
+            }
+
+            if ((float) $total_fee === (float) $previous_paid) {
+                $status = 're_submitted';
+                $payment_status = 'paid';
+                $paid_amount = $previous_paid;
             }
 
             $user_service_application->update([
@@ -1915,7 +1921,7 @@ class UserServiceApplicationController extends Controller
             $application_date    = $request->input('application_date');
             $updation_date       = $request->input('updation_date');
             $egras_account_head  = $request->input('egras_account_head');
-            
+
             $data = UserServiceApplication::where('external_application_id', $external_id)->first();
 
             if ($data) {
@@ -2511,10 +2517,15 @@ class UserServiceApplicationController extends Controller
             $effective_fee = $application->effective_fee;
             $total_fee     = $application->total_fee ?? 0;
 
-            $current_payment = isset($effective_fee) ? $effective_fee : $total_fee;
+            $current_payment = !empty($effective_fee) ? $effective_fee : $total_fee;
             $previous_paid = $application->paid_amount ?? 0;
             $final_paid_amount = $previous_paid + $current_payment;
-            $status = $application->current_step_number == 0 ? 'approved' : 'submitted';
+
+            if ($previous_paid > 0) {
+                $status = 're_submitted';
+            } else {
+                $status = $application->current_step_number == 0 ? 'approved' : 'submitted';
+            }
 
             $application->update([
                 'GRN_number'     => $request->GRN_number,
@@ -2549,7 +2560,7 @@ class UserServiceApplicationController extends Controller
                     'GRN_number'     => $application->GRN_number,
                     'comments'       => $application->comments,
                     'payment_time'   => $application->payment_time,
-                    'paid_amount'    => $application->total_fee,
+                    'paid_amount'    => $application->final_paid_amount,
                     'status'         => $status
                 ]
             ]);
@@ -3605,8 +3616,7 @@ class UserServiceApplicationController extends Controller
                 ucfirst($status),
                 Carbon::parse($application->application_date)->format('d M Y, g:i A')
             ];
-        }
-        elseif ((float) $total_fee === 0.0 && !$has_approval_flow) {
+        } elseif ((float) $total_fee === 0.0 && !$has_approval_flow) {
             // sending template "certificate_generated_v1" from certificateController
         } elseif ((float) $total_fee > 0.0) {
             $template_name = 'payment_required_v1';
