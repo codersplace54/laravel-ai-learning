@@ -63,6 +63,12 @@ class UserIncentiveApplicationController extends Controller
 
             if (!$is_save_only && $proforma && $proforma->proforma_type === 'claim') {
 
+                $existing_application = UserIncentiveApplication::where('id', $request->application_id)
+                    ->where('user_id', $user->id)
+                    ->first();
+
+                $is_draft_submission = $existing_application && $existing_application->workflow_status === 'draft';
+
                 // A user could change the proforma_id in the URL to open a claim form they are not eligible for
                 $can_apply = $this->can_apply_for_this_claim($user->id, $proforma);
                 if ($can_apply == false) {
@@ -72,13 +78,14 @@ class UserIncentiveApplicationController extends Controller
                     ], 422);
                 }
 
-                // Prevents users from re-submitting claims too soon or beyond allowed count.
-                $can_reapply = $this->can_reapply_for_claim($user->id, $proforma);
-                if (!$can_reapply) {
-                    return response()->json([
-                        'status'  => 0,
-                        'message' => 'Re-apply not allowed.',
-                    ], 422);
+                if (!$is_draft_submission) {
+                    $can_reapply = $this->can_reapply_for_claim($user->id, $proforma);
+                    if (!$can_reapply) {
+                        return response()->json([
+                            'status'  => 0,
+                            'message' => 'Re-apply not allowed.',
+                        ], 422);
+                    }
                 }
             }
 
@@ -205,6 +212,7 @@ class UserIncentiveApplicationController extends Controller
             $application->proforma_id = $proforma->id;
             $application->scheme_id = $proforma->scheme->id;
             $application->user_id = Auth::id();
+            $application->submitted_at = now();
             $application->application_date = now();
             $application->save();
 
@@ -316,22 +324,22 @@ class UserIncentiveApplicationController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $proposed_date_of_commissioning = EnterpriseDetail::where('user_id', Auth::id())->value('proposed_date_of_commissioning');
+            $dob = User::where('id', Auth::id())->value('dob');
 
-            if (!$proposed_date_of_commissioning) {
+            if (!$dob) {
                 return response()->json(
                     [
                         'data'    => [],
                         'status' => 1,
-                        'message' => 'Proposed commissioning date not found.'
+                        'message' => 'Date of business establishment not found.'
                     ],
                     422
                 );
             }
 
             $data = Scheme::query()
-                ->whereDate('policy_start_date', '<=',  $proposed_date_of_commissioning)
-                ->whereDate('policy_end_date', '>=', $proposed_date_of_commissioning)
+                ->whereDate('policy_start_date', '<=',  $dob)
+                ->whereDate('policy_end_date', '>=', $dob)
                 ->select('id', 'code', 'title')->get();
 
             return response()->json([
@@ -398,7 +406,8 @@ class UserIncentiveApplicationController extends Controller
                     'application_no'   => $application?->application_no,
                     'applied_on'       => $application?->submitted_at?->format('d/m/Y'),
                     'certificate_issued_or_rejected_on' => $application?->decided_at?->format('d/m/Y'),
-                    'workflow_status'  => $this->status_label($application->workflow_status),
+                    'workflow_status'  => $application ? $this->status_label($application->workflow_status) : null,
+                    'raw_status'  => $application->workflow_status,
                     'is_editable'     => $application  ? $this->is_application_editable($application) : true,
                 ];
             });
@@ -445,6 +454,18 @@ class UserIncentiveApplicationController extends Controller
                 $eligible_claim_proforma_ids = array_merge($eligible_claim_proforma_ids, $proforma_ids);
             }
 
+            // only keep claim proformas where all depends_on_proforma_ids are noc_issued by this user
+            $noc_issued_proforma_ids = $user_eligibility_applications->pluck('proforma_id')->toArray();
+
+            $eligible_claim_proforma_ids = array_filter($eligible_claim_proforma_ids, function ($claim_proforma_id) use ($noc_issued_proforma_ids) {
+                $depends_on = Proforma::where('id', $claim_proforma_id)->value('depends_on_proforma_ids');
+                $depends_on = json_decode($depends_on, true) ?? [];
+                return count($depends_on) > 0 && count(array_diff($depends_on, $noc_issued_proforma_ids)) === 0;
+            });
+
+            $eligible_claim_proforma_ids = array_values(array_unique($eligible_claim_proforma_ids));
+
+            // also include proformas where user already has a claim application (to show existing applications)
             $user_claim_proform_ids = UserIncentiveApplication::query()
                 ->where('user_id', $user_id)
                 ->where('application_type', 'claim')
@@ -456,7 +477,14 @@ class UserIncentiveApplicationController extends Controller
                 ->pluck('proforma_id')
                 ->toArray();
 
-            $eligible_claim_proforma_ids = array_merge($eligible_claim_proforma_ids, $user_claim_proform_ids);
+            // only merge claim proforma ids that are also fully eligible
+            $user_claim_proform_ids = array_filter($user_claim_proform_ids, function ($claim_proforma_id) use ($noc_issued_proforma_ids) {
+                $depends_on = Proforma::where('id', $claim_proforma_id)->value('depends_on_proforma_ids');
+                $depends_on = json_decode($depends_on, true) ?? [];
+                return count($depends_on) > 0 && count(array_diff($depends_on, $noc_issued_proforma_ids)) === 0;
+            });
+
+            $eligible_claim_proforma_ids = array_values(array_unique(array_merge($eligible_claim_proforma_ids, $user_claim_proform_ids)));
 
             $claim_proformas = Proforma::query()
                 ->whereIn('id', $eligible_claim_proforma_ids)
@@ -467,7 +495,7 @@ class UserIncentiveApplicationController extends Controller
                 ->with(['applications' => function ($q) use ($user_id) {
                     $q->where('user_id', $user_id)
                         ->orderByDesc('id')
-                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id', 'subsidy_report');
+                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id', 'subsidy_report', 'remaining_claim');
                 }])
                 ->select('id', 'scheme_id', 'code', 'title', 'description', 'claim_type')
                 ->get();
@@ -480,7 +508,6 @@ class UserIncentiveApplicationController extends Controller
                 $has_applications = isset($proforma->applications) && count($proforma->applications) > 0;
 
                 if (!$has_applications) {
-
                     $response_data[] = [
                         'application_id'   => null,
                         'scheme_id'        => $proforma->scheme_id,
@@ -488,25 +515,26 @@ class UserIncentiveApplicationController extends Controller
                         'application_code' => $proforma->code,
                         'application_type' => $proforma->title,
                         'proforma_details' => $proforma->description,
+                        'claim_type'       => $proforma->claim_type,
                         'application_no'   => null,
                         'applied_on'       => null,
                         'approved_on'      => null,
                         'workflow_status'  => null,
+                        'raw_status'       => null,
                         'is_editable'      => true,
-                        'can_reapply'      => false, // Don't show reapply button if user don't have even applied once
+                        'can_reapply'      => false,
                         'claimed_amount'   => null,
                         'approved_amount'  => null,
                         'disbursed_amount' => null,
+                        'remaining_claim'  => null,
                     ];
                     continue;
                 }
 
-
                 foreach ($proforma->applications as $application) {
-
                     $subsidyReport = json_decode($application->subsidy_report);
 
-                    $claimed = $subsidyReport->totals->claimed ?? 0;
+                    $claimed  = $subsidyReport->totals->claimed ?? 0;
                     $approved = $subsidyReport->totals->approved ?? 0;
                     $disbursed = $subsidyReport->totals->disbursed ?? 0;
 
@@ -517,15 +545,18 @@ class UserIncentiveApplicationController extends Controller
                         'application_code' => $proforma->code,
                         'application_type' => $proforma->title,
                         'proforma_details' => $proforma->description,
+                        'claim_type'       => $proforma->claim_type,
                         'application_no'   => $application->application_no,
                         'applied_on'       => $application->submitted_at ? $application->submitted_at->format('d/m/Y') : null,
                         'approved_on'      => $application->decided_at ? $application->decided_at->format('d/m/Y') : null,
-                        'workflow_status'  => $this->status_label($application->workflow_status),
+                        'workflow_status'  => $application ? $this->status_label($application->workflow_status) : null,
+                        'raw_status'       => $application->workflow_status,
                         'is_editable'      => $this->is_application_editable($application),
                         'can_reapply'      => $can_reapply_for_claim,
                         'claimed_amount'   => $claimed,
                         'approved_amount'  => $approved,
                         'disbursed_amount' => $disbursed,
+                        'remaining_claim'  => $application->remaining_claim,
                     ];
                 }
             }
@@ -718,7 +749,8 @@ class UserIncentiveApplicationController extends Controller
                     . '|required_if:new_status,rejected_by_slc'
                     . '|required_if:new_status,sent_back_by_slc',
                 'approved_items' => 'nullable',
-                'review_file' => 'nullable | file',
+                'review_file' => 'nullable|file',
+                'eligibility_certificate_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png',
             ]);
 
             DB::beginTransaction();
@@ -852,6 +884,13 @@ class UserIncentiveApplicationController extends Controller
             $application->save();
 
 
+            if ($request->file('eligibility_certificate_file')) {
+                $file = $request->eligibility_certificate_file;
+                $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                $eligibility_certificate_path = $file->storeAs("uploads/{$user->id}/incentive_certificates", $filename, 'public');
+                $application->eligibility_certificate_path = $eligibility_certificate_path;
+            }
+
             if ($request->file('review_file')) {
                 $file = $request->review_file;
                 $filename = uniqid() . '.' . $file->getClientOriginalExtension();
@@ -921,8 +960,8 @@ class UserIncentiveApplicationController extends Controller
                     return [
                         'date'        => $history->action_taken_at->format('d/m/Y'),
                         'user_name'   => optional($history->user)->authorized_person_name,
-                        'from_status' => $this->status_label($history->from_status),
-                        'to_status'   => $this->status_label($history->to_status),
+                        'from_status' => $history->from_status ? $this->status_label($history->from_status) : null,
+                        'to_status'   => $history->to_status ? $this->status_label($history->to_status) : null,
                         'remarks'     => $history->remarks ?? null,
                     ];
                 });
@@ -1061,6 +1100,35 @@ class UserIncentiveApplicationController extends Controller
     }
 
 
+    public function preview_subsidy_report(Request $request)
+    {
+        try {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'proforma_id'       => 'required|integer|exists:proformas,id',
+                'form_answers_json' => 'required|string',
+            ]);
+
+            $answers = json_decode($request->form_answers_json, true) ?? [];
+
+            $subsidy = $this->build_subsidy_report($request->proforma_id, $answers);
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Subsidy report preview generated successfully.',
+                'data'    => $subsidy,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 0, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+
     private function build_subsidy_report($proformaId, $answers): array
     {
 
@@ -1186,9 +1254,8 @@ class UserIncentiveApplicationController extends Controller
     }
 
 
-    private function status_label(string $status)
+    private function status_label(?string $status)
     {
-
         if ($status === null || $status === '') {
             return $status;
         }
@@ -1261,9 +1328,10 @@ class UserIncentiveApplicationController extends Controller
                 ->where('proforma_id', $proforma->id)
                 ->where('application_type', 'claim')
                 ->whereNotNull('submitted_at')
+                ->whereNotIn('workflow_status', ['draft'])
                 ->exists();
 
-            return $already_submitted ? false : true;
+            return !$already_submitted;
         }
 
         $gap_months_map = [
