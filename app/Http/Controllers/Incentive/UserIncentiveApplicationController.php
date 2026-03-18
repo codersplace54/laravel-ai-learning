@@ -407,8 +407,8 @@ class UserIncentiveApplicationController extends Controller
                     'applied_on'       => $application?->submitted_at?->format('d/m/Y'),
                     'certificate_issued_or_rejected_on' => $application?->decided_at?->format('d/m/Y'),
                     'workflow_status'  => $application ? $this->status_label($application->workflow_status) : null,
-                    'raw_status'  => $application->workflow_status,
-                    'is_editable'     => $application  ? $this->is_application_editable($application) : true,
+                    'raw_status'  => $application?->workflow_status,
+                    'is_editable'     => $application ? $this->is_application_editable($application) : false,
                 ];
             });
 
@@ -521,7 +521,7 @@ class UserIncentiveApplicationController extends Controller
                         'approved_on'      => null,
                         'workflow_status'  => null,
                         'raw_status'       => null,
-                        'is_editable'      => true,
+                        'is_editable'      => false,
                         'can_reapply'      => false,
                         'claimed_amount'   => null,
                         'approved_amount'  => null,
@@ -531,7 +531,8 @@ class UserIncentiveApplicationController extends Controller
                     continue;
                 }
 
-                foreach ($proforma->applications as $application) {
+                $application = $proforma->applications->first();
+                if ($application) {
                     $subsidyReport = json_decode($application->subsidy_report);
 
                     $claimed  = $subsidyReport->totals->claimed ?? 0;
@@ -550,7 +551,7 @@ class UserIncentiveApplicationController extends Controller
                         'applied_on'       => $application->submitted_at ? $application->submitted_at->format('d/m/Y') : null,
                         'approved_on'      => $application->decided_at ? $application->decided_at->format('d/m/Y') : null,
                         'workflow_status'  => $application ? $this->status_label($application->workflow_status) : null,
-                        'raw_status'       => $application->workflow_status,
+                        'raw_status'       => $application?->workflow_status,
                         'is_editable'      => $this->is_application_editable($application),
                         'can_reapply'      => $can_reapply_for_claim,
                         'claimed_amount'   => $claimed,
@@ -838,6 +839,8 @@ class UserIncentiveApplicationController extends Controller
             }
 
 
+            $approved_total = 0.0;
+
             if (
                 in_array($new_status, ['claim_approved_by_gm', 'claim_approved_by_slc', 'approved_by_da'], true)
                 && $application->application_type === 'claim'
@@ -881,7 +884,6 @@ class UserIncentiveApplicationController extends Controller
             }
 
             $application->workflow_status = $new_status;
-            $application->save();
 
 
             if ($request->file('eligibility_certificate_file')) {
@@ -890,6 +892,8 @@ class UserIncentiveApplicationController extends Controller
                 $eligibility_certificate_path = $file->storeAs("uploads/{$user->id}/incentive_certificates", $filename, 'public');
                 $application->eligibility_certificate_path = $eligibility_certificate_path;
             }
+                        $application->save();
+
 
             if ($request->file('review_file')) {
                 $file = $request->review_file;
@@ -1069,7 +1073,7 @@ class UserIncentiveApplicationController extends Controller
                 'submitted_at'                 => optional($application->submitted_at)->toDateTimeString(),
                 'decided_at'                   => optional($application->decided_at)->toDateTimeString(),
                 'eligibility_certificate_no'   => $application->eligibility_certificate_no,
-                'eligibility_certificate_path' => $application->eligibility_certificate_path,
+                'eligibility_certificate_path' => $application->eligibility_certificate_path ? asset('storage/' . $application->eligibility_certificate_path) : null,
                 'claim_type'                   => $application->claim_type,
                 'remaining_claim'              => $application->remaining_claim,
                 'claim_calculated'             => $application->claim_calculated,
@@ -1249,6 +1253,10 @@ class UserIncentiveApplicationController extends Controller
 
     private function is_application_editable(UserIncentiveApplication $application): bool
     {
+        // dd($application);
+        if (!$application->application_no) {
+            return false;
+        }
         $editable_statuses = ['draft', 'sent_back_by_da', 'sent_back_by_gm', 'sent_back_by_slc'];
         return in_array($application->workflow_status, $editable_statuses, true);
     }

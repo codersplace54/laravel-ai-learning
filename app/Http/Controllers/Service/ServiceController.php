@@ -22,6 +22,7 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use setasign\Fpdi\Fpdi;
 use App\Services\SmsService;
 use App\Jobs\SendWhatsAppNotification;
+use App\Models\DepartmentUser;
 use App\Models\PaymentOrder;
 use Carbon\Carbon;
 use App\Traits\PaymentMapTrait;
@@ -612,8 +613,14 @@ class ServiceController extends Controller
                 ->first();
 
             $is_eligible_for_certificate_action = false;
-            if ($auth_user->user_type == 'department' && $final_step && $final_step->department_id == $auth_user->department_user->department_id) {
-                $is_eligible_for_certificate_action = true;
+            if ($auth_user->user_type == 'department' && $final_step && $current_step) {
+                $dept_user_match = DepartmentUser::where('user_id', $auth_user->id)
+                    ->where('department_id', $final_step->department_id)
+                    ->where('hierarchy_level', $current_step->hierarchy_level)
+                    ->exists();
+                if ($dept_user_match) {
+                    $is_eligible_for_certificate_action = true;
+                }
             }
 
             $is_just_before_final_step = false;
