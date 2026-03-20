@@ -232,6 +232,10 @@ class UserServiceApplicationController extends Controller
                     $payment_status = 'paid';
                     $paid_amount = 0;
                     $payment_time = now();
+                } elseif ((float) $total_fee === (float) $previous_paid) {
+                    $status = 're_submitted';
+                    $payment_status = 'paid';
+                    $paid_amount = $user_service_application->paid_amount;
                 }
 
 
@@ -287,7 +291,7 @@ class UserServiceApplicationController extends Controller
 
                     $user_service_application->application_data = json_encode($application_data);
 
-                    if ((float) $total_fee === 0.0 && (float) $total_fee === (float) $previous_paid && $request->save_data != 1 && $user_service_application->status != "draft") {
+                    if ((float) $total_fee === 0.0 && $request->save_data != 1 && $user_service_application->status != "draft") {
                         $status = 're_submitted';
                     }
 
@@ -311,8 +315,8 @@ class UserServiceApplicationController extends Controller
                         'NOC_application_date'  => $request->NOC_application_date,
                         'NOC_expiry_date'       => $request->NOC_expiry_date,
                         'PreviousNOCexpiryDate' => $request->PreviousNOCexpiryDate,
-                        'payment_transId'       => $request->payment_transId,
-                        'GRN_number'            => $request->GRN_number,
+                        'payment_transId'       => $request->payment_transId ?? $user_service_application->payment_transId,
+                        'GRN_number'            => $request->GRN_number ?? $user_service_application->GRN_number,
                         'payment_time'          => $payment_time,
                         'extra_payment'         => $request->extra_payment,
                         'comments'              => $request->comments,
@@ -811,6 +815,7 @@ class UserServiceApplicationController extends Controller
                 $status = 're_submitted';
                 $payment_status = 'paid';
                 $paid_amount = $previous_paid;
+                $payment_time = $user_service_application->payment_time;
             }
 
             $user_service_application->update([
@@ -830,8 +835,8 @@ class UserServiceApplicationController extends Controller
                 'NOC_application_date'  => $request->NOC_application_date,
                 'NOC_expiry_date'       => $request->NOC_expiry_date,
                 'PreviousNOCexpiryDate' => $request->PreviousNOCexpiryDate,
-                'payment_transId'       => $request->payment_transId,
-                'GRN_number'            => $request->GRN_number,
+                'payment_transId'       => $request->payment_transId ?? $user_service_application->GRN_number,
+                'GRN_number'            => $request->GRN_number ?? $user_service_application->GRN_number,
                 'payment_time'          => $payment_time,
                 'extra_payment'         => $request->extra_payment,
                 'comments'              => $request->comments,
