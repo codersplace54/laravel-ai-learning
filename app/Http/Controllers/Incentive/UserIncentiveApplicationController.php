@@ -1058,6 +1058,18 @@ class UserIncentiveApplicationController extends Controller
                 ->orderByDesc('id')
                 ->first(['remarks', 'review_file']);
 
+            $designation_statuses = [
+                'Dealing Assistant'     => ['approved_by_da', 'rejected_by_da', 'sent_back_by_da'],
+                'General Manager'       => ['noc_issued', 'claim_approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm', 'under_review_slc'],
+                'State Level Committee' => ['claim_approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc'],
+            ];
+
+            $action_already_taken = in_array(
+                $application->workflow_status,
+                $designation_statuses[$designation] ?? [],
+                true
+            );
+
             $data = [
                 'id'                           => $application->id,
                 'application_no'               => $application->application_no,
@@ -1081,6 +1093,7 @@ class UserIncentiveApplicationController extends Controller
                 'subsidy_report'               => $subsidy_report,
                 'created_at'                   => optional($application->created_at)->toDateTimeString(),
                 'updated_at'                   => optional($application->updated_at)->toDateTimeString(),
+                'action_already_taken'         => $action_already_taken,
             ];
 
             return response()->json([

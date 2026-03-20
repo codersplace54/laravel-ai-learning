@@ -26,6 +26,7 @@ use App\Models\DepartmentUser;
 use App\Models\PaymentOrder;
 use Carbon\Carbon;
 use App\Traits\PaymentMapTrait;
+use Illuminate\Support\Facades\Log;
 
 class ServiceController extends Controller
 {
@@ -1452,7 +1453,7 @@ class ServiceController extends Controller
         $qr_payload = "Certificate Link: {$certificate_url}";
 
         // for cooperative society only
-        if ($application->service_id !== "2" || empty($application_data['278'])) {
+        if ($application->service_id !== 2 || empty($application_data['278'])) {
             return null;
         }
 
@@ -1515,6 +1516,7 @@ class ServiceController extends Controller
             if (isset($tmp_qr_path) && file_exists($tmp_qr_path)) {
                 @unlink($tmp_qr_path);
             }
+            Log::error('add_qr_to_by_law_file: ' . $e->getMessage() . ' on line ' . $e->getLine());
             return null;
         }
     }
