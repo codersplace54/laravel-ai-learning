@@ -1037,34 +1037,22 @@ class AuthController extends Controller
                 'dlt_entity_id'   => 'required|string',
             ]);
 
-            $secret_key = config('services.otp_sms.secret_key');
-            $signature  = $request->header('X-Signature');
+            // --- Signature authentication disabled ---
+            // $secret_key = config('services.otp_sms.secret_key');
+            // $signature  = $request->header('X-Signature');
 
-            // Log::info('SIGNATURE_DEBUG', [
-            //     'signature' => $signature,
-            //     'signature_type' => gettype($signature),
-            //     'signature_empty' => empty($signature),
-            //     'secret_key_exists' => !empty($secret_key),
-            // ]);
+            // if (empty($signature)) {
+            //     return response()->json(['status' => 0, 'message' => 'Missing signature.'], 401);
+            // }
 
-            if (empty($signature)) {
-                return response()->json(['status' => 0, 'message' => 'Missing signature.'], 401);
-            }
-
-            $expected = base64_encode(
-                hash_hmac('sha256', $request->mobile_no, $secret_key, true)
-            );
-
-            // Log::info('EXPECTED_SIGNATURE', [
-            //     'signature' => $expected,
-            //     'signature_type' => gettype($expected),
-            //     'signature_empty' => empty($expected),
-            //     'secret_key_exists' => !empty($secret_key),
-            // ]);
+            // $expected = base64_encode(
+            //     hash_hmac('sha256', $request->mobile_no, $secret_key, true)
+            // );
 
             // if (! hash_equals($expected, $signature)) {
             //     return response()->json(['status' => 0, 'message' => 'Unauthorized request.'], 401);
             // }
+            // --- End signature authentication ---
 
             $gateway_config = [
                 'gateway_url'   => $request->gateway_url,
