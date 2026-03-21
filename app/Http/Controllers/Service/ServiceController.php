@@ -1444,26 +1444,105 @@ class ServiceController extends Controller
         }
     }
 
+    // private function add_qr_to_by_law_file($application): ?string
+    // {
+    //     $application_data = json_decode($application->application_data, true);
+
+    //     $certificate_url = rtrim(config('app.url'), '/') . "/storage/uploads/{$application->user->id}/application/{$application->applicationId}.pdf";
+
+    //     $qr_payload = "Certificate Link: {$certificate_url}";
+
+    //     // for cooperative society only
+    //     if ($application->service_id !== 2 || empty($application_data['278'])) {
+    //         return null;
+    //     }
+
+    //     $by_law_file = $application_data['278'];
+
+    //     if (! Storage::disk('public')->exists($by_law_file)) {
+    //         return null;
+    //     }
+
+    //     $source_full_path = Storage::disk('public')->path($by_law_file);
+
+    //     try {
+    //         $qr_png = QrCode::format('png')
+    //             ->size(300)
+    //             ->margin(4)
+    //             ->errorCorrection('M')
+    //             ->generate($qr_payload);
+
+    //         $tmp_qr_path = storage_path('app/temp_qr_' . uniqid('', true) . '.png');
+
+    //         $temp_dir = dirname($tmp_qr_path);
+    //         if (!is_dir($temp_dir)) {
+    //             mkdir($temp_dir, 0755, true);
+    //         }
+
+    //         file_put_contents($tmp_qr_path, $qr_png);
+
+    //         $pdf = new Fpdi('P', 'mm');
+    //         $page_count = $pdf->setSourceFile($source_full_path);
+
+    //         $qr_size_mm = 25.0;
+    //         $outer_margin_mm = 10.0;
+    //         $gap_mm          = 3.0;
+    //         $inner_margin_mm = $outer_margin_mm + $gap_mm;
+
+    //         for ($page_no = 1; $page_no <= $page_count; $page_no++) {
+    //             $template_id = $pdf->importPage($page_no);
+    //             $size        = $pdf->getTemplateSize($template_id);
+
+    //             $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
+    //             $pdf->useTemplate($template_id);
+
+    //             $outer_margin_mm = 10.0;
+    //             $gap_mm          = 3.0;
+    //             $inner_margin_mm = $outer_margin_mm + $gap_mm;
+
+    //             $x = $inner_margin_mm;
+    //             $y = $size['height'] - $inner_margin_mm - $qr_size_mm;
+
+    //             $pdf->Image($tmp_qr_path, $x, $y, $qr_size_mm, 0, 'PNG');
+    //         }
+
+    //         @unlink($tmp_qr_path);
+
+    //         $final_content = $pdf->Output('S');
+    //         file_put_contents($source_full_path, $final_content);
+
+    //         return $by_law_file;
+    //     } catch (\Exception $e) {
+    //         if (isset($tmp_qr_path) && file_exists($tmp_qr_path)) {
+    //             @unlink($tmp_qr_path);
+    //         }
+    //         Log::error('add_qr_to_by_law_file: ' . $e->getMessage() . ' on line ' . $e->getLine());
+    //         return null;
+    //     }
+    // }
+    
     private function add_qr_to_by_law_file($application): ?string
     {
         $application_data = json_decode($application->application_data, true);
 
         $certificate_url = rtrim(config('app.url'), '/') . "/storage/uploads/{$application->user->id}/application/{$application->applicationId}.pdf";
-
         $qr_payload = "Certificate Link: {$certificate_url}";
 
         // for cooperative society only
-        if ($application->service_id !== 2 || empty($application_data['278'])) {
+        if ((int) $application->service_id !== 2 || empty($application_data['278'])) {
             return null;
         }
 
         $by_law_file = $application_data['278'];
 
-        if (! Storage::disk('public')->exists($by_law_file)) {
+        if (!Storage::disk('public')->exists($by_law_file)) {
             return null;
         }
 
         $source_full_path = Storage::disk('public')->path($by_law_file);
+
+        $tmp_qr_path = null;
+        $normalized_path = null;
 
         try {
             $qr_png = QrCode::format('png')
@@ -1473,6 +1552,7 @@ class ServiceController extends Controller
                 ->generate($qr_payload);
 
             $tmp_qr_path = storage_path('app/temp_qr_' . uniqid('', true) . '.png');
+            $normalized_path = storage_path('app/temp_normalized_' . uniqid('', true) . '.pdf');
 
             $temp_dir = dirname($tmp_qr_path);
             if (!is_dir($temp_dir)) {
@@ -1481,24 +1561,61 @@ class ServiceController extends Controller
 
             file_put_contents($tmp_qr_path, $qr_png);
 
+            $working_pdf_path = $source_full_path;
             $pdf = new Fpdi('P', 'mm');
-            $page_count = $pdf->setSourceFile($source_full_path);
+
+            try {
+                // Try original PDF directly first
+                $page_count = $pdf->setSourceFile($working_pdf_path);
+            } catch (\Throwable $fpdiException) {
+                // If FPDI fails, normalize the PDF through Ghostscript
+                $gs_path = $this->findGhostscriptBinary();
+
+                if (!$gs_path) {
+                    throw new \RuntimeException(
+                        'Ghostscript not found. Please install Ghostscript or set GHOSTSCRIPT_BIN in .env'
+                    );
+                }
+
+                $gs_bin = escapeshellarg($gs_path);
+
+                $gs_cmd = $gs_bin
+                    . ' -q'
+                    . ' -dNOPAUSE'
+                    . ' -dBATCH'
+                    . ' -dSAFER'
+                    . ' -sDEVICE=pdfwrite'
+                    . ' -dCompatibilityLevel=1.4'
+                    . ' -dAutoRotatePages=/None'
+                    . ' -sOutputFile=' . escapeshellarg($normalized_path)
+                    . ' ' . escapeshellarg($source_full_path);
+
+                $output = [];
+                $return_var = 0;
+                exec($gs_cmd . ' 2>&1', $output, $return_var);
+
+                if ($return_var !== 0 || !file_exists($normalized_path) || filesize($normalized_path) === 0) {
+                    throw new \RuntimeException(
+                        "Ghostscript failed (exit code {$return_var}): " . implode("\n", $output)
+                    );
+                }
+
+                $working_pdf_path = $normalized_path;
+                $pdf = new Fpdi('P', 'mm');
+                $page_count = $pdf->setSourceFile($working_pdf_path);
+            }
 
             $qr_size_mm = 25.0;
             $outer_margin_mm = 10.0;
-            $gap_mm          = 3.0;
+            $gap_mm = 3.0;
             $inner_margin_mm = $outer_margin_mm + $gap_mm;
 
             for ($page_no = 1; $page_no <= $page_count; $page_no++) {
                 $template_id = $pdf->importPage($page_no);
-                $size        = $pdf->getTemplateSize($template_id);
+                $size = $pdf->getTemplateSize($template_id);
 
                 $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
                 $pdf->useTemplate($template_id);
-
-                $outer_margin_mm = 10.0;
-                $gap_mm          = 3.0;
-                $inner_margin_mm = $outer_margin_mm + $gap_mm;
 
                 $x = $inner_margin_mm;
                 $y = $size['height'] - $inner_margin_mm - $qr_size_mm;
@@ -1506,19 +1623,52 @@ class ServiceController extends Controller
                 $pdf->Image($tmp_qr_path, $x, $y, $qr_size_mm, 0, 'PNG');
             }
 
-            @unlink($tmp_qr_path);
-
             $final_content = $pdf->Output('S');
             file_put_contents($source_full_path, $final_content);
 
-            return $by_law_file;
-        } catch (\Exception $e) {
-            if (isset($tmp_qr_path) && file_exists($tmp_qr_path)) {
+            if ($tmp_qr_path && file_exists($tmp_qr_path)) {
                 @unlink($tmp_qr_path);
             }
+
+            if ($normalized_path && file_exists($normalized_path)) {
+                @unlink($normalized_path);
+            }
+
+            return $by_law_file;
+        } catch (\Throwable $e) {
+            if ($tmp_qr_path && file_exists($tmp_qr_path)) {
+                @unlink($tmp_qr_path);
+            }
+
+            if ($normalized_path && file_exists($normalized_path)) {
+                @unlink($normalized_path);
+            }
+
             Log::error('add_qr_to_by_law_file: ' . $e->getMessage() . ' on line ' . $e->getLine());
             return null;
         }
+    }
+
+    private function findGhostscriptBinary(): ?string
+    {
+        foreach (['/usr/bin/gs', '/usr/local/bin/gs'] as $path) {
+            if (file_exists($path)) {
+                return $path;
+            }
+        }
+
+        $output = [];
+        $code = 1;
+        @exec('which gs 2>/dev/null', $output, $code);
+
+        if ($code === 0 && !empty($output[0])) {
+            $path = trim($output[0]);
+            if (file_exists($path)) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 
     public function get_user_approved_applications(Request $request)
