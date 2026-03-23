@@ -146,4 +146,9 @@ class UserServiceApplication extends Model
 
         return $path;
     }
+
+    public function serviceWorkflow()
+    {
+        return $this->hasMany(ServiceApprovalFlow::class, 'service_id', 'service_id');
+    }
 }
