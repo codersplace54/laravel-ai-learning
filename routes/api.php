@@ -362,6 +362,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('date-confirmed-inspections-list-per-user', [InspectionController::class, 'date_confirmed_inspections_list_per_user']);
         Route::post('inspection-date-update-by-user', [InspectionController::class, 'inspection_date_update_by_user']);
     });
+
+    Route::post('get-application-tracking-details', [UserServiceApplicationController::class, 'get_application_tracking_details']);
 });
 
 Route::post('department-get-all-departments', [DepartmentController::class, 'all_departments'])->name('department.all_departments');

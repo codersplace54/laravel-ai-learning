@@ -3642,4 +3642,126 @@ class UserServiceApplicationController extends Controller
             );
         }
     }
+
+    public function get_application_tracking_details(Request $request)
+    {
+
+
+        try {
+
+            if (!Auth::check()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Unauthenticated user.'
+                ], 401);
+            }
+
+            $request->validate([
+                'applicationId' => 'required|string|exists:user_service_applications,applicationId',
+            ]);
+
+            $app = UserServiceApplication::with(['service.department', 'workflow.actionTaker', 'workflow.department'])
+                ->where('applicationId', $request->applicationId)
+                ->first();
+
+            if (!$app) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Application not found.'
+                ], 404);
+            }
+
+            $app->application_data = json_decode($app->application_data, true);
+
+            $history = $app->workflow()->orderBy('id', 'desc')->get();
+
+            $latest_workflow = $history->first();
+
+            $last_approved = $history->where('status', 'approved')->first();
+
+            $executed_steps = $app->workflow()->orderBy('step_number')->get();
+
+            $all_steps = ServiceApprovalFlow::where('service_id', $app->service_id)
+                ->orderBy('step_number')
+                ->get();
+
+            $last_completed_step = $executed_steps->max('step_number') ?? 0;
+
+            $history_data = $history->map(function ($item) {
+                return [
+                    'id'              => $item->id,
+                    'step_number'     => $item->step_number,
+                    'status'          => $item->status,
+                    'step_type'       => $item->step_type,
+                    'hierarchy_level' => $item->hierarchy_level,
+                    'department'      => $item->department->name,
+                    'remarks'         => $item->remarks,
+                    'status_file'     => $item->status_file ? asset('storage/' . $item->status_file) : null,
+                    'action_taken_at' => $item->action_taken_at,
+                    'action_taken_by' => optional($item->actionTaker)->authorized_person_name,
+                    'action_taken_email_id' => optional($item->actionTaker)->email_id,
+                ];
+            });
+
+            foreach ($all_steps as $step) {
+                if ($step->step_number > $last_completed_step) {
+                    $history_data[] = [
+                        'step_number'      => $step->step_number,
+                        'status'           => 'pending',
+                        'step_type'        => $step->step_type,
+                        'hierarchy_level' => $step->hierarchy_level,
+                        'department'      => $step->department->name,
+                        'department_id'    => $step->department_id,
+                        'department_name'  => $step->department->name ?? null,
+                        'action_taken_at'  => null,
+                        'action_taken_by'  => null,
+                    ];
+                }
+            }
+
+            $history_data = collect($history_data)
+                ->sortBy('step_number')
+                ->values();
+
+            $response = [
+                'application_id' => $app->id,
+                'service_id' => $app->service_id,
+                'application_number' => $app->applicationId,
+                'applicat_name' => $app->user->authorized_person_name,
+                'application_date' => $app->application_date,
+                'service_title_or_description' => $app->service->service_title_or_description ?? null,
+                'application_type' => $app->service->noc_type ?? null,
+                'department_id' => $app->service->department_id ?? null,
+                'department_name' => $app->service->department->name ?? null,
+                'payment_status' => $app->payment_status,
+                'status' => $app->status,
+                'latest_hierarchy' => $latest_workflow->hierarchy_level ?? null,
+                'latest_status' => $latest_workflow->status ?? null,
+                'latest_department' => $app->service->department->name ?? null,
+                'last_approved_by' => optional($last_approved?->actionTaker)->authorized_person_name,
+                'last_approved_dept_mail' => optional($last_approved?->actionTaker)->email_id,
+                'last_approved_time' => $last_approved?->action_taken_at,
+                'NOC_generationDate' => $app->NOC_generationDate,
+                'NOC_expiry_date' => $app->NOC_expiry_date,
+                'license_id' => $app->license_id,
+                'NOC_mode' => $app->NOC_mode,
+                'NOC_certificate' => $app->noc_certificate_url,
+                'history_data' => $history_data,
+            ];
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Application details fetched successfully.',
+                'data' => $response
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
