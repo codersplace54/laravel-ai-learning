@@ -264,6 +264,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
             Route::post('proforma-application-store', [UserIncentiveApplicationController::class, 'user_proforma_application_store']);
             Route::post('application-workflow-history', [UserIncentiveApplicationController::class, 'application_workflow_history']);
             Route::post('preview-subsidy-report', [UserIncentiveApplicationController::class, 'preview_subsidy_report']);
+            Route::post('track-application', [UserIncentiveApplicationController::class, 'track_application']);
         });
 
         Route::post('/get-total-applications-by-user', [DashboardController::class, 'get_total_applications_by_user']);
@@ -308,6 +309,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
             Route::post('applications', [UserIncentiveApplicationController::class, 'get_department_applications']);
             Route::post('update-application-status', [UserIncentiveApplicationController::class, 'update_application_status']);
             Route::post('application-details', [UserIncentiveApplicationController::class, 'application_details']);
+            Route::post('track-application', [UserIncentiveApplicationController::class, 'track_application']);
         });
 
         Route::post('/services', [ServiceController::class, 'get_services_by_department']);
