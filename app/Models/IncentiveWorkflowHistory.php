@@ -10,17 +10,15 @@ class IncentiveWorkflowHistory extends Model
         'application_id',
         'from_status',
         'to_status',
-        'action',
         'action_taken_by',
         'remarks',
-        'meta',
-        'action_taken_at',
         'review_file',
+        'action_taken_at',
     ];
 
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'action_taken_by');
     }
 
     protected $casts = [

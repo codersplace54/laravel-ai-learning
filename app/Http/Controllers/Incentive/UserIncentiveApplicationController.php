@@ -212,8 +212,9 @@ class UserIncentiveApplicationController extends Controller
             $application->proforma_id = $proforma->id;
             $application->scheme_id = $proforma->scheme->id;
             $application->user_id = Auth::id();
-            $application->submitted_at = now();
-            $application->application_date = now();
+            if (!$application->submitted_at) {
+                $application->application_date = now();
+            }
             $application->save();
 
             if (!$is_save_only) {
@@ -286,7 +287,7 @@ class UserIncentiveApplicationController extends Controller
                 return response()->json([
                     'status'  => 1,
                     'message' => 'Application Submitted successfully.',
-                    'data'    => $application,
+                    'data'    => array_merge($application->toArray(), ['application_id' => $application->id]),
                 ]);
             }
 
@@ -295,7 +296,7 @@ class UserIncentiveApplicationController extends Controller
             return response()->json([
                 'status'  => 1,
                 'message' => 'Draft saved successfully.',
-                'data'    => $application,
+                'data'    => array_merge($application->toArray(), ['application_id' => $application->id]),
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -338,6 +339,7 @@ class UserIncentiveApplicationController extends Controller
             }
 
             $data = Scheme::query()
+                ->where('status', 1)
                 ->whereDate('policy_start_date', '<=',  $dob)
                 ->whereDate('policy_end_date', '>=', $dob)
                 ->select('id', 'code', 'title')->get();
@@ -381,7 +383,7 @@ class UserIncentiveApplicationController extends Controller
                         ->where('application_type', 'eligibility')
                         ->orderByDesc('id')
                         ->orderBy('id', 'desc')
-                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status');
+                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'eligibility_certificate_no', 'eligibility_certificate_path');
                 })
                 ->select('id', 'scheme_id', 'code', 'title', 'description')
                 ->get();
@@ -409,6 +411,8 @@ class UserIncentiveApplicationController extends Controller
                     'workflow_status'  => $application ? $this->status_label($application->workflow_status) : null,
                     'raw_status'  => $application?->workflow_status,
                     'is_editable'     => $application ? $this->is_application_editable($application) : false,
+                    'eligibility_certificate_no'   => $application?->eligibility_certificate_no,
+                    'eligibility_certificate_path' => $application?->eligibility_certificate_path ? asset('storage/' . $application->eligibility_certificate_path) : null,
                 ];
             });
 
@@ -602,10 +606,11 @@ class UserIncentiveApplicationController extends Controller
 
                 $answers = $application->form_answers_json ?? [];
             } else {
-                $proforma = Proforma::where('id', $request->proforma_id)->first();
+                $proforma = Proforma::where('id', $request->proforma_id)->where('status', 1)->first();
             }
 
             $questions = ProformaQuestionnaire::where('proforma_id', $proforma->id)
+                ->where('status', 1)
                 ->orderBy('display_order')
                 ->orderBy('id')
                 ->get();
@@ -666,9 +671,7 @@ class UserIncentiveApplicationController extends Controller
 
             $user = User::where('id', auth()->user()->id)->with('department_user')->first();
 
-            $designation = $user ? $user?->department_user?->designation : null;
-
-            $department_user_district_code = $user?->district_id;
+            $designation = $user?->department_user?->designation;
 
             if (!$designation) {
                 return response()->json([
@@ -682,8 +685,9 @@ class UserIncentiveApplicationController extends Controller
             $applications = UserIncentiveApplication::with(['proforma', 'user.district']);
 
             if (!$is_slc) {
-                $applications->whereHas('user', function ($q) use ($department_user_district_code) {
-                    $q->where('district_id', $department_user_district_code);
+                $assigned_district_codes = array_filter([$user->department_user?->district_id]);
+                $applications->whereHas('user', function ($q) use ($assigned_district_codes) {
+                    $q->whereIn('district_id', $assigned_district_codes);
                 });
             }
 
@@ -958,7 +962,7 @@ class UserIncentiveApplicationController extends Controller
 
             $history = IncentiveWorkflowHistory::where('application_id', $request->application_id)
                 ->orderBy('action_taken_at')
-                ->with(['user:id,name,authorized_person_name,email'])
+                ->with(['user:id,authorized_person_name,email_id'])
                 ->get()
                 ->map(function ($history) {
                     return [
@@ -1037,6 +1041,7 @@ class UserIncentiveApplicationController extends Controller
             }
 
             $questions = ProformaQuestionnaire::where('proforma_id', $application->proforma->id)
+                ->where('status', 1)
                 ->orderBy('display_order')
                 ->orderBy('id')
                 ->get();
@@ -1113,6 +1118,145 @@ class UserIncentiveApplicationController extends Controller
                 'message' => 'Something went wrong.',
                 'error'   => $e->getMessage(),
             ], 500);
+        }
+    }
+
+
+    public function track_application(Request $request)
+    {
+        try {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'application_id' => 'required|integer|exists:user_incentive_applications,id',
+            ]);
+
+            $application = UserIncentiveApplication::with(['proforma.scheme', 'user'])
+                ->find($request->application_id);
+
+            $auth_user   = User::with('department_user')->find(Auth::id());
+            $designation = $auth_user?->department_user?->designation;
+
+            if ($designation) {
+                $allowed_map = [
+                    'Dealing Assistant'     => ['submitted', 're_submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da'],
+                    'General Manager'       => ['approved_by_da', 'noc_issued', 'claim_approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm', 'under_review_slc'],
+                    'State Level Committee' => ['under_review_slc', 'claim_approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc'],
+                ];
+                $allowed = $allowed_map[$designation] ?? [];
+                if (!empty($allowed) && !in_array($application->workflow_status, $allowed, true)) {
+                    return response()->json(['status' => 0, 'message' => 'You do not have authority to track this application.'], 403);
+                }
+            } else {
+                if ($application->user_id !== Auth::id()) {
+                    return response()->json(['status' => 0, 'message' => 'You do not have authority to track this application.'], 403);
+                }
+            }
+
+            $history = IncentiveWorkflowHistory::where('application_id', $application->id)
+                ->orderBy('action_taken_at')
+                ->with('user:id,authorized_person_name,email_id')
+                ->get();
+
+            $latest       = $history->last();
+            $last_approved = $history->whereIn('to_status', ['approved_by_da', 'noc_issued', 'claim_approved_by_gm', 'claim_approved_by_slc'])->last();
+
+            $history_data = $history->map(function ($h) {
+                return [
+                    'id'                    => $h->id,
+                    'from_status'           => $h->from_status,
+                    'from_status_label'     => $this->status_label($h->from_status),
+                    'to_status'             => $h->to_status,
+                    'to_status_label'       => $this->status_label($h->to_status),
+                    'remarks'               => $h->remarks,
+                    'review_file'           => $h->review_file ? asset('storage/' . $h->review_file) : null,
+                    'action_taken_at'       => optional($h->action_taken_at)->toDateTimeString(),
+                    'action_taken_by'       => optional($h->user)->authorized_person_name,
+                    'action_taken_email_id' => optional($h->user)->email_id,
+                    'is_completed'          => true,
+                ];
+            })->values();
+
+            $is_claim = $application->application_type === 'claim';
+            if ($is_claim) {
+                $pipeline = [
+                    ['step' => 1, 'role' => 'Dealing Assistant',    'to_status' => 'approved_by_da',        'label' => 'Review by Dealing Assistant'],
+                    ['step' => 2, 'role' => 'General Manager',      'to_status' => 'claim_approved_by_gm',  'label' => 'Approval by General Manager'],
+                    ['step' => 3, 'role' => 'State Level Committee', 'to_status' => 'claim_approved_by_slc', 'label' => 'Final Approval by SLC (if applicable)'],
+                ];
+            } else {
+                $pipeline = [
+                    ['step' => 1, 'role' => 'Dealing Assistant', 'to_status' => 'approved_by_da', 'label' => 'Review by Dealing Assistant'],
+                    ['step' => 2, 'role' => 'General Manager',   'to_status' => 'noc_issued',     'label' => 'NOC Issuance by General Manager'],
+                ];
+            }
+
+            $completed_to_statuses = $history->pluck('to_status')->toArray();
+
+            $terminal_statuses = [
+                'rejected_by_da', 'rejected_by_gm', 'rejected_by_slc',
+                'noc_issued', 'claim_approved_by_slc', 'claim_approved_by_gm',
+            ];
+            $is_terminal = in_array($application->workflow_status, $terminal_statuses, true);
+
+            // Append upcoming steps not yet completed
+            foreach ($pipeline as $step) {
+                $already_done = in_array($step['to_status'], $completed_to_statuses, true);
+                if (!$already_done && !$is_terminal) {
+                    $history_data->push([
+                        'step'                  => $step['step'],
+                        'role'                  => $step['role'],
+                        'label'                 => $step['label'],
+                        'to_status'             => $step['to_status'],
+                        'to_status_label'       => $this->status_label($step['to_status']),
+                        'from_status'           => null,
+                        'from_status_label'     => null,
+                        'remarks'               => null,
+                        'review_file'           => null,
+                        'action_taken_at'       => null,
+                        'action_taken_by'       => null,
+                        'action_taken_email_id' => null,
+                        'is_completed'          => false,
+                    ]);
+                }
+            }
+
+            $data = [
+                'application_id'               => $application->id,
+                'application_no'               => $application->application_no,
+                'applicant_name'               => optional($application->user)->authorized_person_name,
+                'application_date'             => $application->application_date,
+                'scheme'                       => optional(optional($application->proforma)->scheme)->title,
+                'proforma'                     => optional($application->proforma)->title,
+                'application_type'             => $application->application_type,
+                'workflow_status'              => $application->workflow_status,
+                'workflow_status_label'        => $this->status_label($application->workflow_status),
+                'submitted_at'                 => optional($application->submitted_at)->toDateTimeString(),
+                'decided_at'                   => optional($application->decided_at)->toDateTimeString(),
+                'eligibility_certificate_no'   => $application->eligibility_certificate_no,
+                'eligibility_certificate_path' => $application->eligibility_certificate_path
+                    ? asset('storage/' . $application->eligibility_certificate_path)
+                    : null,
+                'last_action_by'               => optional(optional($latest)->user)->authorized_person_name,
+                'last_action_email'            => optional(optional($latest)->user)->email_id,
+                'last_action_at'               => optional(optional($latest)->action_taken_at)->toDateTimeString(),
+                'last_approved_by'             => optional(optional($last_approved)->user)->authorized_person_name,
+                'last_approved_email'          => optional(optional($last_approved)->user)->email_id,
+                'last_approved_at'             => optional(optional($last_approved)->action_taken_at)->toDateTimeString(),
+                'history_data'                 => $history_data,
+            ];
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Application tracking details fetched successfully.',
+                'data'    => $data,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 0, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
         }
     }
 
@@ -1266,11 +1410,13 @@ class UserIncentiveApplicationController extends Controller
 
     private function is_application_editable(UserIncentiveApplication $application): bool
     {
-        // dd($application);
+        if ($application->workflow_status === 'draft') {
+            return true;
+        }
         if (!$application->application_no) {
             return false;
         }
-        $editable_statuses = ['draft', 'sent_back_by_da', 'sent_back_by_gm', 'sent_back_by_slc'];
+        $editable_statuses = ['sent_back_by_da', 'sent_back_by_gm', 'sent_back_by_slc'];
         return in_array($application->workflow_status, $editable_statuses, true);
     }
 
