@@ -366,7 +366,11 @@ class UserIncentiveApplicationController extends Controller
             }
 
             $request->validate([
-                'scheme_id' => ['required', 'integer', 'exists:schemes,id'],
+                'scheme_id'      => ['required', 'integer', 'exists:schemes,id'],
+                'application_no' => 'nullable|string|max:50',
+                'application_code' => 'nullable|string|max:100',
+                'proforma_name'  => 'nullable|string|max:255',
+                'status'         => 'nullable|string',
             ]);
 
             $user_id = Auth::id();
@@ -375,16 +379,19 @@ class UserIncentiveApplicationController extends Controller
                 ->where('scheme_id', $request->scheme_id)
                 ->where('proforma_type', 'eligibility')
                 ->where('status', 1)
+                ->when($request->filled('application_code'), fn($q) => $q->where('code', 'like', '%' . $request->application_code . '%'))
+                ->when($request->filled('proforma_name'), fn($q) => $q->where('title', 'like', '%' . $request->proforma_name . '%'))
                 ->orderBy('display_order')
                 ->orderBy('id', 'desc')
-                ->with('applications', function ($q) use ($request, $user_id) {
+                ->with(['applications' => function ($q) use ($request, $user_id) {
                     $q->where('user_id', $user_id)
                         ->where('scheme_id', $request->scheme_id)
                         ->where('application_type', 'eligibility')
+                        ->when($request->filled('application_no'), fn($q) => $q->where('application_no', 'like', '%' . $request->application_no . '%'))
+                        ->when($request->filled('status'), fn($q) => $q->where('workflow_status', $request->status))
                         ->orderByDesc('id')
-                        ->orderBy('id', 'desc')
                         ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'eligibility_certificate_no', 'eligibility_certificate_path');
-                })
+                }])
                 ->select('id', 'scheme_id', 'code', 'title', 'description')
                 ->get();
 
@@ -416,6 +423,10 @@ class UserIncentiveApplicationController extends Controller
                 ];
             });
 
+            if ($request->filled('application_no') || $request->filled('status')) {
+                $response_data = $response_data->filter(fn($item) => $item['application_id'] !== null)->values();
+            }
+
             return response()->json([
                 'status' => 1,
                 'message' => 'Eligibility proforma fetched successfully.',
@@ -431,7 +442,7 @@ class UserIncentiveApplicationController extends Controller
         }
     }
 
-    public function user_claim_proforma_list()
+    public function user_claim_proforma_list(Request $request)
     {
         try {
             if (!Auth::check()) {
@@ -490,14 +501,25 @@ class UserIncentiveApplicationController extends Controller
 
             $eligible_claim_proforma_ids = array_values(array_unique(array_merge($eligible_claim_proforma_ids, $user_claim_proform_ids)));
 
+            $request->validate([
+                'application_no'   => 'nullable|string|max:50',
+                'application_code' => 'nullable|string|max:100',
+                'proforma_name'    => 'nullable|string|max:255',
+                'status'           => 'nullable|string',
+            ]);
+
             $claim_proformas = Proforma::query()
                 ->whereIn('id', $eligible_claim_proforma_ids)
                 ->where('status', 1)
                 ->where('proforma_type', 'claim')
+                ->when($request->filled('application_code'), fn($q) => $q->where('code', 'like', '%' . $request->application_code . '%'))
+                ->when($request->filled('proforma_name'), fn($q) => $q->where('title', 'like', '%' . $request->proforma_name . '%'))
                 ->orderBy('display_order')
                 ->orderByDesc('id')
-                ->with(['applications' => function ($q) use ($user_id) {
+                ->with(['applications' => function ($q) use ($user_id, $request) {
                     $q->where('user_id', $user_id)
+                        ->when($request->filled('application_no'), fn($q) => $q->where('application_no', 'like', '%' . $request->application_no . '%'))
+                        ->when($request->filled('status'), fn($q) => $q->where('workflow_status', $request->status))
                         ->orderByDesc('id')
                         ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id', 'subsidy_report', 'remaining_claim');
                 }])
@@ -564,6 +586,10 @@ class UserIncentiveApplicationController extends Controller
                         'remaining_claim'  => $application->remaining_claim,
                     ];
                 }
+            }
+
+            if ($request->filled('application_no') || $request->filled('status')) {
+                $response_data = array_values(array_filter($response_data, fn($item) => $item['application_id'] !== null));
             }
 
             return response()->json([
@@ -707,6 +733,28 @@ class UserIncentiveApplicationController extends Controller
                     'status'  => 0,
                     'message' => 'Invalid designation. Only Dealing Assistant, General Manager, or State Level Committee can access applications.',
                 ]);
+            }
+
+            if ($request->filled('status')) {
+                $applications->where('workflow_status', $request->status);
+            }
+            if ($request->filled('scheme_id')) {
+                $applications->where('scheme_id', $request->scheme_id);
+            }
+            if ($request->filled('proforma_id')) {
+                $applications->where('proforma_id', $request->proforma_id);
+            }
+            if ($request->filled('applicant_name')) {
+                $applications->whereHas('user', fn($q) => $q->where('authorized_person_name', 'like', '%' . $request->applicant_name . '%'));
+            }
+            if ($request->filled('applicant_phone')) {
+                $applications->whereHas('user', fn($q) => $q->where('mobile_no', 'like', '%' . $request->applicant_phone . '%'));
+            }
+            if ($request->filled('date_from')) {
+                $applications->whereDate('submitted_at', '>=', $request->date_from);
+            }
+            if ($request->filled('date_to')) {
+                $applications->whereDate('submitted_at', '<=', $request->date_to);
             }
 
             $applications = $applications->orderByDesc('submitted_at')->get();
