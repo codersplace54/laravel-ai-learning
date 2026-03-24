@@ -247,7 +247,7 @@ class ServiceMasterController extends Controller
                 'third_party_status_api_url' => $request->third_party_status_api_url,
                 'is_active' => $request->is_active ?? $service->is_active,
                 'updated_by' => $admin->email_id,
-                'egras_scheme_code' => $request->egras_scheme_code ?? $service->egras_scheme_code,
+                'egras_scheme_code' => $request->has('egras_scheme_code') ? $request->egras_scheme_code : $service->egras_scheme_code,
                 'caf_depends' => $request->caf_depends,
             ]);
 
