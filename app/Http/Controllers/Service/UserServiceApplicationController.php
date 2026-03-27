@@ -3687,7 +3687,21 @@ class UserServiceApplicationController extends Controller
 
             $last_completed_step = $executed_steps->max('step_number') ?? 0;
 
-            $history_data = $history->map(function ($item) {
+            $history_records = ApplicationWorkflowHistory::where('application_id', $app->id)
+                ->get()
+                ->groupBy(function ($item) {
+                    return $item->step_number . '_' . $item->step_type . '_' . $item->department_id . '_' . $item->hierarchy_level;
+                });
+
+            $history_data = $history->map(function ($item) use ($history_records) {
+
+                $key = $item->step_number . '_' . $item->step_type . '_' . $item->department_id . '_' . $item->hierarchy_level;
+
+                $records = $history_records->get($key);
+
+                $latest_history = $records
+                    ? $records->sortByDesc('id')->first()
+                    : null;
                 return [
                     'id'              => $item->id,
                     'step_number'     => $item->step_number,
@@ -3696,7 +3710,9 @@ class UserServiceApplicationController extends Controller
                     'hierarchy_level' => $item->hierarchy_level,
                     'department'      => $item->department->name,
                     'remarks'         => $item->remarks,
-                    'status_file'     => $item->status_file ? asset('storage/' . $item->status_file) : null,
+                    'status_file'     => $latest_history && $latest_history->status_file
+                        ? asset('storage/' . $latest_history->status_file)
+                        : null,
                     'action_taken_at' => $item->action_taken_at,
                     'action_taken_by' => optional($item->actionTaker)->authorized_person_name,
                     'action_taken_email_id' => optional($item->actionTaker)->email_id,
