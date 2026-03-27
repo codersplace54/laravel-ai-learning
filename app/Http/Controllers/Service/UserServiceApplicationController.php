@@ -1910,27 +1910,27 @@ class UserServiceApplicationController extends Controller
 
     public function third_party_return(Request $request)
     {
+        $external_id         = $request->input('applicationId');
+        $status              = $request->input('status');
+        $payment_status      = $request->input('payment_status');
+        $max_processing_date = $request->input('max_processing_date'); // expected: 2026-02-17
+        $noc_number          = $request->input('noc_number');
+        $noc_valid_till      = $request->input('noc_valid_till');
+        $remarks             = $request->input('remarks');
+        $service_id          = $request->input('service_id');
+        $user_id             = $request->input('user_id');
+        $approved_fee        = $request->input('approved_fee');
+        $extra_payment       = $request->input('extra_payment');
+        $application_date    = $request->input('application_date');
+        $updation_date       = $request->input('updation_date');
+        $egras_account_head  = $request->input('egras_account_head');
+
+        DB::beginTransaction();
+
         try {
-
-            $external_id         = $request->input('applicationId');
-            $status              = $request->input('status');
-            $payment_status      = $request->input('payment_status');
-            $max_processing_date = $request->input('max_processing_date'); // expected: 2026-02-17
-            $noc_number          = $request->input('noc_number');
-            $noc_valid_till      = $request->input('noc_valid_till');
-            $remarks             = $request->input('remarks');
-            $service_id          = $request->input('service_id');
-            $user_id             = $request->input('user_id');
-            $approved_fee        = $request->input('approved_fee');
-            $extra_payment       = $request->input('extra_payment');
-            $application_date    = $request->input('application_date');
-            $updation_date       = $request->input('updation_date');
-            $egras_account_head  = $request->input('egras_account_head');
-
             $data = UserServiceApplication::where('external_application_id', $external_id)->first();
 
             if ($data) {
-
                 $data->update([
                     'status'              => $status,
                     'payment_status'      => $payment_status ?? $data->payment_status,
@@ -1951,7 +1951,6 @@ class UserServiceApplicationController extends Controller
                     'egras_scheme_code'            => $egras_account_head,
                 ]);
             } else {
-
                 $data = UserServiceApplication::create([
                     'user_id'                 => $user_id,
                     'service_id'              => $service_id,
@@ -1963,7 +1962,7 @@ class UserServiceApplicationController extends Controller
                     'license_id'              => $noc_number,
                     'NOC_expiry_date'         => $noc_valid_till,
                     'remarks'                 => $remarks,
-                    // 'bin'                  => $request->input('bin'), // there is no column named bin in user_service_applications
+                    // 'bin'                  => $request->input('bin'), // no column named bin in user_service_applications
                     'approved_fee'            => $approved_fee,
                     'total_fee'               => $approved_fee,
                     'extra_payment'           => $extra_payment,
@@ -1980,7 +1979,6 @@ class UserServiceApplicationController extends Controller
             }
 
             if ($payment_status === 'pending' && (float) $approved_fee > 0) {
-
                 $payment_order = PaymentOrder::where('user_id', $user_id)
                     ->where('application_id', json_encode([$data->id]))
                     ->first();
@@ -1997,20 +1995,24 @@ class UserServiceApplicationController extends Controller
                     ]);
 
                     $payment_order->update([
-                        'order_id' => 'SW' . $payment_order->id
+                        'order_id' => 'SW' . $payment_order->id,
                     ]);
                 }
             }
 
+            DB::commit();
+
+            // Activity log — non-critical, outside transaction
             $user_obj = User::find($user_id);
             if ($user_obj) {
                 $this->logActivity('Third party application callback', $data, $user_obj, [
                     'external_application_id' => $external_id,
-                    'status' => $status,
-                    'payment_status' => $payment_status,
+                    'status'                  => $status,
+                    'payment_status'          => $payment_status,
                 ], 'Third party callback');
             }
 
+            // Status log — fire-and-forget, failures silently ignored
             try {
                 ThirdPartyStatusLog::create([
                     'service_id'         => $service_id,
@@ -2033,14 +2035,20 @@ class UserServiceApplicationController extends Controller
                 // ignore
             }
 
-            $redirectUrl = env('APP_FRONTEND_URL') . "/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";
-            return redirect()->away($redirectUrl);
+            // $redirectUrl = config('app.app_frontendurl') . "/dashboard/user-app-view/{$service_id}/{$data->id}?service=third_party";            // return redirect()->away($redirectUrl);
+            // return redirect()->away($redirectUrl);
+            return response()->json([
+                'success' => 1,
+                'message' => 'Callback processed successfully',
+                // 'data'    => $data,
+            ], 200);
         } catch (\Exception $e) {
+            DB::rollBack();
 
             return response()->json([
                 'success' => 0,
                 'message' => 'Failed to process callback',
-                'error' => $e->getMessage(),
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
