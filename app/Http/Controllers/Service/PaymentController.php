@@ -23,6 +23,7 @@ use App\Traits\LogsActivity;
 use App\Models\ThirdPartyStatusLog;
 use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\Service\CertificateController;
+use App\Models\UnitDetail;
 
 class PaymentController extends Controller
 {
@@ -96,14 +97,37 @@ class PaymentController extends Controller
             $scheme_count = count($scheme_names);
             $total_amount = array_sum($fee_amounts);
 
+            // Calculate service fee apply to the first application that qualifies (only once)
+            $establishment_fee = null;
+            $operational_fee   = null;
+            foreach ($applications as $app) {
+                $service_fee_data = $this->resolve_service_fee($app);
+                if ($service_fee_data) {
+                    if ($service_fee_data['fee_type'] === 'establishment') {
+                        $establishment_fee = $service_fee_data['amount'];
+                    } else {
+                        $operational_fee = $service_fee_data['amount'];
+                    }
+                    // Add as a separate scheme entry routed to dedicated account head
+                    $scheme_names[] = '8443-00-117-45-01';
+                    $fee_amounts[]  = $service_fee_data['amount'];
+                    $total_amount  += $service_fee_data['amount'];
+                    break;
+                }
+            }
+
+            $scheme_count = count($scheme_names);
+
             $payment_order = PaymentOrder::create([
-                'user_id'            => $user_id,
-                'application_id'     => json_encode($application_ids),
-                'payment_amount'     => $total_amount,
-                'payment_created_on' => now(),
-                'payment_updated_on' => now(),
-                'payment_status'     => 'initiated',
-                'transaction_id'     => null,
+                'user_id'               => $user_id,
+                'application_id'        => json_encode($application_ids),
+                'payment_amount'        => $total_amount,
+                'payment_created_on'    => now(),
+                'payment_updated_on'    => now(),
+                'payment_status'        => 'initiated',
+                'transaction_id'        => null,
+                'establishment_fee_paid' => $establishment_fee,
+                'operational_fee_paid'  => $operational_fee,
             ]);
 
             $payment_order->update([
@@ -440,6 +464,55 @@ class PaymentController extends Controller
     }
 
 
+    private function calculate_service_fee(float $project_cost): float
+    {
+        $slabs = [
+            [0,           2500000,    500],
+            [2500000,     10000000,   2000],
+            [10000000,    50000000,   5000],
+            [50000000,    100000000,  7500],
+            [100000000,   250000000,  10000],
+            [250000000,   500000000,  15000],
+            [500000000,   1000000000, 20000],
+            [1000000000,  PHP_INT_MAX, 25000],
+        ];
+
+        foreach ($slabs as [$min, $max, $fee]) {
+            if ($project_cost >= $min && $project_cost < $max) {
+                return (float) $fee;
+            }
+        }
+
+        return 25000.0;
+    }
+
+    private function resolve_service_fee(UserServiceApplication $application): ?array
+    {
+        $service = $application->service;
+        if (!$service) return null;
+
+        $noc_type = strtoupper($service->noc_type ?? '');
+        $fee_type = $noc_type === 'CFE' ? 'establishment' : 'operational';
+        $fee_col  = $fee_type === 'establishment' ? 'establishment_fee_paid' : 'operational_fee_paid';
+
+        $already_paid = PaymentOrder::where('user_id', $application->user_id)
+            ->where('payment_status', 'success')
+            ->whereNotNull($fee_col)
+            ->exists();
+
+        if ($already_paid) return null;
+
+        $unit_detail = UnitDetail::where('user_id', $application->user_id)->first();
+        if (!$unit_detail) return null;
+
+        $project_cost = (float) ($unit_detail->investment_details_total_project_cost ?? 0);
+
+        return [
+            'fee_type' => $fee_type,
+            'amount'   => $this->calculate_service_fee($project_cost),
+        ];
+    }
+
     public function generate_encryption_key($grn)
     {
         $sum = 0;
@@ -509,6 +582,8 @@ class PaymentController extends Controller
                     ->pluck('GRN_number')
                     ->toArray();
 
+                $service_fee = $this->resolve_service_fee($application);
+
                 $response_data[] = [
                     'user_service_application_id' => $application->id,
                     'application_id' => $application->applicationId,
@@ -520,6 +595,7 @@ class PaymentController extends Controller
                     'grn_number'  => $payment_orders_grns ?? null,
                     'payment_date'  => $application->payment_datetime ?? null,
                     'is_third_party' => $application->is_third_party ?? 0,
+                    'service_fee' => $service_fee,
                 ];
             }
 
