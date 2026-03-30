@@ -974,22 +974,9 @@ class ServiceController extends Controller
                     ->first();
 
                 if ($first_step_flow) {
-                    $next_step = ApplicationWorkflowAssignment::create([
-                        'application_id'  => $application->id,
-                        'service_id'      => $application->service_id,
-                        'step_number'     => $first_step_flow->step_number,
-                        'step_type'       => $first_step_flow->step_type,
-                        'department_id'   => $first_step_flow->department_id,
-                        'hierarchy_level' => null,
-                        'action_taken_by' => null,
-                        'action_taken_at' => null,
-                        'remarks'         => null,
-                        'status'          => 'send_back',
-                    ]);
-
                     $application->update([
-                        'current_step_number' => $first_step_flow->step_number,
                         'status'              => 'send_back',
+                        'updated_at' => now(),
                     ]);
 
                     SendWhatsAppNotification::dispatch(
@@ -1011,30 +998,29 @@ class ServiceController extends Controller
                 ]);
 
 
-                $first_step_flow = ServiceApprovalFlow::where('service_id', $application->service_id)
-                    ->orderBy('step_number', 'asc')
+                $current_step = ApplicationWorkflowAssignment::where('application_id', $application->id)
+                    ->where('step_number', $application->current_step_number)
+                    ->latest('id')
                     ->first();
 
-                if ($first_step_flow) {
-                    $next_step = ApplicationWorkflowAssignment::create([
-                        'application_id'  => $application->id,
-                        'service_id'      => $application->service_id,
-                        'step_number'     => $first_step_flow->step_number,
-                        'step_type'       => $first_step_flow->step_type,
-                        'department_id'   => $first_step_flow->department_id,
-                        'hierarchy_level' => null,
-                        'action_taken_by' => null,
-                        'action_taken_at' => null,
-                        'remarks'         => null,
+                if ($current_step) {
+
+                    $current_step->update([
                         'status'          => 'extra_payment',
+                        'remarks'         => $request->remarks,
+                        'action_taken_by' => $user->id,
+                        'action_taken_at' => now(),
                     ]);
 
-                    $total_fee = $application->final_fee +  $request->extra_payment;
+                    $effective_fee = ($application->final_fee + $request->extra_payment) - ($application->paid_amount ?? 0);
+
+                    if ($effective_fee < 0) {
+                        $effective_fee = 0;
+                    }
 
                     $application->update([
-                        'current_step_number' => $first_step_flow->step_number,
                         'payment_status'      => 'pending',
-                        // 'total_fee'           =>  $total_fee,
+                        'effective_fee'       =>  $effective_fee,
                         'extra_payment'       => $request->extra_payment,
                         'remarks'             => $request->remarks,
                         'status'              => 'extra_payment',
