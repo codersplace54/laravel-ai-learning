@@ -950,17 +950,6 @@ class UserServiceApplicationController extends Controller
 
     public function calculate_final_fee($service_id, $application_data, $application_id = null, $request_extra_payment = null)
     {
-        $auth_user = Auth::user();
-        if ($auth_user && $auth_user->user_name === 'Mandeep') {
-            $has_fee_rules = ServiceFeeRule::where('service_id', $service_id)->exists();
-            if ($has_fee_rules) {
-                return [
-                    'final_fee'     => 1.00,
-                    'previous_paid' => 0.00,
-                    'effective_fee' => 1.00,
-                ];
-            }
-        }
 
         $rules = ServiceFeeRule::where('service_id', $service_id)->get();
         $final_fee = 0;
