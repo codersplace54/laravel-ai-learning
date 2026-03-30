@@ -86,9 +86,7 @@ class PaymentController extends Controller
                     ], 400);
                 }
 
-                if ($user->authorized_person_name === 'Mandeep') {
-                    $amount = 1;
-                }
+               
 
                 if ($application->is_third_party == 1 && $application->egras_scheme_code) {
                     $scheme_names[] = $application->egras_scheme_code;
@@ -112,7 +110,6 @@ class PaymentController extends Controller
                     } else {
                         $operational_fee = $service_fee_data['amount'];
                     }
-                    // Add as a separate scheme entry routed to dedicated account head
                     $scheme_names[] = '8443-00-117-45-01';
                     $fee_amounts[]  = $service_fee_data['amount'];
                     $total_amount  += $service_fee_data['amount'];
@@ -570,6 +567,10 @@ class PaymentController extends Controller
                 ], 404);
             }
 
+            $service_fee = $service_user_applications->isNotEmpty()
+                ? $this->resolve_service_fee($service_user_applications->first())
+                : null;
+
             $response_data = [];
             foreach ($service_user_applications as $application) {
                 $amount = null;
@@ -588,8 +589,6 @@ class PaymentController extends Controller
                     ->pluck('GRN_number')
                     ->toArray();
 
-                $service_fee = $this->resolve_service_fee($application);
-
                 $response_data[] = [
                     'user_service_application_id' => $application->id,
                     'application_id' => $application->applicationId,
@@ -601,13 +600,13 @@ class PaymentController extends Controller
                     'grn_number'  => $payment_orders_grns ?? null,
                     'payment_date'  => $application->payment_datetime ?? null,
                     'is_third_party' => $application->is_third_party ?? 0,
-                    'service_fee' => $service_fee,
                 ];
             }
 
             return response()->json([
                 'status' => 1,
                 'message' => 'Service user application fetched successfully.',
+                'service_fee' => $service_fee,
                 'data' => $response_data,
                 'pagination' => [
                     'current_page' => $service_user_applications->currentPage(),
