@@ -108,9 +108,15 @@ class PaymentController extends Controller
                     } else {
                         $operational_fee = $service_fee_data['amount'];
                     }
+                    // Add as a separate scheme entry routed to dedicated account head
+                    $scheme_names[] = '8443-00-117-45-01';
+                    $fee_amounts[]  = $service_fee_data['amount'];
+                    $total_amount  += $service_fee_data['amount'];
                     break;
                 }
             }
+
+            $scheme_count = count($scheme_names);
 
             $payment_order = PaymentOrder::create([
                 'user_id'               => $user_id,
