@@ -300,6 +300,8 @@ class UserServiceApplicationController extends Controller
                         $application_number = $this->generate_application_number($request->service_id, $user_service_application->id);
                     }
 
+                    $is_resubmission = $user_service_application->status === 'send_back';
+
                     $user_service_application->update([
                         'renewal_cycle_id'      => $request->renewal_cycle_id,
                         'renewal'               => $request->renewal,
@@ -332,7 +334,9 @@ class UserServiceApplicationController extends Controller
                         'final_fee'             => $final_fee,
                         'total_fee'             => $total_fee,
                         'effective_fee'         => $effective_fee,
-                        'current_step_number'   => $approval_flow->step_number ?? 0,
+                        'current_step_number'   => $is_resubmission
+                            ? $user_service_application->current_step_number
+                            : ($approval_flow->step_number ?? 0),
                         'max_processing_date'   => $has_approval_flow ? $max_processing_date : null,
                         'paid_amount'           => $paid_amount,
                         'applied_fee'           => $request->land_allotment_estimated_amount ?? null,
@@ -340,29 +344,36 @@ class UserServiceApplicationController extends Controller
 
                     if ($request->status != 'draft' && $has_approval_flow) {
 
-                        ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
-                            ->where('status', 'pending')
-                            ->update([
-                                'status'          => 're_submitted',
-                                'remarks'         => $request->remarks,
-                                'action_taken_by' => $user->id,
-                                'action_taken_at' => now(),
+                        if ($is_resubmission) {
+                            $existing_step = ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
+                                ->where('step_number', $user_service_application->current_step_number)
+                                ->latest('id')
+                                ->first();
+
+                            if ($existing_step) {
+                                $existing_step->update([
+                                    'status' => 'pending',
+                                    'action_taken_by' => null,
+                                    'action_taken_at' => null,
+                                    'remarks' => null,
+                                ]);
+                            }
+                        } else {
+
+                            ApplicationWorkflowAssignment::create([
+                                'application_id'     => $user_service_application->id,
+                                'service_id'         => $request->service_id,
+                                'step_number'        => $approval_flow->step_number,
+                                'step_type'          => $approval_flow->step_type,
+                                'department_id'      => $approval_flow->department_id,
+                                'hierarchy_level'    => $approval_flow->hierarchy_level,
+                                'assigned_to_group'  => true,
+                                'status'             => 'pending',
+                                'action_taken_by'    => null,
+                                'action_taken_at'    => null,
+                                'remarks'            => null,
                             ]);
-
-
-                        ApplicationWorkflowAssignment::create([
-                            'application_id'     => $user_service_application->id,
-                            'service_id'         => $request->service_id,
-                            'step_number'        => $approval_flow->step_number,
-                            'step_type'          => $approval_flow->step_type,
-                            'department_id'      => $approval_flow->department_id,
-                            'hierarchy_level'    => $approval_flow->hierarchy_level,
-                            'assigned_to_group'  => true,
-                            'status'             => 'pending',
-                            'action_taken_by'    => null,
-                            'action_taken_at'    => null,
-                            'remarks'            => null,
-                        ]);
+                        }
                     }
 
                     $user_service_application->application_data = is_array($user_service_application->application_data)
@@ -707,7 +718,7 @@ class UserServiceApplicationController extends Controller
                 'NSW_Push_Document_ID' => 'nullable|string|max:255',
                 'final_fee'             => 'nullable|string',
                 'total_fee'             => 'nullable|string',
-                'current_step_number'   => 'nullable|date',
+                'current_step_number'   => 'nullable|integer',
                 'max_processing_date'   => 'nullable|string',
             ]);
 
@@ -818,6 +829,8 @@ class UserServiceApplicationController extends Controller
                 $payment_time = $user_service_application->payment_time;
             }
 
+            $is_resubmission = $user_service_application->status === 'send_back';
+
             $user_service_application->update([
                 'user_id'               => $user->id,
                 'service_id'            => $request->service_id,
@@ -852,24 +865,44 @@ class UserServiceApplicationController extends Controller
                 'final_fee'             => $final_fee,
                 'total_fee'             => $total_fee,
                 'effective_fee'         => $effective_fee,
-                'current_step_number'   => $approval_flow->step_number,
+                'current_step_number'   => $is_resubmission
+                    ? $user_service_application->current_step_number
+                    : $approval_flow->step_number,
                 'max_processing_date'   => $max_processing_date,
                 'paid_amount'           => $paid_amount,
             ]);
 
-            ApplicationWorkflowAssignment::create([
-                'application_id'     => $user_service_application->id,
-                'service_id'         => $request->service_id,
-                'step_number'        => $approval_flow->step_number,
-                'step_type'          => $approval_flow->step_type,
-                'department_id'      => $approval_flow->department_id,
-                'hierarchy_level'    => $approval_flow->hierarchy_level,
-                'assigned_to_group'  => true,
-                'status'             => 'pending',
-                'action_taken_by'    => null,
-                'action_taken_at'    => null,
-                'remarks'            => null,
-            ]);
+            if ($is_resubmission) {
+
+                $existing_step = ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
+                    ->where('step_number', $user_service_application->current_step_number)
+                    ->latest('id')
+                    ->first();
+
+                if ($existing_step) {
+                    $existing_step->update([
+                        'status' => 'pending',
+                        'action_taken_by' => null,
+                        'action_taken_at' => null,
+                        'remarks' => null,
+                    ]);
+                }
+            } else {
+
+                ApplicationWorkflowAssignment::create([
+                    'application_id'     => $user_service_application->id,
+                    'service_id'         => $request->service_id,
+                    'step_number'        => $approval_flow->step_number,
+                    'step_type'          => $approval_flow->step_type,
+                    'department_id'      => $approval_flow->department_id,
+                    'hierarchy_level'    => $approval_flow->hierarchy_level,
+                    'assigned_to_group'  => true,
+                    'status'             => 'pending',
+                    'action_taken_by'    => null,
+                    'action_taken_at'    => null,
+                    'remarks'            => null,
+                ]);
+            }
 
             $user_service_application->logAs($user->user_name . ' updated application', 'Application Updated');
 
@@ -885,7 +918,7 @@ class UserServiceApplicationController extends Controller
                     'user_id' => $user_service_application->user_id,
                     'status' => $user_service_application->status,
                     'final_fee' => $final_fee,
-                    'current_step_number' => $approval_flow->step_number,
+                    'current_step_number' => $user_service_application->step_number,
                     'assigned_department_id' => $approval_flow->department_id,
                     'assigned_hierarchy_level' => $approval_flow->hierarchy_level,
                     'max_processing_date' => $max_processing_date->format('Y-m-d'),
@@ -2533,8 +2566,11 @@ class UserServiceApplicationController extends Controller
             $current_payment = !empty($effective_fee) ? $effective_fee : $total_fee;
             $previous_paid = $application->paid_amount ?? 0;
             $final_paid_amount = $previous_paid + $current_payment;
+            $is_extra_payment = $application->status === 'extra_payment';
 
-            if ($previous_paid > 0) {
+            if ($is_extra_payment) {
+                $status = 're_submitted';
+            } elseif ($previous_paid > 0) {
                 $status = 're_submitted';
             } else {
                 $status = $application->current_step_number == 0 ? 'approved' : 'submitted';
@@ -2549,11 +2585,28 @@ class UserServiceApplicationController extends Controller
                 'status'         => $status,
             ]);
 
+            if ($is_extra_payment) {
+
+                $current_step = ApplicationWorkflowAssignment::where('application_id', $application->id)
+                    ->where('step_number', $application->current_step_number)
+                    ->latest('id')
+                    ->first();
+
+                if ($current_step) {
+                    $current_step->update([
+                        'status' => 'pending',
+                        'action_taken_by' => null,
+                        'action_taken_at' => null,
+                        'remarks' => null,
+                    ]);
+                }
+            }
+
             PaymentOrder::create([
                 'application_id'    => json_encode([(int) $request->application_id]),
                 'user_id'           => $application->user_id,
                 'payment_status'    => 'success',
-                'payment_amount'    => $application->total_fee,
+                'payment_amount'    => $current_payment,
                 'gateway'           => 'offline',
                 'GRN_number'        => $request->GRN_number,
                 'payment_datetime'  => now(),
@@ -2573,7 +2626,7 @@ class UserServiceApplicationController extends Controller
                     'GRN_number'     => $application->GRN_number,
                     'comments'       => $application->comments,
                     'payment_time'   => $application->payment_time,
-                    'paid_amount'    => $application->final_paid_amount,
+                    'paid_amount'    => $final_paid_amount,
                     'status'         => $status
                 ]
             ]);

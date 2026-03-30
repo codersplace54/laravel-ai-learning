@@ -22,7 +22,9 @@ class PaymentOrder extends Model
         'updated_at',
         'GRN_number',
         'payment_datetime',
-        'updated_by_cron'
+        'updated_by_cron',
+        'establishment_fee_paid',
+        'operational_fee_paid',
     ];
 
     protected $casts = [

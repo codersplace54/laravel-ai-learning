@@ -97,7 +97,7 @@ class PaymentController extends Controller
             $scheme_count = count($scheme_names);
             $total_amount = array_sum($fee_amounts);
 
-            // Calculate service fee apply to the first application that qualifies (only once)
+            // Calculate service fee (apply to the first application only)
             $establishment_fee = null;
             $operational_fee   = null;
             foreach ($applications as $app) {
