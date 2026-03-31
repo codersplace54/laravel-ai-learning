@@ -31,10 +31,7 @@ class PaymentController extends Controller
 
     public function update_payment(Request $request)
     {
-
         try {
-
-
             $request->validate([
                 'application_id' => 'required|array',
                 'application_id.*' => 'integer|exists:user_service_applications,id',
@@ -47,11 +44,13 @@ class PaymentController extends Controller
 
             $application_ids = array_map('intval', $request->input('application_id'));
 
-            $applications = UserServiceApplication::whereIn('id', $application_ids)
+            $applications = UserServiceApplication::with('service')
+                ->whereIn('id', $application_ids)
                 ->where('user_id', $user_id)
                 ->get();
 
             if ($applications->isEmpty()) {
+                DB::rollBack();
                 return response()->json([
                     'status' => 0,
                     'message' => 'No applications found for the given IDs.',
@@ -73,9 +72,13 @@ class PaymentController extends Controller
                 }
 
                 if ($application->extra_payment !== null && $application->payment_status === 'pending') {
-                    $amount = $application->extra_payment;
+                    $amount = (float) $application->extra_payment;
                 } else {
-                    $amount = ($application->effective_fee !== null && $application->effective_fee > 0) ? $application->effective_fee : ($application->total_fee ?? 0);
+                    $amount = (float) (
+                        ($application->effective_fee !== null && $application->effective_fee > 0)
+                        ? $application->effective_fee
+                        : ($application->total_fee ?? 0)
+                    );
                 }
 
                 if ($amount <= 0) {
@@ -86,33 +89,38 @@ class PaymentController extends Controller
                     ], 400);
                 }
 
-               
-
                 if ($application->is_third_party == 1 && $application->egras_scheme_code) {
-                    $scheme_names[] = $application->egras_scheme_code;
+                    $scheme_names[] = trim($application->egras_scheme_code);
                 } else {
-                    $scheme_names[] = $application->service->egras_scheme_code ?? 'NA';
+                    $scheme_names[] = trim($application->service->egras_scheme_code ?? 'NA');
                 }
-                $fee_amounts[]  = $amount;
+
+                $fee_amounts[] = number_format($amount, 2, '.', '');
             }
 
             $scheme_count = count($scheme_names);
-            $total_amount = array_sum($fee_amounts);
+            $total_amount = number_format(array_sum(array_map('floatval', $fee_amounts)), 2, '.', '');
 
             // Calculate service fee (apply to the first application only)
             $establishment_fee = null;
             $operational_fee   = null;
+
             foreach ($applications as $app) {
                 $service_fee_data = $this->resolve_service_fee($app);
+
                 if ($service_fee_data) {
                     if ($service_fee_data['fee_type'] === 'establishment') {
-                        $establishment_fee = $service_fee_data['amount'];
+                        $establishment_fee = (float) $service_fee_data['amount'];
                     } else {
-                        $operational_fee = $service_fee_data['amount'];
+                        $operational_fee = (float) $service_fee_data['amount'];
                     }
+
+                    $service_fee_amount = number_format((float) $service_fee_data['amount'], 2, '.', '');
+
                     $scheme_names[] = '8443-00-117-45-01';
-                    $fee_amounts[]  = $service_fee_data['amount'];
-                    $total_amount  += $service_fee_data['amount'];
+                    $fee_amounts[]  = $service_fee_amount;
+                    $total_amount   = number_format(((float) $total_amount + (float) $service_fee_amount), 2, '.', '');
+
                     break;
                 }
             }
@@ -120,15 +128,15 @@ class PaymentController extends Controller
             $scheme_count = count($scheme_names);
 
             $payment_order = PaymentOrder::create([
-                'user_id'               => $user_id,
-                'application_id'        => json_encode($application_ids),
-                'payment_amount'        => $total_amount,
-                'payment_created_on'    => now(),
-                'payment_updated_on'    => now(),
-                'payment_status'        => 'initiated',
-                'transaction_id'        => null,
+                'user_id'                => $user_id,
+                'application_id'         => json_encode($application_ids),
+                'payment_amount'         => $total_amount,
+                'payment_created_on'     => now(),
+                'payment_updated_on'     => now(),
+                'payment_status'         => 'initiated',
+                'transaction_id'         => null,
                 'establishment_fee_paid' => $establishment_fee,
-                'operational_fee_paid'  => $operational_fee,
+                'operational_fee_paid'   => $operational_fee,
             ]);
 
             $payment_order->update([
@@ -137,17 +145,15 @@ class PaymentController extends Controller
 
             DB::commit();
 
-            $order_id   = $payment_order->order_id;
-            $dept_code  = 'FIN';
-            $dto_code   = '99';
-            $ddo_code   = '99001';
-            $sto_code   = '99';
+            $order_id    = $payment_order->order_id;
+            $dept_code   = 'FIN';
+            $dto_code    = '99';
+            $ddo_code    = '99001';
+            $sto_code    = '99';
             $egrasUserId = 'finswgt';
-            $valid_upto = Carbon::today()->format('d/m/Y');
-
-            $return_url = url('/user/payment-callback');
-
-            $secret_key = config('egras.secret_key');
+            $valid_upto  = Carbon::today()->format('d/m/Y');
+            $return_url  = url('/user/payment-callback');
+            $secret_key  = config('egras.secret_key');
 
             if (empty($user->registered_enterprise_address)) {
                 $user->registered_enterprise_address = 'TRIPURA';
@@ -165,61 +171,59 @@ class PaymentController extends Controller
                 $user->mobile_no,
                 $total_amount,
                 $scheme_count,
+                $scheme_names[0] ?? '',
+                $fee_amounts[0] ?? '0.00',
+                $return_url,
             ];
 
-            for ($i = 0; $i < $scheme_count; $i++) {
-                $hash_parts[] = $scheme_names[$i];
-                $hash_parts[] = $fee_amounts[$i];
-            }
-
-            $hash_parts[] = $return_url;
-
-            $hash       = base64_encode(hash_hmac('sha256', implode('|', $hash_parts), $secret_key, true));
+            $hash = base64_encode(
+                hash_hmac('sha256', implode('|', $hash_parts), $secret_key, true)
+            );
 
             $form_html  = '<html><body>';
             $form_html .= '<p>Redirecting to e-GRAS. Please wait...</p>';
 
             $form_html .= '<form id="egrasForm" name="process_payment" method="POST" action="https://swaagatbackend.tripura.gov.in/test_payment.php">';
 
-            $form_html .= '<input type="hidden" name="DTO" value="' . $dto_code . '"/>';
-            $form_html .= '<input type="hidden" name="STO" value="' . $sto_code . '"/>';
-            $form_html .= '<input type="hidden" name="DDO" value="' . $ddo_code . '"/>';
-            $form_html .= '<input type="hidden" name="Deptcode" value="' . $dept_code . '"/>';
-            $form_html .= '<input type="hidden" name="UserID" value="' . $egrasUserId . '"/>';
-            $form_html .= '<input type="hidden" name="Applicationnumber" value="' . $order_id . '"/>';
-            $form_html .= '<input type="hidden" name="Fullname" value="' . $user->authorized_person_name . '"/>';
-            $form_html .= '<input type="hidden" name="Cityname" value="' . $user->registered_enterprise_city . '"/>';
-            $form_html .= '<input type="hidden" name="Address" value="' . $user->registered_enterprise_address . '"/>';
-            $form_html .= '<input type="hidden" name="Officename" value="' . $user->name_of_enterprise . '"/>';
+            $form_html .= '<input type="hidden" name="DTO" value="' . e($dto_code) . '"/>';
+            $form_html .= '<input type="hidden" name="STO" value="' . e($sto_code) . '"/>';
+            $form_html .= '<input type="hidden" name="DDO" value="' . e($ddo_code) . '"/>';
+            $form_html .= '<input type="hidden" name="Deptcode" value="' . e($dept_code) . '"/>';
+            $form_html .= '<input type="hidden" name="UserID" value="' . e($egrasUserId) . '"/>';
+            $form_html .= '<input type="hidden" name="Applicationnumber" value="' . e($order_id) . '"/>';
+            $form_html .= '<input type="hidden" name="Fullname" value="' . e($user->authorized_person_name) . '"/>';
+            $form_html .= '<input type="hidden" name="Cityname" value="' . e($user->registered_enterprise_city) . '"/>';
+            $form_html .= '<input type="hidden" name="Address" value="' . e($user->registered_enterprise_address) . '"/>';
+            $form_html .= '<input type="hidden" name="Officename" value="' . e($user->name_of_enterprise) . '"/>';
             $form_html .= '<input type="hidden" name="ChallanYear" value="2526"/>';
             $form_html .= '<input type="hidden" name="PINCODE" value="799001"/>';
             $form_html .= '<input type="hidden" name="Bank" value="0001509"/>';
             $form_html .= '<input type="hidden" name="Remarks" value="Swaagat Payment"/>';
-            $form_html .= '<input type="hidden" name="Securityemail" value="' . $user->email_id . '"/>';
-            $form_html .= '<input type="hidden" name="Securityphone" value="' . $user->mobile_no . '"/>';
-            $form_html .= '<input type="hidden" name="VALID_UPTO" value="' . $valid_upto . '"/>';
+            $form_html .= '<input type="hidden" name="Securityemail" value="' . e($user->email_id) . '"/>';
+            $form_html .= '<input type="hidden" name="Securityphone" value="' . e($user->mobile_no) . '"/>';
+            $form_html .= '<input type="hidden" name="VALID_UPTO" value="' . e($valid_upto) . '"/>';
             $form_html .= '<input type="hidden" name="ptype" value="N"/>';
             $form_html .= '<input type="hidden" name="paymentmode" value=""/>';
-            $form_html .= '<input type="hidden" name="TotalAmount" value="' . $total_amount . '"/>';
-            $form_html .= '<input type="hidden" name="hash" value="' . $hash . '"/>';
-            $form_html .= '<input type="hidden" name="UURL" value="' . $return_url . '"/>';
-            $form_html .= '<input type="hidden" name="SCHEMECOUNT" value="' . $scheme_count . '"/>';
+            $form_html .= '<input type="hidden" name="TotalAmount" value="' . e($total_amount) . '"/>';
+            $form_html .= '<input type="hidden" name="hash" value="' . e($hash) . '"/>';
+            $form_html .= '<input type="hidden" name="UURL" value="' . e($return_url) . '"/>';
+            $form_html .= '<input type="hidden" name="SCHEMECOUNT" value="' . e($scheme_count) . '"/>';
 
             for ($i = 0; $i < $scheme_count; $i++) {
                 $idx        = $i + 1;
                 $schemeName = htmlspecialchars($scheme_names[$i], ENT_QUOTES, 'UTF-8');
 
                 $form_html .= '<input type="hidden" name="SCHEMENAME' . $idx . '" value="' . $schemeName . '"/>';
-                $form_html .= '<input type="hidden" name="FEEAMOUNT' . $idx . '" value="' . $fee_amounts[$i] . '"/>';
+                $form_html .= '<input type="hidden" name="FEEAMOUNT' . $idx . '" value="' . e($fee_amounts[$i]) . '"/>';
             }
 
             $form_html .= '<input type="submit" value="Submit"/>';
             $form_html .= '</form>';
             // $form_html .= '<script>document.getElementById("egrasForm").submit();</script>';
             $form_html .= '</body></html>';
+
             return $form_html;
         } catch (\Exception $e) {
-
             DB::rollBack();
 
             return response()->json([
@@ -229,6 +233,209 @@ class PaymentController extends Controller
             ], 500);
         }
     }
+
+    // public function update_payment(Request $request)
+    // {
+
+    //     try {
+
+
+    //         $request->validate([
+    //             'application_id' => 'required|array',
+    //             'application_id.*' => 'integer|exists:user_service_applications,id',
+    //         ]);
+
+    //         DB::beginTransaction();
+
+    //         $user = Auth::user();
+    //         $user_id = $user->id;
+
+    //         $application_ids = array_map('intval', $request->input('application_id'));
+
+    //         $applications = UserServiceApplication::whereIn('id', $application_ids)
+    //             ->where('user_id', $user_id)
+    //             ->get();
+
+    //         if ($applications->isEmpty()) {
+    //             return response()->json([
+    //                 'status' => 0,
+    //                 'message' => 'No applications found for the given IDs.',
+    //             ], 404);
+    //         }
+
+    //         $scheme_names = [];
+    //         $fee_amounts  = [];
+
+    //         foreach ($applications as $application) {
+    //             if ($application->is_third_party == 1) {
+    //                 if (!$application->egras_scheme_code) {
+    //                     DB::rollBack();
+    //                     return response()->json([
+    //                         'status' => 0,
+    //                         'message' => 'Payment details are not yet available. Please contact support for assistance.',
+    //                     ], 400);
+    //                 }
+    //             }
+
+    //             if ($application->extra_payment !== null && $application->payment_status === 'pending') {
+    //                 $amount = $application->extra_payment;
+    //             } else {
+    //                 $amount = ($application->effective_fee !== null && $application->effective_fee > 0) ? $application->effective_fee : ($application->total_fee ?? 0);
+    //             }
+
+    //             if ($amount <= 0) {
+    //                 DB::rollBack();
+    //                 return response()->json([
+    //                     'status' => 0,
+    //                     'message' => 'Fee amount cannot be zero for application ID: ' . $application->id,
+    //                 ], 400);
+    //             }
+
+
+
+    //             if ($application->is_third_party == 1 && $application->egras_scheme_code) {
+    //                 $scheme_names[] = $application->egras_scheme_code;
+    //             } else {
+    //                 $scheme_names[] = $application->service->egras_scheme_code ?? 'NA';
+    //             }
+    //             $fee_amounts[]  = $amount;
+    //         }
+
+    //         $scheme_count = count($scheme_names);
+    //         $total_amount = array_sum($fee_amounts);
+
+    //         // Calculate service fee (apply to the first application only)
+    //         $establishment_fee = null;
+    //         $operational_fee   = null;
+    //         foreach ($applications as $app) {
+    //             $service_fee_data = $this->resolve_service_fee($app);
+    //             if ($service_fee_data) {
+    //                 if ($service_fee_data['fee_type'] === 'establishment') {
+    //                     $establishment_fee = $service_fee_data['amount'];
+    //                 } else {
+    //                     $operational_fee = $service_fee_data['amount'];
+    //                 }
+    //                 $scheme_names[] = '8443-00-117-45-01';
+    //                 $fee_amounts[]  = $service_fee_data['amount'];
+    //                 $total_amount  += $service_fee_data['amount'];
+    //                 break;
+    //             }
+    //         }
+
+    //         $scheme_count = count($scheme_names);
+
+    //         $payment_order = PaymentOrder::create([
+    //             'user_id'               => $user_id,
+    //             'application_id'        => json_encode($application_ids),
+    //             'payment_amount'        => $total_amount,
+    //             'payment_created_on'    => now(),
+    //             'payment_updated_on'    => now(),
+    //             'payment_status'        => 'initiated',
+    //             'transaction_id'        => null,
+    //             'establishment_fee_paid' => $establishment_fee,
+    //             'operational_fee_paid'  => $operational_fee,
+    //         ]);
+
+    //         $payment_order->update([
+    //             'order_id' => 'SW' . $payment_order->id
+    //         ]);
+
+    //         DB::commit();
+
+    //         $order_id   = $payment_order->order_id;
+    //         $dept_code  = 'FIN';
+    //         $dto_code   = '99';
+    //         $ddo_code   = '99001';
+    //         $sto_code   = '99';
+    //         $egrasUserId = 'finswgt';
+    //         $valid_upto = Carbon::today()->format('d/m/Y');
+
+    //         $return_url = url('/user/payment-callback');
+
+    //         $secret_key = config('egras.secret_key');
+
+    //         if (empty($user->registered_enterprise_address)) {
+    //             $user->registered_enterprise_address = 'TRIPURA';
+    //             $user->save();
+    //         }
+
+    //         $hash_parts = [
+    //             $dto_code,
+    //             $sto_code,
+    //             $ddo_code,
+    //             $dept_code,
+    //             $egrasUserId,
+    //             $order_id,
+    //             $user->authorized_person_name,
+    //             $user->mobile_no,
+    //             $total_amount,
+    //             $scheme_count,
+    //         ];
+
+    //         for ($i = 0; $i < $scheme_count; $i++) {
+    //             $hash_parts[] = $scheme_names[$i];
+    //             $hash_parts[] = $fee_amounts[$i];
+    //         }
+
+    //         $hash_parts[] = $return_url;
+
+    //         $hash       = base64_encode(hash_hmac('sha256', implode('|', $hash_parts), $secret_key, true));
+
+    //         $form_html  = '<html><body>';
+    //         $form_html .= '<p>Redirecting to e-GRAS. Please wait...</p>';
+
+    //         $form_html .= '<form id="egrasForm" name="process_payment" method="POST" action="https://swaagatbackend.tripura.gov.in/test_payment.php">';
+
+    //         $form_html .= '<input type="hidden" name="DTO" value="' . $dto_code . '"/>';
+    //         $form_html .= '<input type="hidden" name="STO" value="' . $sto_code . '"/>';
+    //         $form_html .= '<input type="hidden" name="DDO" value="' . $ddo_code . '"/>';
+    //         $form_html .= '<input type="hidden" name="Deptcode" value="' . $dept_code . '"/>';
+    //         $form_html .= '<input type="hidden" name="UserID" value="' . $egrasUserId . '"/>';
+    //         $form_html .= '<input type="hidden" name="Applicationnumber" value="' . $order_id . '"/>';
+    //         $form_html .= '<input type="hidden" name="Fullname" value="' . $user->authorized_person_name . '"/>';
+    //         $form_html .= '<input type="hidden" name="Cityname" value="' . $user->registered_enterprise_city . '"/>';
+    //         $form_html .= '<input type="hidden" name="Address" value="' . $user->registered_enterprise_address . '"/>';
+    //         $form_html .= '<input type="hidden" name="Officename" value="' . $user->name_of_enterprise . '"/>';
+    //         $form_html .= '<input type="hidden" name="ChallanYear" value="2526"/>';
+    //         $form_html .= '<input type="hidden" name="PINCODE" value="799001"/>';
+    //         $form_html .= '<input type="hidden" name="Bank" value="0001509"/>';
+    //         $form_html .= '<input type="hidden" name="Remarks" value="Swaagat Payment"/>';
+    //         $form_html .= '<input type="hidden" name="Securityemail" value="' . $user->email_id . '"/>';
+    //         $form_html .= '<input type="hidden" name="Securityphone" value="' . $user->mobile_no . '"/>';
+    //         $form_html .= '<input type="hidden" name="VALID_UPTO" value="' . $valid_upto . '"/>';
+    //         $form_html .= '<input type="hidden" name="ptype" value="N"/>';
+    //         $form_html .= '<input type="hidden" name="paymentmode" value=""/>';
+    //         $form_html .= '<input type="hidden" name="TotalAmount" value="' . $total_amount . '"/>';
+    //         $form_html .= '<input type="hidden" name="hash" value="' . $hash . '"/>';
+    //         $form_html .= '<input type="hidden" name="UURL" value="' . $return_url . '"/>';
+    //         $form_html .= '<input type="hidden" name="SCHEMECOUNT" value="' . $scheme_count . '"/>';
+
+    //         for ($i = 0; $i < $scheme_count; $i++) {
+    //             $idx        = $i + 1;
+    //             $schemeName = htmlspecialchars($scheme_names[$i], ENT_QUOTES, 'UTF-8');
+
+    //             $form_html .= '<input type="hidden" name="SCHEMENAME' . $idx . '" value="' . $schemeName . '"/>';
+    //             $form_html .= '<input type="hidden" name="FEEAMOUNT' . $idx . '" value="' . $fee_amounts[$i] . '"/>';
+    //         }
+
+    //         $form_html .= '<input type="submit" value="Submit"/>';
+    //         $form_html .= '</form>';
+    //         // $form_html .= '<script>document.getElementById("egrasForm").submit();</script>';
+    //         $form_html .= '</body></html>';
+    //         return $form_html;
+    //     } catch (\Exception $e) {
+
+    //         DB::rollBack();
+
+    //         return response()->json([
+    //             'status' => 0,
+    //             'status_message' => $e->getMessage(),
+    //             'line' => $e->getLine(),
+    //         ], 500);
+    //     }
+    // }
+
+
 
     public function payment_callback(Request $request)
     {
@@ -247,10 +454,24 @@ class PaymentController extends Controller
             $hash = $request->input('hash');
             $trandatetime = $request->input('trandatetime');
 
-            if ($status && stripos($status, 'One process is already running') !== false) {
-                $frontendurl = config('payment.frontendurl');
+            $frontendurl = config('payment.frontendurl');
+
+            $known_error_messages = [
+                'One process is already running' => 'Please try again after some time.',
+            ];
+
+            foreach ($known_error_messages as $pattern => $friendly_msg) {
+                if ($status && stripos($status, $pattern) !== false) {
+                    return redirect()->away(
+                        $frontendurl . '?status=failed&message=' . urlencode($friendly_msg)
+                    );
+                }
+            }
+
+            if (!$order_id && $status) {
+                Log::channel('payment')->warning('No order ID in callback, status message received', ['status' => $status]);
                 return redirect()->away(
-                    $frontendurl . '?status=failed&message=' . urlencode('Please try again after some time.')
+                    $frontendurl . '?status=failed&message=' . urlencode($status)
                 );
             }
 
@@ -258,18 +479,15 @@ class PaymentController extends Controller
 
             $status_lower = strtolower($request->input('status'));
             $secret = config('egras.secret_key');
-            $frontendurl = config('payment.frontendurl');
 
             $dt = $trandatetime ?: ($tdate ? ($tdate . ' 00:00:00') : null);
             $dt = $dt ? str_replace('-', '/', $dt) : null;
             $payment_datetime = $dt ? Carbon::createFromFormat('d/m/Y H:i:s', $dt) : null;
 
             if (!$order_id) {
-
-                $msg = $status && stripos($status, 'These schemes are not') !== false ? $status : 'Order ID not found';
                 Log::channel('payment')->error('Order ID not found in callback');
                 return redirect()->away(
-                    $frontendurl . '?status=failed&message=' . urlencode($msg)
+                    $frontendurl . '?status=failed&message=' . urlencode($status ?? 'Order ID not found')
                 );
             }
 
@@ -491,7 +709,6 @@ class PaymentController extends Controller
 
     private function resolve_service_fee(UserServiceApplication $application): ?array
     {
-        return null;
         $service = $application->service;
         if (!$service) return null;
 
