@@ -789,6 +789,15 @@ class PaymentController extends Controller
                 ? $this->resolve_service_fee($service_user_applications->first())
                 : null;
 
+            $application_ids = $service_user_applications->pluck('id')->toArray();
+
+            $all_payment_orders = PaymentOrder::where('user_id', $user_id)
+                ->whereNotNull('GRN_number')
+                ->get();
+
+            $establishment_fee_paid = $all_payment_orders->whereNotNull('establishment_fee_paid')->first()?->establishment_fee_paid;
+            $operational_fee_paid   = $all_payment_orders->whereNotNull('operational_fee_paid')->first()?->operational_fee_paid;
+
             $response_data = [];
             foreach ($service_user_applications as $application) {
                 $amount = null;
@@ -802,10 +811,10 @@ class PaymentController extends Controller
                     $payment_type = 'Application Fee Payment';
                 }
 
-                $payment_orders_grns = PaymentOrder::whereJsonContains('application_id', $application->id)
-                    ->whereNotNull('GRN_number')
-                    ->pluck('GRN_number')
-                    ->toArray();
+                $payment_orders_grns = $all_payment_orders->filter(function ($order) use ($application) {
+                    $ids = is_array($order->application_id) ? $order->application_id : json_decode($order->application_id, true);
+                    return in_array($application->id, $ids ?? []);
+                })->pluck('GRN_number')->toArray();
 
                 $response_data[] = [
                     'user_service_application_id' => $application->id,
@@ -816,7 +825,7 @@ class PaymentController extends Controller
                     'amount' => $amount,
                     'payment_status'  => $application->payment_status ?? null,
                     'grn_number'  => $payment_orders_grns ?? null,
-                    'payment_date'  => $application->payment_datetime ?? null,
+                    'payment_date'  => $application->payment_time ?? null,
                     'is_third_party' => $application->is_third_party ?? 0,
                 ];
             }
@@ -825,6 +834,8 @@ class PaymentController extends Controller
                 'status' => 1,
                 'message' => 'Service user application fetched successfully.',
                 'service_fee' => $service_fee,
+                'establishment_fee_paid' => $establishment_fee_paid,
+                'operational_fee_paid'   => $operational_fee_paid,
                 'data' => $response_data,
                 'pagination' => [
                     'current_page' => $service_user_applications->currentPage(),
