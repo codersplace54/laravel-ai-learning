@@ -678,6 +678,7 @@ class DashboardController extends Controller
                     'noc_issued' => (clone $base)->whereIn('status', ['noc_issued', 'approved'])->count(),
                     'rejected'  => (clone $base)->where('status', 'rejected')->count(),
                     'under_process' => (clone $base)->whereIn('status', [
+                        'submitted',
                         'pending',
                         'under_review',
                         're_submitted',
@@ -715,6 +716,7 @@ class DashboardController extends Controller
                     'noc_issued' => (clone $base)->whereIn('status', ['noc_issued', 'approved'])->count(),
                     'rejected'  => (clone $base)->where('status', 'rejected')->count(),
                     'under_process' => (clone $base)->whereIn('status', [
+                        'submitted',
                         'pending',
                         'under_review',
                         're_submitted',
