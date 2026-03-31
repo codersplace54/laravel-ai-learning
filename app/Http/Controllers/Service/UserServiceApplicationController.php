@@ -33,6 +33,7 @@ use App\Models\User;
 use App\Traits\LogsActivity;
 use App\Traits\PaymentMapTrait;
 use App\Http\Controllers\Service\CertificateController;
+use App\Models\LabourDeposit;
 
 class UserServiceApplicationController extends Controller
 {
@@ -342,6 +343,8 @@ class UserServiceApplicationController extends Controller
                         'applied_fee'           => $request->land_allotment_estimated_amount ?? null,
                     ]);
 
+                    $this->store_labour_deposits($request->service_id, $application_data, $user_service_application->id);
+
                     if ($request->status != 'draft' && $has_approval_flow) {
 
                         if ($is_resubmission) {
@@ -453,6 +456,8 @@ class UserServiceApplicationController extends Controller
                         'paid_amount'           => $paid_amount,
                         'applied_fee'           => $request->land_allotment_estimated_amount ?? null,
                     ]);
+
+                    $this->store_labour_deposits($request->service_id, $application_data, $user_service_application->id);
 
                     if ($user_service_application->status !== "draft") {
                         $application_number = $this->generate_application_number($request->service_id, $user_service_application->id);
@@ -3841,5 +3846,89 @@ class UserServiceApplicationController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function store_labour_deposits($service_id, $application_data, $application_id)
+    {
+        if ($service_id != 37) {
+            return;
+        }
+
+        $calculated = $this->calculate_labour_deposit($service_id,$application_data,[882, 883]
+        );
+
+        $contract_labour_deposit = $calculated[882] ?? 0;
+        $ismw_labour_deposit     = $calculated[883] ?? 0;
+
+        if ($contract_labour_deposit === null && $ismw_labour_deposit === null) {
+            return;
+        }
+
+        $application = UserServiceApplication::find($application_id);
+
+        if ($application->labourDeposit) {
+            $application->labourDeposit->update([
+                'contract_labour_deposit' => $contract_labour_deposit,
+                'ismw_labour_deposit'     => $ismw_labour_deposit,
+            ]);
+        } else {
+            $application->labourDeposit()->create([
+                'application_id'          => $application_id,
+                'contract_labour_deposit' => $contract_labour_deposit,
+                'ismw_labour_deposit'     => $ismw_labour_deposit,
+            ]);
+        }
+    }
+
+    private function calculate_labour_deposit($service_id, $application_data, $target_question_ids = [])
+    {
+
+        $rules = ServiceFeeRule::where('service_id', $service_id)
+            ->whereIn('question_id', $target_question_ids)
+            ->get();
+
+        $result = [];
+
+        foreach ($rules as $rule) {
+
+            $user_answer = $application_data[$rule->question_id] ?? null;
+            if ($user_answer === null) continue;
+
+            if (is_numeric($user_answer)) {
+                $user_answer = (float) $user_answer;
+            }
+
+            $match = match ($rule->condition_operator) {
+                '='  => $user_answer == $rule->condition_value_start,
+                '!=' => $user_answer != $rule->condition_value_start,
+                '<'  => $user_answer <  $rule->condition_value_start,
+                '<=' => $user_answer <= $rule->condition_value_start,
+                '>'  => $user_answer >  $rule->condition_value_start,
+                '>=' => $user_answer >= $rule->condition_value_start,
+                'between' => $user_answer >= $rule->condition_value_start &&
+                    $user_answer <= $rule->condition_value_end,
+                default => true,
+            };
+
+            if (!$match) continue;
+
+            $temp_fee = 0;
+
+            if (!empty($rule->per_unit_fee)) {
+                $temp_fee += $user_answer * (float) $rule->per_unit_fee;
+            }
+
+            if (!empty($rule->fixed_calculated_fee)) {
+                $temp_fee += (float) $rule->fixed_calculated_fee;
+            }
+
+            if (!isset($result[$rule->question_id])) {
+                $result[$rule->question_id] = 0;
+            }
+
+            $result[$rule->question_id] += $temp_fee;
+        }
+
+        return $result;
     }
 }

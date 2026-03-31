@@ -151,4 +151,9 @@ class UserServiceApplication extends Model
     {
         return $this->hasMany(ServiceApprovalFlow::class, 'service_id', 'service_id');
     }
+
+    public function labourDeposit()
+    {
+        return $this->hasOne(LabourDeposit::class, 'application_id');
+    }
 }

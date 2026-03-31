@@ -674,7 +674,7 @@ class DashboardController extends Controller
                     });
 
                 return [
-                    'submitted' => (clone $base)->where('status', 'submitted')->count(),
+                    'total_application' => (clone $base)->whereNotIn('status', ['expired', 'draft', 'saved'])->count(),
                     'noc_issued' => (clone $base)->whereIn('status', ['noc_issued', 'approved'])->count(),
                     'rejected'  => (clone $base)->where('status', 'rejected')->count(),
                     'under_process' => (clone $base)->whereIn('status', [
@@ -711,7 +711,7 @@ class DashboardController extends Controller
                 $base = UserServiceApplication::query();
 
                 return [
-                    'submitted' => (clone $base)->where('status', 'submitted')->count(),
+                    'total_application' => (clone $base)->whereNotIn('status', ['expired', 'draft', 'saved'])->count(),
                     'noc_issued' => (clone $base)->whereIn('status', ['noc_issued', 'approved'])->count(),
                     'rejected'  => (clone $base)->where('status', 'rejected')->count(),
                     'under_process' => (clone $base)->whereIn('status', [
