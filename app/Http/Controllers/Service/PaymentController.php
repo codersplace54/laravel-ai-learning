@@ -491,6 +491,7 @@ class PaymentController extends Controller
 
     private function resolve_service_fee(UserServiceApplication $application): ?array
     {
+        return null;
         $service = $application->service;
         if (!$service) return null;
 
