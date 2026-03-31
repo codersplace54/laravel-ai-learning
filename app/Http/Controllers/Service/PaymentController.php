@@ -718,7 +718,11 @@ class PaymentController extends Controller
 
         $already_paid = PaymentOrder::where('user_id', $application->user_id)
             ->where('payment_status', 'success')
-            ->whereNotNull($fee_col)
+            ->where(function ($q) use ($fee_col) {
+                $q->whereNotNull($fee_col)
+                  ->orWhereNotNull('establishment_fee_paid')
+                  ->orWhereNotNull('operational_fee_paid');
+            })
             ->exists();
 
         if ($already_paid) return null;
