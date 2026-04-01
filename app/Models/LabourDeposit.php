@@ -11,6 +11,12 @@ class LabourDeposit extends Model
         'application_id',
         'contract_labour_deposit',
         'ismw_labour_deposit',
+        'contract_labour_fee',
+        'ismw_labour_fee',
+        'grn_number',
+        'payment_status',
+        'payment_time',
+        'scheme_details',
         'created_at',
         'updated_at',
 

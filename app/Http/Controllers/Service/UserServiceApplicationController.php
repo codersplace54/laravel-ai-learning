@@ -3854,79 +3854,198 @@ class UserServiceApplicationController extends Controller
             return;
         }
 
-        $calculated = $this->calculate_labour_deposit($service_id,$application_data,[882, 883]
+        $calculated = $this->calculate_labour_deposit(
+            $service_id,
+            $application_data,
+            [882, 883]
         );
 
-        $contract_labour_deposit = $calculated[882] ?? 0;
-        $ismw_labour_deposit     = $calculated[883] ?? 0;
+        $contract_labour_deposit = $calculated[882]['deposit'] ?? 0;
+        $contract_labour_fee     = $calculated[882]['fee'] ?? 0;
 
-        if ($contract_labour_deposit === null && $ismw_labour_deposit === null) {
+        $ismw_labour_deposit     = $calculated[883]['deposit'] ?? 0;
+        $ismw_labour_fee         = $calculated[883]['fee'] ?? 0;
+
+        if (
+            $contract_labour_deposit == 0 &&
+            $ismw_labour_deposit == 0 &&
+            $contract_labour_fee == 0 &&
+            $ismw_labour_fee == 0
+        ) {
             return;
         }
 
+        $scheme_details = [
+            ['scheme' => 'CONTRACT_DEPOSIT', 'amount' => $contract_labour_deposit],
+            ['scheme' => 'ISMW_DEPOSIT', 'amount' => $ismw_labour_deposit],
+            ['scheme' => 'CONTRACT_FEE', 'amount' => $contract_labour_fee],
+            ['scheme' => 'ISMW_FEE', 'amount' => $ismw_labour_fee],
+        ];
+
         $application = UserServiceApplication::find($application_id);
+        if (!$application) return;
 
         if ($application->labourDeposit) {
             $application->labourDeposit->update([
                 'contract_labour_deposit' => $contract_labour_deposit,
                 'ismw_labour_deposit'     => $ismw_labour_deposit,
+                'contract_labour_fee'     => $contract_labour_fee,
+                'ismw_labour_fee'         => $ismw_labour_fee,
+                'scheme_details'          => json_encode($scheme_details),
             ]);
         } else {
             $application->labourDeposit()->create([
                 'application_id'          => $application_id,
                 'contract_labour_deposit' => $contract_labour_deposit,
                 'ismw_labour_deposit'     => $ismw_labour_deposit,
+                'contract_labour_fee'     => $contract_labour_fee,
+                'ismw_labour_fee'         => $ismw_labour_fee,
+                'scheme_details'          => json_encode($scheme_details),
             ]);
         }
     }
 
+    // private function calculate_labour_deposit($service_id, $application_data, $target_question_ids = [])
+    // {
+
+    //     $rules = ServiceFeeRule::where('service_id', $service_id)
+    //         ->whereIn('question_id', $target_question_ids)
+    //         ->get();
+
+    //     $result = [];
+
+    //     foreach ($rules as $rule) {
+
+    //         $user_answer = $application_data[$rule->question_id] ?? null;
+    //         if ($user_answer === null) continue;
+
+    //         if (is_numeric($user_answer)) {
+    //             $user_answer = (float) $user_answer;
+    //         }
+
+    //         $match = match ($rule->condition_operator) {
+    //             '='  => $user_answer == $rule->condition_value_start,
+    //             '!=' => $user_answer != $rule->condition_value_start,
+    //             '<'  => $user_answer <  $rule->condition_value_start,
+    //             '<=' => $user_answer <= $rule->condition_value_start,
+    //             '>'  => $user_answer >  $rule->condition_value_start,
+    //             '>=' => $user_answer >= $rule->condition_value_start,
+    //             'between' => $user_answer >= $rule->condition_value_start &&
+    //                 $user_answer <= $rule->condition_value_end,
+    //             default => true,
+    //         };
+
+    //         if (!$match) continue;
+
+    //         $temp_fee = 0;
+
+    //         if (!empty($rule->per_unit_fee)) {
+    //             $temp_fee += $user_answer * (float) $rule->per_unit_fee;
+    //         }
+
+    //         if (!empty($rule->fixed_calculated_fee)) {
+    //             $temp_fee += (float) $rule->fixed_calculated_fee;
+    //         }
+
+    //         if (!isset($result[$rule->question_id])) {
+    //             $result[$rule->question_id] = 0;
+    //         }
+
+    //         $result[$rule->question_id] += $temp_fee;
+    //     }
+
+    //     return $result;
+    // }
+
     private function calculate_labour_deposit($service_id, $application_data, $target_question_ids = [])
     {
-
         $rules = ServiceFeeRule::where('service_id', $service_id)
             ->whereIn('question_id', $target_question_ids)
+            ->orderBy('priority')
             ->get();
 
         $result = [];
 
-        foreach ($rules as $rule) {
+        foreach ($target_question_ids as $qid) {
 
-            $user_answer = $application_data[$rule->question_id] ?? null;
+            $result[$qid] = [
+                'deposit' => 0,
+                'fee'     => 0,
+            ];
+
+            $user_answer = $application_data[$qid]
+                ?? $application_data[(string)$qid]
+                ?? null;
+
             if ($user_answer === null) continue;
 
             if (is_numeric($user_answer)) {
                 $user_answer = (float) $user_answer;
             }
 
-            $match = match ($rule->condition_operator) {
-                '='  => $user_answer == $rule->condition_value_start,
-                '!=' => $user_answer != $rule->condition_value_start,
-                '<'  => $user_answer <  $rule->condition_value_start,
-                '<=' => $user_answer <= $rule->condition_value_start,
-                '>'  => $user_answer >  $rule->condition_value_start,
-                '>=' => $user_answer >= $rule->condition_value_start,
-                'between' => $user_answer >= $rule->condition_value_start &&
-                    $user_answer <= $rule->condition_value_end,
-                default => true,
-            };
+            foreach ($rules->where('question_id', $qid) as $rule) {
 
-            if (!$match) continue;
+                // ✅ Pre-condition
+                if ($rule->condition_label_question_id) {
 
-            $temp_fee = 0;
+                    $pre_value = $application_data[$rule->condition_label_question_id] ?? null;
+                    if ($pre_value === null) continue;
 
-            if (!empty($rule->per_unit_fee)) {
-                $temp_fee += $user_answer * (float) $rule->per_unit_fee;
+                    if (is_numeric($pre_value)) {
+                        $pre_value = (float) $pre_value;
+                    }
+
+                    $pre_match = match ($rule->pre_condition_operator) {
+                        '='  => $pre_value == $rule->pre_condition_value,
+                        '!=' => $pre_value != $rule->pre_condition_value,
+                        '<'  => $pre_value <  $rule->pre_condition_value,
+                        '<=' => $pre_value <= $rule->pre_condition_value,
+                        '>'  => $pre_value >  $rule->pre_condition_value,
+                        '>=' => $pre_value >= $rule->pre_condition_value,
+                        'between' => $pre_value >= $rule->pre_start_value &&
+                            $pre_value <= $rule->pre_end_value,
+                        default => true,
+                    };
+
+                    if (!$pre_match) continue;
+                }
+
+                // ✅ Condition match
+                $match = match ($rule->condition_operator) {
+                    '='  => $user_answer == $rule->condition_value_start,
+                    '!=' => $user_answer != $rule->condition_value_start,
+                    '<'  => $user_answer <  $rule->condition_value_start,
+                    '<=' => $user_answer <= $rule->condition_value_start,
+                    '>'  => $user_answer >  $rule->condition_value_start,
+                    '>=' => $user_answer >= $rule->condition_value_start,
+                    'between' => $user_answer >= $rule->condition_value_start &&
+                        $user_answer <= $rule->condition_value_end,
+                    default => true,
+                };
+
+                if (!$match) continue;
+
+                $temp = 0;
+
+                if (!empty($rule->per_unit_fee)) {
+                    $temp += $user_answer * (float) $rule->per_unit_fee;
+                }
+
+                if (!empty($rule->fixed_calculated_fee)) {
+                    $temp += (float) $rule->fixed_calculated_fee;
+                }
+
+                // 🔥 LOGIC SPLIT (IMPORTANT)
+                if ($rule->condition_operator === 'between') {
+                    // 👉 slab = FEES
+                    $result[$qid]['fee'] = $temp;
+
+                    break; // only one slab
+                } else {
+                    // 👉 non-slab = DEPOSIT
+                    $result[$qid]['deposit'] += $temp;
+                }
             }
-
-            if (!empty($rule->fixed_calculated_fee)) {
-                $temp_fee += (float) $rule->fixed_calculated_fee;
-            }
-
-            if (!isset($result[$rule->question_id])) {
-                $result[$rule->question_id] = 0;
-            }
-
-            $result[$rule->question_id] += $temp_fee;
         }
 
         return $result;

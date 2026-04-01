@@ -24,6 +24,8 @@ use App\Models\ThirdPartyStatusLog;
 use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\Service\CertificateController;
 use App\Models\UnitDetail;
+use App\Models\ServiceFeeRule;
+use App\Models\LabourDeposit;
 
 class PaymentController extends Controller
 {
@@ -61,6 +63,7 @@ class PaymentController extends Controller
             $fee_amounts  = [];
 
             foreach ($applications as $application) {
+
                 if ($application->is_third_party == 1) {
                     if (!$application->egras_scheme_code) {
                         DB::rollBack();
@@ -69,6 +72,32 @@ class PaymentController extends Controller
                             'message' => 'Payment details are not yet available. Please contact support for assistance.',
                         ], 400);
                     }
+                }
+
+                if ($application->service_id == 37) {
+
+                    $deposit = LabourDeposit::where('application_id', $application->id)->first();
+
+                    $contract_deposit = (float) ($deposit->contract_labour_deposit ?? 0);
+
+                    $ismw_deposit     = (float) ($deposit->ismw_labour_deposit ?? 0);
+
+                    $contract_fee = (float) ($deposit->contract_labour_fee ?? 0);
+                    $ismw_fee     = (float) ($deposit->ismw_labour_fee ?? 0);
+
+                    $items = [
+                        ['scheme' => 'SCHEME_CONTRACT_DEPOSIT', 'amount' => $contract_deposit],
+                        ['scheme' => 'SCHEME_ISMW_DEPOSIT',     'amount' => $ismw_deposit],
+                        ['scheme' => 'SCHEME_CONTRACT_FEE',     'amount' => $contract_fee],
+                        ['scheme' => 'SCHEME_ISMW_FEE',         'amount' => $ismw_fee],
+                    ];
+                    foreach ($items as $item) {
+                        if ($item['amount'] > 0) {
+                            $scheme_names[] = $item['scheme'];
+                            $fee_amounts[]  = (float) $item['amount'];
+                        }
+                    }
+                  //  continue;
                 }
 
                 if ($application->extra_payment !== null && $application->payment_status === 'pending') {
@@ -96,6 +125,7 @@ class PaymentController extends Controller
                 }
 
                 $fee_amounts[] = number_format($amount, 2, '.', '');
+
             }
 
             $scheme_count = count($scheme_names);
@@ -570,6 +600,13 @@ class PaymentController extends Controller
                         'payment_time' => $payment_datetime,
                         'updated_at'       => now(),
                     ]);
+
+                    LabourDeposit::whereIn('application_id', $application->id)
+                        ->update([
+                            'grn_number'    => $request->GRN_number,
+                            'payment_status' => 'paid',
+                            'payment_time'  => now(),
+                        ]);
 
                     $application->refresh();
 

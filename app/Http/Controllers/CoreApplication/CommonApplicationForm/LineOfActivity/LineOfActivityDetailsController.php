@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use App\Models\LineOfActivity;
 use App\Models\RawMaterialToBeUsed;
 use App\Models\ListOfProductsOrByProduct;
@@ -28,16 +29,27 @@ class LineOfActivityDetailsController extends Controller
 
             if ($request->save_data != 1) {
                 $request->validate([
-                    'thrust_sector' => 'nullable|in:Agri & Horticultural Produce,Bamboo,Gas,Hospital/Nursing Home,Hotel,Rubber,Tea,Tourism Promoting Activites(Water-Sports, Ropeways, Adventure and Leisure Sports)',
-
+                    'thrust_sector' => [
+                        'nullable',
+                        Rule::in([
+                            'Agri & Horticultural Produce',
+                            'Bamboo',
+                            'Gas',
+                            'Hospital/Nursing Home',
+                            'Hotel',
+                            'Rubber',
+                            'Tea',
+                            'Tourism Promoting Activites(Water-Sports, Ropeways, Adventure and Leisure Sports)',
+                        ])
+                    ],
                     'raw_materials' => 'nullable|array',
-                    'raw_materials.*.id' => 'nullable|integer|exists:raw_material_to_be_used,id',
+                    'raw_materials.*.id' => 'nullable|integer|exists:raw_materials_to_be_used,id',
                     'raw_materials.*.raw_material_name' => 'nullable|string',
                     'raw_materials.*.raw_material_quantity_per_month' => 'nullable|string',
                     'raw_materials.*.raw_material_unit' => 'nullable|in:Liters Numbers Per Month,Kilo Liters Number Per Month,Meter Numbers Per Month,Square Meter Numbers Per Month,Cubic Meter Numbers Per Month,Foot Numbers Per Month,Square Foot Numbers Per Month,Tonnes Numbers Per Month,Metric Tonnes Numbers Per Month,Million Unit (MU)',
 
                     'products' => 'nullable|array',
-                    'products.*.id' => 'nullable|integer|exists:list_of_products_or_by_products,id',
+                    'products.*.id' => 'nullable|integer|exists:list_of_products_or_byproducts,id',
                     'products.*.product_name' => 'nullable|string',
                     'products.*.product_production_capacity_per_month' => 'nullable|string',
                     'products.*.product_average_production_per_month' => 'nullable|string',
@@ -139,7 +151,7 @@ class LineOfActivityDetailsController extends Controller
 
             return response()->json([
                 'status' => 0,
-                'message' => 'Something went wrong.',
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
