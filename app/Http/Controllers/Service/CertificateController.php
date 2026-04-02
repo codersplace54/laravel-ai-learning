@@ -1106,15 +1106,12 @@ class CertificateController extends Controller
             $request->validate([
                 'certificate_number' => 'required|string|max:255',
 
-                'mobile_no'          => 'required_without:date_of_issue|nullable|string|max:20',
-                'date_of_issue'      => 'required_without:mobile_no|nullable|date',
+                'mobile_no'          => 'nullable|string|max:20',
+                'date_of_issue'      => 'required|date',
             ], [
                 [
                     'certificate_number.required' => 'License Id or Application ID is required.',
-
-                    'mobile_no.required_without'  => 'Either mobile number or date of issue is required.',
-                    'date_of_issue.required_without' => 'Either date of issue or mobile number is required.',
-
+                    'date_of_issue.required' => 'Date of issue is required.',
                     'date_of_issue.date' => 'Date of issue must be a valid date.',
                 ]
             ]);
