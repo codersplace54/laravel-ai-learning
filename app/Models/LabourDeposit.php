@@ -13,6 +13,8 @@ class LabourDeposit extends Model
         'ismw_labour_deposit',
         'contract_labour_fee',
         'ismw_labour_fee',
+        'no_of_contract_labour',
+        'no_of_ismw_labour',
         'grn_number',
         'payment_status',
         'payment_time',

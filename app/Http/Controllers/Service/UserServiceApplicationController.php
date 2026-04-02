@@ -3854,17 +3854,15 @@ class UserServiceApplicationController extends Controller
             return;
         }
 
-        $calculated = $this->calculate_labour_deposit(
-            $service_id,
-            $application_data,
-            [882, 883]
-        );
+        $calculated = $this->calculate_labour_deposit($service_id, $application_data, [882, 883]);
 
         $contract_labour_deposit = $calculated[882]['deposit'] ?? 0;
         $contract_labour_fee     = $calculated[882]['fee'] ?? 0;
+        $no_of_contract_labour   = $application_data[882] ?? 0;
 
         $ismw_labour_deposit     = $calculated[883]['deposit'] ?? 0;
         $ismw_labour_fee         = $calculated[883]['fee'] ?? 0;
+        $no_of_ismw_labour       = $application_data[883] ?? 0;
 
         if (
             $contract_labour_deposit == 0 &&
@@ -3891,6 +3889,8 @@ class UserServiceApplicationController extends Controller
                 'ismw_labour_deposit'     => $ismw_labour_deposit,
                 'contract_labour_fee'     => $contract_labour_fee,
                 'ismw_labour_fee'         => $ismw_labour_fee,
+                'no_of_contract_labour'   => $no_of_contract_labour,
+                'no_of_ismw_labour'       => $no_of_ismw_labour,
                 'scheme_details'          => json_encode($scheme_details),
             ]);
         } else {
@@ -3900,6 +3900,8 @@ class UserServiceApplicationController extends Controller
                 'ismw_labour_deposit'     => $ismw_labour_deposit,
                 'contract_labour_fee'     => $contract_labour_fee,
                 'ismw_labour_fee'         => $ismw_labour_fee,
+                'no_of_contract_labour'   => $no_of_contract_labour,
+                'no_of_ismw_labour'       => $no_of_ismw_labour,
                 'scheme_details'          => json_encode($scheme_details),
             ]);
         }

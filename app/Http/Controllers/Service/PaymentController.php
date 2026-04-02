@@ -97,7 +97,7 @@ class PaymentController extends Controller
                             $fee_amounts[]  = (float) $item['amount'];
                         }
                     }
-                  //  continue;
+                    continue;
                 }
 
                 if ($application->extra_payment !== null && $application->payment_status === 'pending') {
