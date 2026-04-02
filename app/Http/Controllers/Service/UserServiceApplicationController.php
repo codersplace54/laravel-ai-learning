@@ -3905,58 +3905,6 @@ class UserServiceApplicationController extends Controller
         }
     }
 
-    // private function calculate_labour_deposit($service_id, $application_data, $target_question_ids = [])
-    // {
-
-    //     $rules = ServiceFeeRule::where('service_id', $service_id)
-    //         ->whereIn('question_id', $target_question_ids)
-    //         ->get();
-
-    //     $result = [];
-
-    //     foreach ($rules as $rule) {
-
-    //         $user_answer = $application_data[$rule->question_id] ?? null;
-    //         if ($user_answer === null) continue;
-
-    //         if (is_numeric($user_answer)) {
-    //             $user_answer = (float) $user_answer;
-    //         }
-
-    //         $match = match ($rule->condition_operator) {
-    //             '='  => $user_answer == $rule->condition_value_start,
-    //             '!=' => $user_answer != $rule->condition_value_start,
-    //             '<'  => $user_answer <  $rule->condition_value_start,
-    //             '<=' => $user_answer <= $rule->condition_value_start,
-    //             '>'  => $user_answer >  $rule->condition_value_start,
-    //             '>=' => $user_answer >= $rule->condition_value_start,
-    //             'between' => $user_answer >= $rule->condition_value_start &&
-    //                 $user_answer <= $rule->condition_value_end,
-    //             default => true,
-    //         };
-
-    //         if (!$match) continue;
-
-    //         $temp_fee = 0;
-
-    //         if (!empty($rule->per_unit_fee)) {
-    //             $temp_fee += $user_answer * (float) $rule->per_unit_fee;
-    //         }
-
-    //         if (!empty($rule->fixed_calculated_fee)) {
-    //             $temp_fee += (float) $rule->fixed_calculated_fee;
-    //         }
-
-    //         if (!isset($result[$rule->question_id])) {
-    //             $result[$rule->question_id] = 0;
-    //         }
-
-    //         $result[$rule->question_id] += $temp_fee;
-    //     }
-
-    //     return $result;
-    // }
-
     private function calculate_labour_deposit($service_id, $application_data, $target_question_ids = [])
     {
         $rules = ServiceFeeRule::where('service_id', $service_id)
@@ -3985,7 +3933,6 @@ class UserServiceApplicationController extends Controller
 
             foreach ($rules->where('question_id', $qid) as $rule) {
 
-                // ✅ Pre-condition
                 if ($rule->condition_label_question_id) {
 
                     $pre_value = $application_data[$rule->condition_label_question_id] ?? null;
@@ -4010,7 +3957,6 @@ class UserServiceApplicationController extends Controller
                     if (!$pre_match) continue;
                 }
 
-                // ✅ Condition match
                 $match = match ($rule->condition_operator) {
                     '='  => $user_answer == $rule->condition_value_start,
                     '!=' => $user_answer != $rule->condition_value_start,
@@ -4035,14 +3981,10 @@ class UserServiceApplicationController extends Controller
                     $temp += (float) $rule->fixed_calculated_fee;
                 }
 
-                // 🔥 LOGIC SPLIT (IMPORTANT)
                 if ($rule->condition_operator === 'between') {
-                    // 👉 slab = FEES
                     $result[$qid]['fee'] = $temp;
-
-                    break; // only one slab
+                    break;
                 } else {
-                    // 👉 non-slab = DEPOSIT
                     $result[$qid]['deposit'] += $temp;
                 }
             }
