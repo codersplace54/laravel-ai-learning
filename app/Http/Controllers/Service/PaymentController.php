@@ -23,6 +23,7 @@ use App\Traits\LogsActivity;
 use App\Models\ThirdPartyStatusLog;
 use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\Service\CertificateController;
+use App\Models\ApplicationWorkflowAssignment;
 use App\Models\UnitDetail;
 
 class PaymentController extends Controller
@@ -547,13 +548,20 @@ class PaymentController extends Controller
 
                 foreach ($applications as $application) {
 
-                    if ($application->extra_payment != null && $application->payment_status == "pending") {
+                    $is_extra_payment = $application->status === 'extra_payment';
+                    $previous_paid    = $application->paid_amount ?? 0;
+
+                    if ($is_extra_payment) {
                         $amount = $application->extra_payment;
+                        $status = 're_submitted';
+                    } elseif ($previous_paid > 0) {
                         $status = 're_submitted';
                     } else {
                         $amount = ($application->effective_fee !== null && $application->effective_fee > 0) ? $application->effective_fee : ($application->total_fee ?? 0);
                         $status = 'submitted';
                     }
+
+                    $final_paid_amount = $previous_paid + $amount;
 
                     $has_approval_flow = ServiceApprovalFlow::where('service_id', $application->service_id)->exists();
 
@@ -561,17 +569,33 @@ class PaymentController extends Controller
                         $status = 'approved';
                     }
 
-                    $user_service_application =  UserServiceApplication::where('id', $application->id)->update([
-                        'payment_status'   => 'paid',
-                        'paid_amount'      => $amount,
-                        'status'           => $status,
-                        'GRN_number'       => $grn,
-                        'payment_transId'  => $CIN,
-                        'payment_time' => $payment_datetime,
-                        'updated_at'       => now(),
+                    $user_service_application = UserServiceApplication::where('id', $application->id)->update([
+                        'payment_status'  => 'paid',
+                        'paid_amount'     => $final_paid_amount,
+                        'status'          => $status,
+                        'GRN_number'      => $grn,
+                        'payment_transId' => $CIN,
+                        'payment_time'    => $payment_datetime,
+                        'updated_at'      => now(),
                     ]);
 
                     $application->refresh();
+
+                    if ($is_extra_payment) {
+                        $current_step = ApplicationWorkflowAssignment::where('application_id', $application->id)
+                            ->where('step_number', $application->current_step_number)
+                            ->latest('id')
+                            ->first();
+
+                        if ($current_step) {
+                            $current_step->update([
+                                'status'          => 'pending',
+                                'action_taken_by' => null,
+                                'action_taken_at' => null,
+                                'remarks'         => null,
+                            ]);
+                        }
+                    }
 
                     if (!$has_approval_flow && $status === 'approved') {
                         app(CertificateController::class)->auto_generate_certificate($application);
