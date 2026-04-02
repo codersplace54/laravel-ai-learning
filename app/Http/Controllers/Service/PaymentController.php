@@ -609,7 +609,7 @@ class PaymentController extends Controller
                         'updated_at'      => now(),
                     ]);
 
-                    LabourDeposit::whereIn('application_id', $application->id)
+                    LabourDeposit::where('application_id', $application->id)
                         ->update([
                             'grn_number'    => $request->GRN_number,
                             'payment_status' => 'paid',
