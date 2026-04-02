@@ -87,10 +87,10 @@ class PaymentController extends Controller
                     $ismw_fee     = (float) ($deposit->ismw_labour_fee ?? 0);
 
                     $items = [
-                        ['scheme' => 'SCHEME_CONTRACT_DEPOSIT', 'amount' => $contract_deposit],
-                        ['scheme' => 'SCHEME_ISMW_DEPOSIT',     'amount' => $ismw_deposit],
-                        ['scheme' => 'SCHEME_CONTRACT_FEE',     'amount' => $contract_fee],
-                        ['scheme' => 'SCHEME_ISMW_FEE',         'amount' => $ismw_fee],
+                        ['scheme' => '8443-00-103-37-01', 'amount' => $contract_deposit],
+                        ['scheme' => '8443-00-103-37-02',     'amount' => $ismw_deposit],
+                        ['scheme' => '0230-00-106-37-02',     'amount' => $contract_fee],
+                        ['scheme' => '0230-00-101-37-06',         'amount' => $ismw_fee],
                     ];
                     foreach ($items as $item) {
                         if ($item['amount'] > 0) {
