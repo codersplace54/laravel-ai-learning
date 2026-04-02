@@ -414,6 +414,7 @@ class ServiceMasterController extends Controller
                     'third_party_redirect_url',
                     'third_party_return_url',
                     'third_party_status_api_url',
+                    'third_party_method',
                     'created_by',
                     'updated_by',
                     'status',
@@ -502,6 +503,7 @@ class ServiceMasterController extends Controller
                         'thirdPartyReturnUrl' => $service->third_party_return_url,
                         'thirdPartyStatusApiUrl' => $service->third_party_status_api_url,
                         'thirdPartyPostParams' => $post_params,
+                        'third_party_method'  =>  $service->third_party_method,
                     ];
                 }
 
