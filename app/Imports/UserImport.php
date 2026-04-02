@@ -99,54 +99,68 @@ class UserImport
         $email_ids = array_column($chunk_rows, 'email_id');
         $user_names = array_column($chunk_rows, 'user_name');
         
-        $existing_records = DB::table('users')
-            ->whereIn('old_id', $old_ids)
-            ->orWhereIn('email_id', $email_ids)
-            ->orWhereIn('user_name', $user_names)
-            ->select('old_id', 'email_id', 'user_name')
-            ->get();
-
-        $existing_old_ids = $existing_records->pluck('old_id')->toArray();
-        $existing_emails = $existing_records->pluck('email_id')->toArray();
-        $existing_usernames = $existing_records->pluck('user_name')->toArray();
+        $existing_old_ids   = DB::table('users')->whereIn('old_id', $old_ids)->pluck('old_id')->toArray();
+        $existing_emails    = DB::table('users')->whereIn('email_id', $email_ids)->pluck('email_id')->toArray();
+        $existing_usernames = DB::table('users')->whereIn('user_name', $user_names)->pluck('user_name')->toArray();
 
         $new_rows = [];
+        $seen_chunk_emails    = [];
+        $seen_chunk_usernames = [];
+        $seen_chunk_old_ids   = [];
+
         foreach ($chunk_rows as $row) {
-            if (in_array($row['old_id'], $existing_old_ids)) {
+            if (in_array($row['old_id'], $existing_old_ids) || isset($seen_chunk_old_ids[$row['old_id']])) {
                 $this->skipped_count++;
                 $this->skipped_rows[] = [
                     'row_index' => null,
-                    'uid' => $row['old_id'],
+                    'uid'       => $row['old_id'],
                     'mobile_no' => $row['mobile_no'],
                     'user_name' => $row['user_name'],
-                    'reason' => 'duplicate_old_id',
+                    'reason'    => 'duplicate_old_id',
                 ];
-            } elseif (in_array($row['email_id'], $existing_emails)) {
+            } elseif (in_array($row['email_id'], $existing_emails) || isset($seen_chunk_emails[$row['email_id']])) {
+                $row['email_id'] = 'dup_' . uniqid() . '@placeholder.com';
+                $seen_chunk_old_ids[$row['old_id']]      = true;
+                $seen_chunk_emails[$row['email_id']]     = true;
+                $seen_chunk_usernames[$row['user_name']] = true;
+                $new_rows[] = $row;
+            } elseif (in_array($row['user_name'], $existing_usernames) || isset($seen_chunk_usernames[$row['user_name']])) {
                 $this->skipped_count++;
                 $this->skipped_rows[] = [
                     'row_index' => null,
-                    'uid' => $row['old_id'],
+                    'uid'       => $row['old_id'],
                     'mobile_no' => $row['mobile_no'],
                     'user_name' => $row['user_name'],
-                    'reason' => 'duplicate_email',
-                ];
-            } elseif (in_array($row['user_name'], $existing_usernames)) {
-                $this->skipped_count++;
-                $this->skipped_rows[] = [
-                    'row_index' => null,
-                    'uid' => $row['old_id'],
-                    'mobile_no' => $row['mobile_no'],
-                    'user_name' => $row['user_name'],
-                    'reason' => 'duplicate_user_name',
+                    'reason'    => 'duplicate_user_name',
                 ];
             } else {
+                $seen_chunk_old_ids[$row['old_id']]     = true;
+                $seen_chunk_emails[$row['email_id']]    = true;
+                $seen_chunk_usernames[$row['user_name']] = true;
                 $new_rows[] = $row;
             }
         }
 
-        if (!empty($new_rows)) {
-            DB::table('users')->insert($new_rows);
-            $this->imported_count += count($new_rows);
+        foreach ($new_rows as $row) {
+            try {
+                DB::table('users')->insert($row);
+                $this->imported_count++;
+            } catch (\Illuminate\Database\QueryException $e) {
+                $message = $e->getMessage();
+                $duplicate_field = 'unknown';
+                if (preg_match("/Duplicate entry '.*?' for key '.*?\.([^']+)'/", $message, $matches)) {
+                    $duplicate_field = $matches[1];
+                }
+                $this->skipped_count++;
+                $this->skipped_rows[] = [
+                    'row_index'       => null,
+                    'uid'             => $row['old_id'],
+                    'mobile_no'       => $row['mobile_no'],
+                    'user_name'       => $row['user_name'],
+                    'reason'          => 'duplicate_db_constraint',
+                    'duplicate_field' => $duplicate_field,
+                ];
+            }
         }
     }
 
@@ -263,7 +277,8 @@ class UserImport
             'mobile_no'                     => $mobile_no,
             'is_mobile_verified'            => $is_mobile_verified,
             'user_name'                     => $user_name,
-            'user_type'                     => "individual",
+            'user_type'                     => 'individual',
+            'is_pan_verified'               => 0,
             'district_id'                   => null,
             'subdivision_id'                => null,
             'ulb_id'                        => null,
@@ -272,7 +287,6 @@ class UserImport
             'registered_enterprise_address' => $registered_enterprise_address,
             'registered_enterprise_city'    => $registered_enterprise_city,
             'business_activity'             => $business_activity,
-            'user_type'                     => "individual",
             'status'                        => $status,
             'password'                      => $this->default_password_hash,
             'password_reset_required'       => 1,
