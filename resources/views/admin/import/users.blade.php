@@ -33,6 +33,7 @@
                         'duplicate_mobile_in_json' => 'Duplicate mobile in JSON',
                         'invalid_object' => 'Invalid object / row format',
                         'insert_or_ignore_skipped_due_to_db_unique' => 'Skipped due to DB unique constraint',
+                        'duplicate_db_constraint' => 'Duplicate DB Constraint',
                         'unknown' => 'Unknown',
                     ];
 
@@ -75,6 +76,10 @@
                                                     Mobile: {{ $row['mobile_no'] ?? 'N/A' }},
                                                     Mobile: {{ $row['user_name'] ?? 'N/A' }},
                                                     Reason: {{ $row['reason'] ?? 'N/A' }}
+
+                                                    @if (!empty($row['duplicate_field']))
+                                                        , Duplicate Field: <code>{{ $row['duplicate_field'] }}</code>
+                                                    @endif
 
                                                     @if (!empty($row['missing_fields']) && is_array($row['missing_fields']))
                                                         , Missing: <code>{{ implode(', ', $row['missing_fields']) }}</code>

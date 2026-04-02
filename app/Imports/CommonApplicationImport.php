@@ -209,11 +209,11 @@ class CommonApplicationImport implements ToCollection, WithHeadingRow
 
         $noc_certificate = null;
         if (!empty($noc_cert_url_raw)) {
-            $path = parse_url($noc_cert_url_raw, PHP_URL_PATH);
-            $file_name = $path ? basename($path) : null;
-
-            if ($file_name) {
-                $noc_certificate = sprintf($this->config['file_path_format'], $file_name);
+            if (str_starts_with($noc_cert_url_raw, 'http')) {
+                $path = parse_url($noc_cert_url_raw, PHP_URL_PATH);
+                $noc_certificate = preg_replace('#^/(?:new/)?storage/#', '', $path);
+            } else {
+                $noc_certificate = $noc_cert_url_raw;
             }
         }
 
