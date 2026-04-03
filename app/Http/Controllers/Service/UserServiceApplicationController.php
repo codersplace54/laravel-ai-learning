@@ -303,6 +303,17 @@ class UserServiceApplicationController extends Controller
 
                     $is_resubmission = $user_service_application->status === 'send_back';
 
+                    if ($is_resubmission && $user_service_application->max_processing_date) {
+                        $send_back_assignment = ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
+                            ->where('status', 'send_back')
+                            ->latest('action_taken_at')
+                            ->first();
+
+                        $send_back_at = $send_back_assignment?->action_taken_at ?? $user_service_application->updated_at;
+                        $days_taken_by_user = (int) Carbon::parse($send_back_at)->diffInDays(now());
+                        $max_processing_date = Carbon::parse($user_service_application->max_processing_date)->addDays($days_taken_by_user);
+                    }
+
                     $user_service_application->update([
                         'renewal_cycle_id'      => $request->renewal_cycle_id,
                         'renewal'               => $request->renewal,
@@ -835,6 +846,17 @@ class UserServiceApplicationController extends Controller
             }
 
             $is_resubmission = $user_service_application->status === 'send_back';
+
+            if ($is_resubmission && $user_service_application->max_processing_date) {
+                $send_back_assignment = ApplicationWorkflowAssignment::where('application_id', $user_service_application->id)
+                    ->where('status', 'send_back')
+                    ->latest('action_taken_at')
+                    ->first();
+
+                $send_back_at = $send_back_assignment?->action_taken_at ?? $user_service_application->updated_at;
+                $days_taken_by_user = (int) Carbon::parse($send_back_at)->diffInDays(now());
+                $max_processing_date = Carbon::parse($user_service_application->max_processing_date)->addDays($days_taken_by_user);
+            }
 
             $user_service_application->update([
                 'user_id'               => $user->id,

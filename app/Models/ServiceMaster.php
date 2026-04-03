@@ -18,6 +18,7 @@ class ServiceMaster extends Model
         'noc_type',
         'noc_payment_type',
         'target_days',
+        'is_deemed_approval',
         'allow_repeat_application',
         'has_input_form',
         'depends_on_services',

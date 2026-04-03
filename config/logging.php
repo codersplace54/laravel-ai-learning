@@ -191,6 +191,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'deemed_approval' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/deemed_approval.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];
