@@ -19,3 +19,5 @@ Schedule::command('backup:clean')
 Schedule::command('saral:sync')
     ->dailyAt('23:00');
 
+Schedule::command('deemed:approve')
+    ->dailyAt('00:30');
