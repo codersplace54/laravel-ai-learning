@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Log;
 
 class PaymentSuccessService
 {
-    // Handle all post-payment-success logic for a given payment order.
+    // Handle all post payment success logic for a given payment order.
     public function handle(array $ids, ?string $grn, ?string $cin, ?Carbon $payment_datetime): void
     {
         $applications = UserServiceApplication::whereIn('id', $ids)->get();
