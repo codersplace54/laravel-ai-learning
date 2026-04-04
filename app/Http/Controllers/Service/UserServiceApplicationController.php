@@ -2630,6 +2630,15 @@ class UserServiceApplicationController extends Controller
                 }
             }
 
+            if ($application->service_id == 37) {
+                LabourDeposit::where('application_id', $application->id)
+                    ->update([
+                        'payment_status' => 'paid',
+                        'grn_number'     => $request->GRN_number,
+                        'payment_time'   => now(),
+                    ]);
+            }
+
             PaymentOrder::create([
                 'application_id'    => json_encode([(int) $request->application_id]),
                 'user_id'           => $application->user_id,
@@ -2754,6 +2763,10 @@ class UserServiceApplicationController extends Controller
     {
 
         $rules = RenewalFeeRule::where('service_id', $service_id)->get();
+
+        if ($service_id == 37) {
+            return $this->calculate_labour_renewal_fee($application, $application_data, $cycle);
+        }
 
         $final_fee = 0;
         $minimum_fee = 0;
@@ -3125,6 +3138,8 @@ class UserServiceApplicationController extends Controller
 
             $application_number = $this->generate_application_number($service->id, $new_application->id);
 
+            $this->store_labour_deposit_renewal($old_application, $new_application, $final_data);
+
             $new_application->update([
                 'applicationId' => $application_number
             ]);
@@ -3234,6 +3249,7 @@ class UserServiceApplicationController extends Controller
 
             $service = UserServiceApplication::where('user_id', $user_id)
                 ->where('status', '!=', 'expired')
+                ->whereHas('service')
                 ->with(['service.renewalCycles']);
 
             $applications = $service->get();
@@ -3896,10 +3912,10 @@ class UserServiceApplicationController extends Controller
         }
 
         $scheme_details = [
-            ['scheme' => 'CONTRACT_DEPOSIT', 'amount' => $contract_labour_deposit],
-            ['scheme' => 'ISMW_DEPOSIT', 'amount' => $ismw_labour_deposit],
-            ['scheme' => 'CONTRACT_FEE', 'amount' => $contract_labour_fee],
-            ['scheme' => 'ISMW_FEE', 'amount' => $ismw_labour_fee],
+            ['scheme' => '8443-00-103-37-01', 'amount' => $contract_labour_deposit],
+            ['scheme' => '8443-00-103-37-02', 'amount' => $ismw_labour_deposit],
+            ['scheme' => '0230-00-106-37-02', 'amount' => $contract_labour_fee],
+            ['scheme' => '0230-00-101-37-06', 'amount' => $ismw_labour_fee],
         ];
 
         $application = UserServiceApplication::find($application_id);
@@ -3913,6 +3929,7 @@ class UserServiceApplicationController extends Controller
                 'ismw_labour_fee'         => $ismw_labour_fee,
                 'no_of_contract_labour'   => $no_of_contract_labour,
                 'no_of_ismw_labour'       => $no_of_ismw_labour,
+                'payment_status'          => "pending",
                 'scheme_details'          => json_encode($scheme_details),
             ]);
         } else {
@@ -3924,6 +3941,7 @@ class UserServiceApplicationController extends Controller
                 'ismw_labour_fee'         => $ismw_labour_fee,
                 'no_of_contract_labour'   => $no_of_contract_labour,
                 'no_of_ismw_labour'       => $no_of_ismw_labour,
+                'payment_status'          => "pending",
                 'scheme_details'          => json_encode($scheme_details),
             ]);
         }
@@ -4015,5 +4033,93 @@ class UserServiceApplicationController extends Controller
         }
 
         return $result;
+    }
+
+    private function store_labour_deposit_renewal($old_application, $new_application, $final_data)
+    {
+        if ($old_application->service_id != 37) {
+            return;
+        }
+
+        $old_deposit = LabourDeposit::where('application_id', $old_application->id)->first();
+
+        $old_contract_deposit = (float) ($old_deposit->contract_labour_deposit ?? 0);
+        $old_ismw_deposit     = (float) ($old_deposit->ismw_labour_deposit ?? 0);
+
+        $old_contract_count = (int) ($old_deposit->no_of_contract_labour ?? 0);
+        $old_ismw_count     = (int) ($old_deposit->no_of_ismw_labour ?? 0);
+
+        $calculated = $this->calculate_labour_deposit(
+            $new_application->service_id,
+            $final_data,
+            [882, 883]
+        );
+
+        $new_contract_deposit_total = (float) ($calculated[882]['deposit'] ?? 0);
+        $new_ismw_deposit_total     = (float) ($calculated[883]['deposit'] ?? 0);
+
+        $new_contract_fee = (float) ($calculated[882]['fee'] ?? 0);
+        $new_ismw_fee     = (float) ($calculated[883]['fee'] ?? 0);
+
+        $new_contract_count = (int) ($final_data[882] ?? 0);
+        $new_ismw_count     = (int) ($final_data[883] ?? 0);
+
+        $contract_deposit_payable = max(0, $new_contract_deposit_total - $old_contract_deposit);
+        $ismw_deposit_payable     = max(0, $new_ismw_deposit_total - $old_ismw_deposit);
+
+        $scheme_details = [
+            ['scheme' => '8443-00-103-37-01', 'amount' => $contract_deposit_payable],
+            ['scheme' => '8443-00-103-37-02', 'amount' => $ismw_deposit_payable],
+            ['scheme' => '0230-00-106-37-02', 'amount' => $new_contract_fee],
+            ['scheme' => '0230-00-101-37-06', 'amount' => $new_ismw_fee],
+        ];
+
+        LabourDeposit::create([
+            'application_id'            => $new_application->id,
+            'old_application_id'        => $old_application->id,
+            'old_user_id'               => $old_application->user_id,
+            'contract_labour_deposit'   => $contract_deposit_payable,
+            'ismw_labour_deposit'       => $ismw_deposit_payable,
+            'contract_labour_fee'       => $new_contract_fee,
+            'ismw_labour_fee'           => $new_ismw_fee,
+            'no_of_contract_labour'     => $new_contract_count,
+            'old_no_of_contract_labour' => $old_contract_count,
+            'no_of_ismw_labour'         => $new_ismw_count,
+            'old_no_of_ismw_labour'     => $old_ismw_count,
+            'scheme_details'            => json_encode($scheme_details),
+        ]);
+    }
+
+    private function calculate_labour_renewal_fee($application, $application_data, $cycle)
+    {
+
+        $old_deposit = LabourDeposit::where('application_id', $application->id)->first();
+
+        $old_contract_deposit = (float) ($old_deposit->contract_labour_deposit ?? 0);
+        $old_ismw_deposit     = (float) ($old_deposit->ismw_labour_deposit ?? 0);
+
+        $calculated = $this->calculate_labour_deposit(37, $application_data, [882, 883]);
+
+        $new_contract_deposit = (float) ($calculated[882]['deposit'] ?? 0);
+        $new_ismw_deposit     = (float) ($calculated[883]['deposit'] ?? 0);
+
+        $contract_fee = (float) ($calculated[882]['fee'] ?? 0);
+        $ismw_fee     = (float) ($calculated[883]['fee'] ?? 0);
+
+        $contract_deposit_payable = max(0, $new_contract_deposit - $old_contract_deposit);
+        $ismw_deposit_payable     = max(0, $new_ismw_deposit - $old_ismw_deposit);
+
+        $base_fee = $contract_fee + $ismw_fee;
+
+        $late_fee = $this->calculate_late_fee($application, $cycle, $base_fee);
+
+        $total_payable = $contract_deposit_payable + $ismw_deposit_payable + $base_fee + $late_fee;
+
+        return [
+            'base_fee' => round($base_fee, 2),
+            'deposit_difference' => round($contract_deposit_payable + $ismw_deposit_payable, 2),
+            'late_fee' => round($late_fee, 2),
+            'renewal_fee' => round($total_payable, 2),
+        ];
     }
 }
