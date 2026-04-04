@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\ManagementDetails;
 use App\Models\Inspection;
 use App\Models\TripuraMasterData;
+use App\Models\Department;
 
 class ReportController extends Controller
 {
@@ -1401,4 +1402,95 @@ class ReportController extends Controller
             ], 500);
         }
     }
+
+    public function inspection_summary_report(Request $request)
+    {
+        try {
+
+            $request->validate([
+                'department_id' => 'nullable|integer|exists:departments,id',
+                'from_date'     => 'nullable|date',
+                'to_date'       => 'nullable|date',
+            ]);
+
+            $query = Inspection::query()
+                ->select(
+                    'department_id',
+                    DB::raw('COUNT(*) as total_inspections'),
+                )
+                ->whereNotNull('inspection_date')
+                ->whereNotNull('proposed_date')
+                ->groupBy('department_id');
+
+            if ($request->filled('from_date') && $request->filled('to_date')) {
+                $query->whereBetween('inspection_date', [$request->from_date, $request->to_date]);
+            }
+
+            if ($request->filled('department_id')) {
+                $query->where('department_id', $request->department_id);
+            }
+
+            $data = $query->get();
+
+            $report = $data->map(function ($row) {
+
+                $department = Department::find($row->department_id);
+
+                $inspections = Inspection::where('department_id', $row->department_id)
+                    ->whereNotNull('inspection_date')
+                    ->whereNotNull('proposed_date')
+                    ->get(['inspection_date', 'proposed_date']);
+
+                $durations = $inspections->map(function ($i) {
+                    return (strtotime($i->inspection_date) - strtotime($i->proposed_date)) / 86400;
+                });
+
+                $avg_time = $durations->avg() ?? 0;
+
+                $count = $durations->count();
+                $median = 0;
+
+                if ($count > 0) {
+                    $sorted = $durations->sort()->values();
+                    $middle = floor(($count - 1) / 2);
+
+                    $median = ($count % 2)
+                        ? $sorted[$middle]
+                        : ($sorted[$middle] + $sorted[$middle + 1]) / 2;
+                }
+
+                $within_24 = $durations->filter(function ($d) {
+                    return $d <= 1;
+                })->count();
+
+                $total = $durations->count();
+
+                $within_24_percent = $total > 0 ? ($within_24 / $total) * 100 : 0;
+                $above_24_percent  = 100 - $within_24_percent;
+
+                return [
+                    'department_name' => $department->name ?? null,
+                    'total_inspections' => (int) $row->total_inspections,
+                    'avg_time_days' => round($avg_time, 2),
+                    'median_time_days' => round($median, 2),
+                    'reports_within_24hrs_percent' => round($within_24_percent, 2),
+                    'reports_above_24hrs_percent' => round($above_24_percent, 2),
+                ];
+            });
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Inspection summary generated successfully',
+                'data' => $report
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to generate report',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }
