@@ -4095,8 +4095,31 @@ class UserServiceApplicationController extends Controller
 
         $old_deposit = LabourDeposit::where('application_id', $application->id)->first();
 
-        $old_contract_deposit = (float) ($old_deposit->contract_labour_deposit ?? 0);
-        $old_ismw_deposit     = (float) ($old_deposit->ismw_labour_deposit ?? 0);
+        $old_application_data = is_array($application->application_data)
+            ? $application->application_data
+            : json_decode($application->application_data ?? '[]', true);
+
+        $old_contract_count = (int) (
+            $old_deposit->old_no_of_contract_labour
+            ?? $old_application_data[882]
+            ?? 0
+        );
+
+        $old_ismw_count = (int) (
+            $old_deposit->old_no_of_ismw_labour
+            ?? $old_application_data[883]
+            ?? 0
+        );
+
+        $old_data = [
+            882 => $old_contract_count,
+            883 => $old_ismw_count,
+        ];
+
+        $old_calculated = $this->calculate_labour_deposit(37, $old_data, [882, 883]);
+
+        $old_contract_deposit = (float) ($old_calculated[882]['deposit'] ?? 0);
+        $old_ismw_deposit     = (float) ($old_calculated[883]['deposit'] ?? 0);
 
         $calculated = $this->calculate_labour_deposit(37, $application_data, [882, 883]);
 
