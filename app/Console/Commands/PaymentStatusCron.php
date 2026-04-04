@@ -21,11 +21,11 @@ class PaymentStatusCron extends Command
         Log::channel('payment_cron')->info('Payment status cron started');
         $this->info('Payment status cron started');
 
-        $orders = PaymentOrder::whereIn('payment_status', ['initiated', 'pending'])
+        $orders = PaymentOrder::whereIn('payment_status', ['initiated', 'pending','fail'])
             ->where('payment_amount', '>', 0)
             ->where('created_at', '>=', Carbon::now()->subDays(3))
             ->orderBy('id', 'desc')
-            ->limit(200)
+            // ->limit(200)
             ->get();
         
         Log::channel('payment_cron')->info('Fetched orders for processing', ['count' => $orders->count()]);

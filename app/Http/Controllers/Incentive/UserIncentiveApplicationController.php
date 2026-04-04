@@ -1598,4 +1598,127 @@ class UserIncentiveApplicationController extends Controller
 
         return $approved_eligibilty === count($proforma_depends_on);
     }
+
+    public function incentive_dashboard(Request $request)
+    {
+        try {
+            $request->validate([
+                'scheme_id'          => 'nullable|integer|exists:schemes,id',
+                'proforma_id'        => 'nullable|integer|exists:proformas,id',
+                'district_code'      => 'nullable|string',
+                'application_status' => 'nullable|string',
+                'from_date'          => 'nullable|date',
+                'to_date'            => 'nullable|date|after_or_equal:from_date',
+            ]);
+
+            $base = UserIncentiveApplication::query()
+                ->join('proformas', 'proformas.id', '=', 'user_incentive_applications.proforma_id')
+                ->join('schemes', 'schemes.id', '=', 'user_incentive_applications.scheme_id')
+                ->join('users', 'users.id', '=', 'user_incentive_applications.user_id')
+                ->leftJoin('tripura_master_data as tmd', 'tmd.district_code', '=', 'users.district_id')
+                ->whereNotNull('user_incentive_applications.submitted_at')
+                ->when($request->filled('scheme_id'),          fn($q) => $q->where('user_incentive_applications.scheme_id', $request->scheme_id))
+                ->when($request->filled('proforma_id'),        fn($q) => $q->where('user_incentive_applications.proforma_id', $request->proforma_id))
+                ->when($request->filled('district_code'),      fn($q) => $q->where('users.district_id', $request->district_code))
+                ->when($request->filled('application_status'), fn($q) => $q->where('user_incentive_applications.workflow_status', $request->application_status))
+                ->when($request->filled('from_date'),          fn($q) => $q->whereDate('user_incentive_applications.submitted_at', '>=', $request->from_date))
+                ->when($request->filled('to_date'),            fn($q) => $q->whereDate('user_incentive_applications.submitted_at', '<=', $request->to_date));
+
+            $all_ids = (clone $base)->pluck('user_incentive_applications.id');
+
+            $total_received  = $all_ids->count();
+            $total_approved  = (clone $base)->whereIn('user_incentive_applications.workflow_status', ['noc_issued', 'claim_approved_by_gm', 'claim_approved_by_slc', 'approved_by_da'])->count();
+            $total_disbursed = (clone $base)->whereIn('user_incentive_applications.workflow_status', ['claim_approved_by_slc', 'claim_approved_by_gm'])->count();
+
+            $processing_times = UserIncentiveApplication::whereIn('id', $all_ids)
+                ->whereNotNull('decided_at')
+                ->selectRaw('DATEDIFF(decided_at, submitted_at) as days')
+                ->pluck('days')
+                ->filter(fn($d) => $d >= 0)
+                ->sort()
+                ->values();
+
+            $count       = $processing_times->count();
+            $avg_time    = $count > 0 ? round($processing_times->avg(), 2) : null;
+            $min_time    = $count > 0 ? $processing_times->min() : null;
+            $max_time    = $count > 0 ? $processing_times->max() : null;
+            $median_time = null;
+            if ($count > 0) {
+                $mid         = intdiv($count, 2);
+                $median_time = $count % 2 === 0
+                    ? round(($processing_times[$mid - 1] + $processing_times[$mid]) / 2, 2)
+                    : $processing_times[$mid];
+            }
+
+            $proforma_rows = (clone $base)
+                ->select(
+                    'proformas.id as proforma_id',
+                    'proformas.title as proforma_name',
+                    'schemes.title as scheme_name',
+                    DB::raw('COUNT(user_incentive_applications.id) as application_received'),
+                    DB::raw('SUM(user_incentive_applications.workflow_status IN ("noc_issued","claim_approved_by_gm","claim_approved_by_slc","approved_by_da")) as approved'),
+                    DB::raw('SUM(user_incentive_applications.workflow_status IN ("claim_approved_by_slc","claim_approved_by_gm")) as disbursed'),
+                    DB::raw('AVG(CASE WHEN user_incentive_applications.decided_at IS NOT NULL THEN DATEDIFF(user_incentive_applications.decided_at, user_incentive_applications.submitted_at) END) as avg_processing_time'),
+                    DB::raw('MIN(CASE WHEN user_incentive_applications.decided_at IS NOT NULL THEN DATEDIFF(user_incentive_applications.decided_at, user_incentive_applications.submitted_at) END) as min_time'),
+                    DB::raw('MAX(CASE WHEN user_incentive_applications.decided_at IS NOT NULL THEN DATEDIFF(user_incentive_applications.decided_at, user_incentive_applications.submitted_at) END) as max_time')
+                )
+                ->groupBy('proformas.id', 'proformas.title', 'schemes.title')
+                ->orderBy('proformas.id')
+                ->get();
+
+            $proforma_ids = $proforma_rows->pluck('proforma_id');
+
+            $decided_days_by_proforma = UserIncentiveApplication::whereIn('user_incentive_applications.id', $all_ids)
+                ->whereNotNull('decided_at')
+                ->whereIn('proforma_id', $proforma_ids)
+                ->selectRaw('proforma_id, DATEDIFF(decided_at, submitted_at) as days')
+                ->get()
+                ->groupBy('proforma_id');
+
+            $table_data = $proforma_rows->map(fn($row, $index) => [
+                'sl_no'               => $index + 1,
+                'proforma_name'       => $row->proforma_name,
+                'scheme_name'         => $row->scheme_name,
+                'application_received'=> (int) $row->application_received,
+                'approved'            => (int) $row->approved,
+                'disbursed'           => (int) $row->disbursed,
+                'avg_processing_time' => $row->avg_processing_time ? round($row->avg_processing_time, 2) : null,
+                'min_time'            => $row->min_time,
+                'max_time'            => $row->max_time,
+                'median_time'         => $this->calculate_median(
+                    ($decided_days_by_proforma[$row->proforma_id] ?? collect())->pluck('days')
+                ),
+            ]);
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Incentive dashboard data fetched successfully.',
+                'data'    => [
+                    'counts'     => [
+                        'application_received' => $total_received,
+                        'approved'             => $total_approved,
+                        'disbursed'            => $total_disbursed,
+                        'avg_processing_time'  => $avg_time,
+                        'median_time'          => $median_time,
+                        'min_time'             => $min_time,
+                        'max_time'             => $max_time,
+                    ],
+                    'table_data' => $table_data,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    private function calculate_median($days): ?float
+    {
+        $sorted = $days->filter(fn($d) => $d >= 0)->sort()->values();
+        $count  = $sorted->count();
+        if ($count === 0) return null;
+        $mid = intdiv($count, 2);
+        return $count % 2 === 0
+            ? round(($sorted[$mid - 1] + $sorted[$mid]) / 2, 2)
+            : (float) $sorted[$mid];
+    }
 }
