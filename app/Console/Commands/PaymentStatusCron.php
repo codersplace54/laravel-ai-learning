@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use App\Models\PaymentOrder;
 use App\Models\UserServiceApplication;
 use App\Models\User;
+use App\Services\PaymentSuccessService;
 use Carbon\Carbon;
 
 class PaymentStatusCron extends Command
@@ -118,30 +119,28 @@ class PaymentStatusCron extends Command
                 DB::beginTransaction();
 
                 try {
+                    $grn              = $matched_record['GRN'] ?? null;
+                    $cin              = trim($matched_record['CIN'] ?? null) ?: null;
+                    $payment_datetime = isset($matched_record['BankdateTime'])
+                        ? Carbon::createFromFormat('d/m/Y H:i:s', $matched_record['BankdateTime'])
+                        : now();
+
                     $order->update([
-                        'payment_status' => 'success',
-                        'GRN_number' => $matched_record['GRN'] ?? null,
-                        'payment_datetime' => now(),
-                        'updated_by_cron' => true
+                        'payment_status'   => 'success',
+                        'GRN_number'       => $grn,
+                        'payment_datetime' => $payment_datetime,
+                        'updated_by_cron'  => true,
                     ]);
 
                     $updated_order_ids[] = $order->order_id;
-                    Log::channel('payment_cron')->info("Order {$order->order_id} updated successfully", ['GRN' => $matched_record['GRN'] ?? null]);
+                    Log::channel('payment_cron')->info("Order {$order->order_id} updated successfully", ['GRN' => $grn]);
 
                     $application_ids = json_decode($order->application_id, true);
 
                     if (is_array($application_ids) && count($application_ids) > 0) {
-                        $updated = UserServiceApplication::whereIn('id', $application_ids)
-                            ->where('payment_status', 'pending')
-                            ->update([
-                                'payment_status' => 'paid',
-                                'status' => 'submitted',
-                                'GRN_number' => $matched_record['GRN'] ?? null,
-                                'payment_time' => now()
-                            ]);
-
-                        $updated_applications += $updated;
-                        Log::channel('payment_cron')->info("Updated {$updated} applications for order {$order->order_id}");
+                        app(PaymentSuccessService::class)->handle($application_ids, $grn, $cin, $payment_datetime);
+                        $updated_applications += count($application_ids);
+                        Log::channel('payment_cron')->info("Processed " . count($application_ids) . " applications for order {$order->order_id}");
                     }
 
                     DB::commit();
