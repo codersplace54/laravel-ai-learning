@@ -390,6 +390,7 @@ Route::prefix('report')->group(function () {
     Route::post('department-approvals', [ReportController::class, 'departmental_approvals']);
     Route::post('cis-summary-report', [ReportController::class, 'cis_summary_report']);
     Route::post('cis-details-report', [ReportController::class, 'cis_details_report']);
+    Route::post('inspection-summary-report', [ReportController::class, 'inspection_summary_report']);
 });
 
 Route::post('user-feedback-store', [UserFeedbackController::class, 'user_feedback_store']);
