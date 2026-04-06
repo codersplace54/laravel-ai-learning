@@ -16,6 +16,7 @@ class PublicNotification extends Model
         'status',
         'featured',
         'link',
+        'is_banner',
         'created_at',
         'updated_at'
     ];

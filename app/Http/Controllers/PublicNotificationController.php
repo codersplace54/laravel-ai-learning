@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\PublicNotification;
+use Carbon\Carbon;
 
 
 class PublicNotificationController extends Controller
@@ -34,6 +35,7 @@ class PublicNotificationController extends Controller
                 'status'        => 'nullable|string',
                 'featured'      => 'nullable|in:yes,no',
                 'link'          => 'nullable|string',
+                'is_banner'     => 'nullable|in:yes,no',
             ]);
 
             DB::beginTransaction();
@@ -54,6 +56,7 @@ class PublicNotificationController extends Controller
                 'status'        => $request->status ?? 'active',
                 'featured'      => $request->featured ?? "no",
                 'link'          => $request->link,
+                'is_banner'     => $request->is_banner ?? 'no',
             ]);
 
             $notification->attachment = $attachment_path
@@ -113,6 +116,7 @@ class PublicNotificationController extends Controller
                 'status'        => 'nullable|string',
                 'featured'      => 'nullable|in:yes,no',
                 'link'          => 'nullable|string',
+                'is_banner'     => 'nullable|in:yes,no',
             ]);
 
             DB::beginTransaction();
@@ -135,6 +139,7 @@ class PublicNotificationController extends Controller
                 'status'        => $request->status ?? $notification->status,
                 'featured'      => $request->featured ?? $notification->featured,
                 'link'          => $request->link,
+                'is_banner'     => $request->is_banner ?? $notification->is_banner,
             ]);
 
             $notification->attachment = $attachment_path
@@ -234,8 +239,17 @@ class PublicNotificationController extends Controller
         try {
 
 
-            $notifications = PublicNotification::orderBy('display_order', 'asc')
-                ->get();
+            $query = PublicNotification::orderBy('display_order', 'asc');
+
+            if ($request->has('is_banner') && in_array($request->is_banner, ['yes', 'no'])) {
+                $query->where('is_banner', $request->is_banner);
+            }
+
+            if ($request->has('from_date') && $request->has('to_date')) {
+                $query->whereBetween('valid_till', [$request->from_date,$request->to_date]);
+            }
+
+            $notifications = $query->get();
 
             $notifications->transform(function ($item) {
                 if ($item->attachment) {
@@ -243,6 +257,13 @@ class PublicNotificationController extends Controller
                 } else {
                     $item->attachment = null;
                 }
+
+                if ($item->valid_till) {
+                    $item->is_expired = Carbon::parse($item->valid_till)->lt(Carbon::now());
+                } else {
+                    $item->is_expired = false;
+                }
+
                 return $item;
             });
 
