@@ -125,12 +125,26 @@ class UserFeedbackController extends Controller
 
     public function user_feedback_details(Request $request)
     {
-        
         $request->validate([
             'id' => 'required|integer|exists:user_feedbacks,id',
         ]);
 
-        $data = UserFeedback::where('id',$request->id)->first();
+        $feedback = UserFeedback::with([
+            'department:id,name',
+            'service:id,service_title_or_description',
+            'user:id,user_name',
+        ])->find($request->id);
+
+        $data = [
+            'id'              => $feedback->id,
+            'user_name'       => $feedback->user?->user_name,
+            'department_name' => $feedback->department?->name,
+            'service_name'    => $feedback->service?->service_title_or_description,
+            'satisfaction'    => $feedback->satisfaction,
+            'feedback'        => $feedback->feedback,
+            'suggestions'     => $feedback->suggestions,
+            'created_at'      => optional($feedback->created_at)->format('d/m/Y'),
+        ];
 
         return response()->json([
             'status'  => 1,

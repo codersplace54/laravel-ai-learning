@@ -250,12 +250,13 @@ class EnterpriseDetailController extends Controller
                 ], 404);
             }
 
+            $data = $enterprise_detail->toArray();
+            $data['business_pan_no'] = $user->pan;
+
             return response()->json([
-
-
                 'status' => 1,
                 'message' => 'Enterprise details fetched successfully.',
-                'data' => $enterprise_detail,
+                'data' => $data,
             ], 200);
         } catch (\Exception $e) {
 

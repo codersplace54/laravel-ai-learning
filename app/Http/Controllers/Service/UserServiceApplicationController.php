@@ -319,7 +319,9 @@ class UserServiceApplicationController extends Controller
                         'renewal'               => $request->renewal,
                         'renewalYear'           => $request->renewalYear,
                         'applicationId'         => $application_number ?? $user_service_application->applicationId,
-                        'application_date'      => $request->application_date ?? now(),
+                        'application_date'      => in_array($user_service_application->status, ['draft', 'saved'])
+                            ? ($request->application_date ?? now())
+                            : $user_service_application->application_date,
                         'status'                => $status,
                         'application_data'      => $user_service_application->application_data,
                         // 'applied_fee'           => $request->applied_fee,
@@ -865,7 +867,9 @@ class UserServiceApplicationController extends Controller
                 'renewal'               => $request->renewal,
                 'renewalYear'           => $request->renewalYear,
                 // 'applicationId'         => $request->applicationId,
-                'application_date'      => $request->application_date ?? now(),
+                'application_date'      => in_array($user_service_application->status, ['draft', 'saved'])
+                    ? ($request->application_date ?? now())
+                    : $user_service_application->application_date,
                 'status'                => $status,
                 'application_data'      => $encoded_application_data,
                 'applied_fee'           => $request->applied_fee,
