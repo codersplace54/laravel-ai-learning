@@ -3075,6 +3075,7 @@ class UserServiceApplicationController extends Controller
                 $renewal_cycle
             );
 
+            $late_fee = $calculated_fee['late_fee'];
             $service = $old_application->service;
             $today = Carbon::today();
 
@@ -3138,7 +3139,7 @@ class UserServiceApplicationController extends Controller
 
             $application_number = $this->generate_application_number($service->id, $new_application->id);
 
-            $this->store_labour_deposit_renewal($old_application, $new_application, $final_data);
+            $this->store_labour_deposit_renewal($old_application, $new_application, $final_data, $late_fee);
 
             $new_application->update([
                 'applicationId' => $application_number
@@ -4035,8 +4036,9 @@ class UserServiceApplicationController extends Controller
         return $result;
     }
 
-    private function store_labour_deposit_renewal($old_application, $new_application, $final_data)
+    private function store_labour_deposit_renewal($old_application, $new_application, $final_data, $late_fee)
     {
+
         if ($old_application->service_id != 37) {
             return;
         }
@@ -4060,6 +4062,19 @@ class UserServiceApplicationController extends Controller
 
         $new_contract_fee = (float) ($calculated[882]['fee'] ?? 0);
         $new_ismw_fee     = (float) ($calculated[883]['fee'] ?? 0);
+
+        $total_base_fee = $new_contract_fee + $new_ismw_fee;
+
+        if ($total_base_fee > 0) {
+            $contract_late_share = ($new_contract_fee / $total_base_fee) * $late_fee;
+            $ismw_late_share     = ($new_ismw_fee / $total_base_fee) * $late_fee;
+        } else {
+            $contract_late_share = $late_fee;
+            $ismw_late_share     = 0;
+        }
+
+        $new_contract_fee += $contract_late_share;
+        $new_ismw_fee     += $ismw_late_share;
 
         $new_contract_count = (int) ($final_data[882] ?? 0);
         $new_ismw_count     = (int) ($final_data[883] ?? 0);
