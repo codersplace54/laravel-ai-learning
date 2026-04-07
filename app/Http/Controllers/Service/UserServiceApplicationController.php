@@ -3120,7 +3120,7 @@ class UserServiceApplicationController extends Controller
             $new_application = UserServiceApplication::create([
                 'user_id'                   => $old_application->user_id,
                 'service_id'                => $old_application->service_id,
-                'renewal_cycle_id'          => null,
+                'renewal_cycle_id'          => $request->renewal_cycle_id,
                 'remarks'                   => $request->remarks,
                 'application_date'          =>  now(),
                 'previous_application_id' => $old_application->id,
@@ -4049,11 +4049,22 @@ class UserServiceApplicationController extends Controller
 
         $old_deposit = LabourDeposit::where('application_id', $old_application->id)->first();
 
-        $old_contract_deposit = (float) ($old_deposit->contract_labour_deposit ?? 0);
-        $old_ismw_deposit     = (float) ($old_deposit->ismw_labour_deposit ?? 0);
-
         $old_contract_count = (int) ($old_deposit->no_of_contract_labour ?? 0);
         $old_ismw_count     = (int) ($old_deposit->no_of_ismw_labour ?? 0);
+
+        $old_data = [
+            882 => $old_contract_count,
+            883 => $old_ismw_count,
+        ];
+
+        $old_calculated = $this->calculate_labour_deposit(
+            37,
+            $old_data,
+            [882, 883]
+        );
+
+        $old_contract_deposit = (float) ($old_calculated[882]['deposit'] ?? 0);
+        $old_ismw_deposit     = (float) ($old_calculated[883]['deposit'] ?? 0);
 
         $calculated = $this->calculate_labour_deposit(
             $new_application->service_id,
