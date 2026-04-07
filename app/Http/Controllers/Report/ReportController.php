@@ -17,6 +17,7 @@ use App\Models\ManagementDetails;
 use App\Models\Inspection;
 use App\Models\TripuraMasterData;
 use App\Models\Department;
+use App\Models\UserFeedback;
 
 class ReportController extends Controller
 {
@@ -1493,4 +1494,96 @@ class ReportController extends Controller
         }
     }
 
+    public function grievance_feedback_summary(Request $request)
+    {
+
+        try {
+
+            $request->validate([
+                'department_id' => 'nullable|integer|exists:departments,id',
+                'service_id'    => 'nullable|integer|exists:service_masters,id',
+                'from_date'     => 'nullable|date',
+                'to_date'       => 'nullable|date',
+            ]);
+
+            $query = UserFeedback::query()
+                ->select(
+                    'service_id',
+                    DB::raw('COUNT(*) as total_received'),
+                    DB::raw("SUM(CASE WHEN updated_at IS NOT NULL THEN 1 ELSE 0 END) as total_responded")
+                )
+                ->groupBy('service_id');
+
+            if ($request->filled('from_date') && $request->filled('to_date')) {
+                $query->whereBetween('created_at', [$request->from_date, $request->to_date]);
+            }
+
+            if ($request->filled('service_id')) {
+                $query->where('service_id', $request->service_id);
+            }
+
+            if ($request->filled('department_id')) {
+                $query->where('department_id', $request->department_id);
+            }
+
+            $data = $query->get();
+
+            $report = $data->map(function ($row) {
+
+                $service = ServiceMaster::find($row->service_id);
+
+                $records = UserFeedback::where('service_id', $row->service_id)
+                    ->whereNotNull('created_at')
+                    ->whereNotNull('updated_at')
+                    ->get(['created_at', 'updated_at']);
+
+                $durations = $records->map(function ($r) {
+                    return (strtotime($r->updated_at) - strtotime($r->created_at)) / 86400;
+                })->filter();
+
+                $avg = $durations->avg() ?? 0;
+                $min = $durations->min() ?? 0;
+                $max = $durations->max() ?? 0;
+
+                $count = $durations->count();
+                $median = 0;
+
+                if ($count > 0) {
+                    $sorted = $durations->sort()->values();
+                    $middle = floor(($count - 1) / 2);
+
+                    $median = ($count % 2)
+                        ? $sorted[$middle]
+                        : ($sorted[$middle] + $sorted[$middle + 1]) / 2;
+                }
+
+                return [
+                    'department_name' => $service->department->name ?? null,
+                    'noc_description' => $service->service_title_or_description ?? null,
+                    'time_limit' => $service->target_days ?? null,
+
+                    'total_grievance_received' => (int) $row->total_received,
+                    'total_grievance_responded' => (int) $row->total_responded,
+
+                    'avg_time_to_respond_days' => round($avg, 2),
+                    'median_time_to_respond_days' => round($median, 2),
+                    'min_time_to_respond_days' => round($min, 2),
+                    'max_time_to_respond_days' => round($max, 2),
+                ];
+            });
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Grievance report generated successfully',
+                'data' => $report
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to generate report',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
