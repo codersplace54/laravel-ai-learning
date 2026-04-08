@@ -120,11 +120,12 @@ class InformationWizardController extends Controller
                 ->values();
 
             return response()->json([
-                'status'           => 1,
-                'message'          => 'Filters fetched successfully.',
-                'categories'       => $categories,
-                'departments'      => $departments,
-                'services'         => $services,
+                'status'                => 1,
+                'message'               => 'Filters fetched successfully.',
+                'is_factory_department' => $request->filled('department_id') && $request->department_id == 9,
+                'categories'            => $categories,
+                'departments'           => $departments,
+                'services'              => $services,
                 'business_location' => [
                     'Industrial Estate',
                     'Urban',

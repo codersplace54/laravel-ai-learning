@@ -12,7 +12,7 @@ return new class extends Migration
             'user_service_applications',
             'application_workflow_assignments',
             'application_workflow_history',
-            'user_incentive_applications',
+            'incentive_workflow_histories',
         ];
 
         foreach ($tables as $table) {

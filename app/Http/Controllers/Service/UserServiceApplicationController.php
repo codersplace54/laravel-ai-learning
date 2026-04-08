@@ -2159,6 +2159,8 @@ class UserServiceApplicationController extends Controller
                 $application_status = 'approved';
             } elseif ($incoming_service_status === 'pending') {
                 $application_status = 'pending';
+            } elseif ($incoming_service_status === 'Completed') {
+                $application_status = 'noc_issued';
             } else {
                 $application_status = 'under_review';
             }
