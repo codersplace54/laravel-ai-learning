@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\InvestorQuery;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class InvestorQueryController extends Controller
 {
@@ -61,10 +62,16 @@ class InvestorQueryController extends Controller
                 'is_verified'        => 1,
             ]);
 
+            $data = $investorQuery->toArray();
+
+            $data['attachment'] = $investorQuery->attachment
+                ? asset('storage/' . $investorQuery->attachment)
+                : null;
+
             return response()->json([
                 'status' => 1,
                 'message' => 'Investor query submitted successfully',
-                'data' => $investorQuery
+                'data' => $data
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -164,7 +171,6 @@ class InvestorQueryController extends Controller
                     'total' => $data->total(),
                 ],
             ], 200);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
 
             return response()->json([
@@ -172,7 +178,6 @@ class InvestorQueryController extends Controller
                 'message' => 'Validation failed',
                 'errors'  => $e->errors(),
             ], 422);
-            
         } catch (\Exception $e) {
 
             return response()->json([
@@ -190,19 +195,39 @@ class InvestorQueryController extends Controller
                 'id'      => 'required|exists:investor_queries,id',
                 'status'      => 'required|in:pending,resolved,closed',
                 'admin_note' => 'nullable|string',
+                'attachment' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:20480',
             ]);
 
             $query = InvestorQuery::where('id', $request->id)->first();
 
+
+
+            if ($request->hasFile('attachment')) {
+                if ($query->attachment && Storage::disk('public')->exists($query->attachment)) {
+                    Storage::disk('public')->delete($query->attachment);
+                }
+
+                $file = $request->file('attachment');
+                $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                $attachment = $file->storeAs('uploads/investor_queries', $filename, 'public');
+            }
+
             $query->update([
                 'status'           => $request->status,
                 'admin_note'      => $request->admin_note,
+                'attachment'  => $attachment ?? $query->attachment,
             ]);
+
+            $data = $query->fresh()->toArray();
+
+            $data['attachment'] = $query->attachment
+                ? asset('storage/' . $query->attachment)
+                : null;
 
             return response()->json([
                 'status'  => 1,
                 'message' => 'Status updated successfully',
-                'data'    => $query->fresh(),
+                'data'    => $data,
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
