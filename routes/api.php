@@ -452,7 +452,7 @@ Route::post('get-all-information-wizards', [InformationWizardController::class, 
 Route::post('get-information-wizard-filters', [InformationWizardController::class, 'get_information_wizard_filters']);
 
 Route::post('incentive-dashboard', [UserIncentiveApplicationController::class, 'incentive_dashboard']);
-Route::post('admin/incentive/scheme-list', [SchemeController::class, 'scheme_list']);
-Route::post('admin/incentive/proforma-list', [ProformaController::class, 'proforma_list']);
+Route::post('incentive/scheme-list', [SchemeController::class, 'scheme_list']);
+Route::post('incentive/proforma-list', [ProformaController::class, 'proforma_list']);
 
 Route::post('public-holiday-disabled-dates', [HolidayController::class, 'holiday_disabled_dates']);

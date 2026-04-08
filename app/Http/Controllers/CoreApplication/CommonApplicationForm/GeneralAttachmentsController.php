@@ -66,7 +66,7 @@ class GeneralAttachmentsController extends Controller
                 'unit_property_tax_clearance_certificate_pdf' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
                 'unit_process_flow_chart_diagram_or_write_up_pdf' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
                 'detailed_project_report_pdf' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
-                'other_supporting_docuement1_pdf' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+                'other_supporting_docuement1_pdf' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
 
                 'remove_self_certificate_format_3A' => 'nullable|in:delete',
                 'remove_tree_registration_certificate' => 'nullable|in:delete',

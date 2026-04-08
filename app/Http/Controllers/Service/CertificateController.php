@@ -715,7 +715,7 @@ class CertificateController extends Controller
 
             $application = UserServiceApplication::where('id', $request->application_id)->first();
 
-            $path = $application->NOC_certificate;
+            $path = $application->noc_certificate_url;
 
             // if (!$path || !Storage::disk('public')->exists($path)) {
             //     return response()->json(['status' => 0, 'message' => 'Certificate not generated for this application.'], 404);
@@ -723,7 +723,7 @@ class CertificateController extends Controller
             return response()->json([
                 'status' => 1,
                 'message' => 'PDF file is available.',
-                'download_url' => !empty($path) ? asset(Storage::url($path)) : null,
+                'download_url' => $path,
             ]);
         } catch (\Exception $e) {
 
