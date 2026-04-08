@@ -808,6 +808,11 @@ class UserServiceApplicationController extends Controller
                 ->orderBy('step_number', 'asc')
                 ->first();
 
+            $current_step = ApplicationWorkflowAssignment::where('application_id', $application_id)
+                ->where('step_number', $user_service_application->current_step_number)
+                ->latest('id')
+                ->first();
+
             $application_date = Carbon::parse($request->application_date ?? now());
             $target_days = $service->target_days ?? 0;
             $max_processing_date = $this->add_working_days($application_date, $target_days);
@@ -949,9 +954,15 @@ class UserServiceApplicationController extends Controller
                     'user_id' => $user_service_application->user_id,
                     'status' => $user_service_application->status,
                     'final_fee' => $final_fee,
-                    'current_step_number' => $user_service_application->step_number,
-                    'assigned_department_id' => $approval_flow->department_id,
-                    'assigned_hierarchy_level' => $approval_flow->hierarchy_level,
+                    'current_step_number' => $is_resubmission
+                        ? $user_service_application->current_step_number
+                        : $approval_flow->step_number,
+                    'assigned_department_id' => $is_resubmission
+                        ? $current_step->department_id
+                        : $approval_flow->department_id,
+                    'assigned_hierarchy_level' => $is_resubmission
+                        ? $current_step->hierarchy_level
+                        : $approval_flow->hierarchy_level,
                     'max_processing_date' => $max_processing_date->format('Y-m-d'),
                     'payment_status' => $user_service_application->payment_status,
                 ]
