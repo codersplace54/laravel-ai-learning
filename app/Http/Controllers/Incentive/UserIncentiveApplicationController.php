@@ -11,6 +11,7 @@ use App\Models\UserIncentiveApplication;
 use App\Models\ProformaQuestionnaire;
 use App\Models\Proforma;
 use App\Models\Scheme;
+use App\Models\DepartmentUser;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -257,7 +258,9 @@ class UserIncentiveApplicationController extends Controller
                 } else {
                     $application->workflow_status = 'submitted';
                 }
-                $application->submitted_at    = now();
+                if (!$application->submitted_at) {
+                    $application->submitted_at = now();
+                }
                 $application->user_id = Auth::id();
                 $application->save();
 
@@ -695,9 +698,11 @@ class UserIncentiveApplicationController extends Controller
                 'date_to'        => 'nullable|date|after_or_equal:date_from',
             ]);
 
-            $user = User::where('id', auth()->user()->id)->with('department_user')->first();
+            $user = auth()->user();
 
-            $designation = $user?->department_user?->designation;
+            $department_users = DepartmentUser::where('user_id', $user->id)->get();
+
+            $designation = $department_users->first()?->designation;
 
             if (!$designation) {
                 return response()->json([
@@ -711,7 +716,7 @@ class UserIncentiveApplicationController extends Controller
             $applications = UserIncentiveApplication::with(['proforma', 'user.district']);
 
             if (!$is_slc) {
-                $assigned_district_codes = array_filter([$user->department_user?->district_id]);
+                $assigned_district_codes = $department_users->pluck('district_id')->filter()->unique()->values()->all();
                 $applications->whereHas('user', function ($q) use ($assigned_district_codes) {
                     $q->whereIn('district_id', $assigned_district_codes);
                 });
@@ -1104,7 +1109,9 @@ class UserIncentiveApplicationController extends Controller
                 ];
             });
 
-            $subsidy_report = $application->subsidy_report ? json_decode($application->subsidy_report, true) : null;
+            $subsidy_report = $application->application_type === 'claim' && $application->subsidy_report
+                ? json_decode($application->subsidy_report, true)
+                : null;
 
             $latest_workflow_history = IncentiveWorkflowHistory::where('application_id', $application->id)
                 ->orderByDesc('action_taken_at')
@@ -1143,7 +1150,7 @@ class UserIncentiveApplicationController extends Controller
                 'remaining_claim'              => $application->remaining_claim,
                 'claim_calculated'             => $application->claim_calculated,
                 'form_answers_json'            => $questions_with_answers,
-                'subsidy_report'               => $subsidy_report,
+                ...($application->application_type === 'claim' ? ['subsidy_report' => $subsidy_report] : []),
                 'created_at'                   => optional($application->created_at)->toDateTimeString(),
                 'updated_at'                   => optional($application->updated_at)->toDateTimeString(),
                 'action_already_taken'         => $action_already_taken,
