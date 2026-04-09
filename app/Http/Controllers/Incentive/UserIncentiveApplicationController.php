@@ -806,6 +806,17 @@ class UserIncentiveApplicationController extends Controller
                 'eligibility_certificate_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png',
             ]);
 
+            $application_type = UserIncentiveApplication::where('id', $request->application_id)->value('application_type');
+            $is_gm_noc_issuance = $request->new_status === 'noc_issued' && $application_type === 'eligibility';
+
+            if ($is_gm_noc_issuance && !$request->hasFile('eligibility_certificate_file')) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Validation failed.',
+                    'errors'  => ['eligibility_certificate_file' => ['The eligibility certificate file is required when issuing NOC.']],
+                ], 422);
+            }
+
             DB::beginTransaction();
 
             $new_status = $request->new_status;
