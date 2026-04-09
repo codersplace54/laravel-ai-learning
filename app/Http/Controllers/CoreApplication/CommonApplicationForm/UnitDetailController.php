@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\UnitDetail;
+use App\Models\UserUnit;
 
 class UnitDetailController extends Controller
 {
@@ -418,11 +419,38 @@ class UnitDetailController extends Controller
             }
 
             $request->validate([
-                    'user_id' => 'required|exists:users,id',
-                ]);
+                'user_id' => 'required|exists:users,id',
+            ]);
 
 
             $unitDetails = UnitDetail::where('user_id', $request->user_id)->first();
+            $user_units = UserUnit::with([
+                'district',
+                'subdivision',
+                'ulb',
+                'ward',
+            ])
+                ->where('user_id', $request->user_id)
+                ->get()
+                ->map(function ($unit) {
+                    return [
+                        'id' => $unit->id,
+                        'unit_name' => $unit->unit_name,
+                        'address' => $unit->address,
+                        'phone' => $unit->phone,
+                        'type' => $unit->type ?? null,
+                        'district_code' => $unit->district_id,
+                        'district_name' => $unit->district->district_name ?? null,
+                        'subdivision_code' => $unit->subdivision_id,
+                        'subdivision_name' => $unit->subdivision->sub_division ?? null,
+                        'block_code' => $unit->ulb_id,
+                        'block_name' => $unit->ulb->ulb_name ?? null,
+                        'ward_code' => $unit->ward_id,
+                        'ward_name' => $unit->ward->name_of_gp_vc_or_ward ?? null,
+                        'status' => $unit->status,
+                        'created_at' => $unit->created_at,
+                    ];
+                });
 
             if (!$unitDetails) {
 
@@ -439,6 +467,7 @@ class UnitDetailController extends Controller
                 'status' => 1,
                 'message' => 'Unit details fetched successfully.',
                 'data' => $unitDetails,
+                'multiple_units'  => $user_units,
             ], 200);
         } catch (\Exception $e) {
 
