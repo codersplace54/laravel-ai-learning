@@ -33,7 +33,8 @@ class InvestmentApplication extends Model
         'other_requirements',
         'query_id',
         'status',
-        'admin_note',
+        'department_id',
+        'remark',
         'heard_from',
     ];
 

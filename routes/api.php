@@ -222,6 +222,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('investment-applications-list', [InvestmentApplicationController::class, 'investment_applications_list']);
         Route::post('investment-application-details', [InvestmentApplicationController::class, 'investment_application_details']);
+        Route::post('investment-application-assign', [InvestmentApplicationController::class, 'investment_application_assign']);
         Route::post('investment-application-update-status', [InvestmentApplicationController::class, 'investment_application_update_status']);
     });
 
@@ -356,6 +357,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('get-department-appeals/{user_id}', [AppealController::class, 'get_department_appeals']);
         Route::post('update-appeal-status', [AppealController::class, 'update_appeal_status']);
+
+        Route::post('investment-applications-by-department', [InvestmentApplicationController::class, 'investment_applications_by_department']);
+        Route::post('investment-application-update-status', [InvestmentApplicationController::class, 'investment_application_update_status']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);

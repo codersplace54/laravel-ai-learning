@@ -130,7 +130,7 @@ class PaymentController extends Controller
             }
 
             $scheme_count = count($scheme_names);
-            $total_amount = number_format(array_sum(array_map('floatval', $fee_amounts)), 2, '.', '');
+            $total_amount = (int) array_sum(array_map('intval', $fee_amounts));
 
             // Calculate service fee (apply to the first application only)
             $establishment_fee = null;
@@ -150,7 +150,7 @@ class PaymentController extends Controller
 
                     $scheme_names[] = '8443-00-117-45-01';
                     $fee_amounts[]  = $service_fee_amount;
-                    $total_amount   = number_format(((float) $total_amount + (float) $service_fee_amount), 2, '.', '');
+                    $total_amount   = (int) ($total_amount + $service_fee_amount);
 
                     break;
                 }
@@ -161,7 +161,7 @@ class PaymentController extends Controller
             $payment_order = PaymentOrder::create([
                 'user_id'                => $user_id,
                 'application_id'         => json_encode($application_ids),
-                'payment_amount'         => $total_amount,
+                'payment_amount'         => (string) $total_amount,
                 'payment_created_on'     => now(),
                 'payment_updated_on'     => now(),
                 'payment_status'         => 'initiated',
@@ -253,7 +253,7 @@ class PaymentController extends Controller
             // $form_html .= '<script>document.getElementById("egrasForm").submit();</script>';
             $form_html .= '</body></html>';
 
-            Log::channel('payment')->info('EGRAS form HTML: ' . $form_html);
+            // Log::channel('payment')->info('EGRAS form HTML: ' . $form_html);
 
             return $form_html;
         } catch (\Exception $e) {
