@@ -43,7 +43,7 @@ class UserIncentiveApplication extends Model
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
         'certificate_upload_date' => 'date',
-        'application_date' => 'date',
+        'application_date' => 'datetime',
     ];
     
     public function proforma(){

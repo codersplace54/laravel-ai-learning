@@ -468,9 +468,9 @@ class ServiceMasterController extends Controller
                         $param_name = $param->param_name;
                         $value = null;
 
-                        if (isset($user->{$param_name}) && !is_null($user->{$param_name})) {
-                            $value = $user->{$param_name};
-                        } elseif (!empty($param->default_source_table) && !empty($param->default_source_column)) {
+                        if ($param->data_source === 'static') {
+                            $value = $param->default_value;
+                        } elseif ($param->data_source === 'system_generated' || (!$param->data_source && !empty($param->default_source_table) && !empty($param->default_source_column))) {
                             try {
                                 $query = DB::table($param->default_source_table);
 
@@ -484,8 +484,30 @@ class ServiceMasterController extends Controller
                             } catch (\Exception $e) {
                                 $value = null;
                             }
-                        } elseif (!is_null($param->default_value)) {
-                            $value = $param->default_value;
+
+                            if (is_null($value) && !is_null($param->default_value)) {
+                                $value = $param->default_value;
+                            }
+                        } else {
+                            if (isset($user->{$param_name}) && !is_null($user->{$param_name})) {
+                                $value = $user->{$param_name};
+                            } elseif (!empty($param->default_source_table) && !empty($param->default_source_column)) {
+                                try {
+                                    $query = DB::table($param->default_source_table);
+
+                                    if ($param->default_source_table === 'users') {
+                                        $query->where('id', $user->id);
+                                    } else {
+                                        $query->where('user_id', $user->id);
+                                    }
+
+                                    $value = $query->value($param->default_source_column);
+                                } catch (\Exception $e) {
+                                    $value = null;
+                                }
+                            } elseif (!is_null($param->default_value)) {
+                                $value = $param->default_value;
+                            }
                         }
 
                         if (!is_null($value)) {
@@ -606,7 +628,7 @@ class ServiceMasterController extends Controller
                 'params.*.default_value' => 'nullable|string',
                 'params.*.default_source_table' => 'nullable|string',
                 'params.*.default_source_column' => 'nullable|string',
-                'params.*.data_source' => 'nullable|string|in:user_input,system_generated',
+                'params.*.data_source' => 'nullable|string|in:user_input,system_generated,static',
                 'params.*.description' => 'nullable|string',
             ]);
 
@@ -671,7 +693,7 @@ class ServiceMasterController extends Controller
                 'params.*.default_value' => 'nullable|string',
                 'params.*.default_source_table' => 'nullable|string',
                 'params.*.default_source_column' => 'nullable|string',
-                'params.*.data_source' => 'nullable|string|in:user_input,system_generated',
+                'params.*.data_source' => 'nullable|string|in:user_input,system_generated,static',
                 'params.*.description' => 'nullable|string',
             ]);
 
@@ -884,9 +906,9 @@ class ServiceMasterController extends Controller
                 $paramName = $param->param_name;
                 $value = null;
 
-                if (isset($user->{$paramName}) && !is_null($user->{$paramName})) {
-                    $value = $user->{$paramName};
-                } elseif (!empty($param->default_source_table) && !empty($param->default_source_column)) {
+                if ($param->data_source === 'static') {
+                    $value = $param->default_value;
+                } elseif ($param->data_source === 'system_generated' || (!$param->data_source && !empty($param->default_source_table) && !empty($param->default_source_column))) {
                     try {
                         $query = DB::table($param->default_source_table);
 
@@ -900,8 +922,30 @@ class ServiceMasterController extends Controller
                     } catch (\Exception $e) {
                         $value = null;
                     }
-                } elseif (!is_null($param->default_value)) {
-                    $value = $param->default_value;
+
+                    if (is_null($value) && !is_null($param->default_value)) {
+                        $value = $param->default_value;
+                    }
+                } else {
+                    if (isset($user->{$paramName}) && !is_null($user->{$paramName})) {
+                        $value = $user->{$paramName};
+                    } elseif (!empty($param->default_source_table) && !empty($param->default_source_column)) {
+                        try {
+                            $query = DB::table($param->default_source_table);
+
+                            if ($param->default_source_table === 'users') {
+                                $query->where('id', $user->id);
+                            } else {
+                                $query->where('user_id', $user->id);
+                            }
+
+                            $value = $query->value($param->default_source_column);
+                        } catch (\Exception $e) {
+                            $value = null;
+                        }
+                    } elseif (!is_null($param->default_value)) {
+                        $value = $param->default_value;
+                    }
                 }
 
                 if (!is_null($value)) {
