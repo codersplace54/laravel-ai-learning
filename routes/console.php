@@ -22,9 +22,9 @@ Schedule::command('saral:sync')
 Schedule::command('deemed:approve')
     ->dailyAt('00:30');
 
-// Schedule::command('whatsapp:migration-complete-profile')
-//     ->dailyAt('08:00')
-//     ->withoutOverlapping();
+Schedule::command('whatsapp:migration-complete-profile')
+    ->dailyAt('08:00')
+    ->withoutOverlapping();
 
 // Schedule::command('whatsapp:helpline-updated')
 //     ->dailyAt('08:30')

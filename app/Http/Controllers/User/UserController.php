@@ -49,7 +49,7 @@ class UserController extends Controller
                     'ulb_id' => 'nullable|integer|exists:tripura_master_data,ulb_lgd_code',
                     'ward_id' => 'nullable|integer|exists:tripura_master_data,gp_vc_ward_lgd_code',
                     'registered_enterprise_address' => 'nullable|string',
-                    'registered_enterprise_city' => 'nullable|string',
+                    'registered_enterprise_city' => ['nullable', 'string', 'not_regex:/[0-9]/'],
                     'user_type' => 'required|string|in:individual,department,admin',
                     'password' => 'required|string|min:6',
                     'pan' => 'required_if:user_type,individual|unique:users,pan|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
@@ -86,6 +86,7 @@ class UserController extends Controller
                     'ward_id.required'       => 'Ward is required.',
                     'ward_id.exists'         => 'Selected ward is invalid.',
                     'registered_enterprise_address.required' => 'Enterprise address is required.',
+                    'registered_enterprise_city.not_regex' => 'Enterprise city must not contain numbers.',
                     'registered_enterprise_city.required' => 'Enterprise city is required.',
                     'user_type.required' => 'User type is required.',
                     'user_type.in' => 'User type must be either individual,department or admin.',
@@ -310,7 +311,7 @@ class UserController extends Controller
                 $rules['registered_enterprise_address'] = 'nullable|string';
             }
             if ($request->registered_enterprise_city !== null) {
-                $rules['registered_enterprise_city'] = 'nullable|string';
+                $rules['registered_enterprise_city'] = ['nullable', 'string', 'not_regex:/[0-9]/'];
             }
             if ($request->user_type !== null) {
                 $rules['user_type'] = 'required|in:individual,department,admin';
@@ -370,6 +371,7 @@ class UserController extends Controller
                 'user_name.alpha_dash' => 'Username can only contain letters, numbers, dashes, and underscores.',
                 'registered_enterprise_address.required' => 'Enterprise address is required.',
                 'registered_enterprise_city.required' => 'Enterprise city is required.',
+                'registered_enterprise_city.not_regex' => 'Enterprise city must not contain numbers.',
                 'user_type.required' => 'User type is required.',
                 'user_type.in' => 'User type must be individual,department or admin.',
                 'password.min' => 'Password must be at least 6 characters long.',

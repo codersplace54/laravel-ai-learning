@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\InvestmentApplication;
+use App\Models\DepartmentUser;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class InvestmentApplicationController extends Controller
 {
@@ -88,6 +90,8 @@ class InvestmentApplicationController extends Controller
                 'status'   => 'nullable|in:pending,under_review,approved,rejected',
                 'search'   => 'nullable|string|max:255',
                 'per_page' => 'nullable|integer|min:1|max:100',
+                'date_from' => 'nullable|date',
+                'date_to'   => 'nullable|date|after_or_equal:date_from',
             ]);
 
             $perPage = $request->per_page ?? 10;
@@ -96,6 +100,14 @@ class InvestmentApplicationController extends Controller
 
             if ($request->filled('status')) {
                 $q->where('status', $request->status);
+            }
+
+            if ($request->filled('date_from') && $request->filled('date_to')) {
+                $q->whereBetween('created_at', [$request->date_from, $request->date_to]);
+            } elseif ($request->filled('date_from')) {
+                $q->whereDate('created_at', '>=', $request->date_from);
+            } elseif ($request->filled('date_to')) {
+                $q->whereDate('created_at', '<=', $request->date_to);
             }
 
             if ($request->filled('search')) {
@@ -152,19 +164,120 @@ class InvestmentApplicationController extends Controller
         }
     }
 
+    public function investment_applications_by_department(Request $request)
+    {
+        try {
+            $request->validate([
+                'status'   => 'nullable|in:pending,under_review,approved,rejected',
+                'search'   => 'nullable|string|max:255',
+                'per_page' => 'nullable|integer|min:1|max:100',
+                'date_from' => 'nullable|date',
+                'date_to'   => 'nullable|date|after_or_equal:date_from',
+            ]);
+
+            $user = Auth::user();
+
+            $dept_user = DepartmentUser::where('user_id', $user->id)
+                ->whereIn('hierarchy_level', ['state1', 'state2', 'state3'])
+                ->where('is_active', 1)
+                ->first();
+
+            if (!$dept_user) {
+                return response()->json(['status' => 0, 'message' => 'Access denied. Only state level department users can view investment applications.'], 403);
+            }
+
+            $perPage = $request->per_page ?? 10;
+
+            $q = InvestmentApplication::query()
+                ->with('user:id,authorized_person_name,email_id,mobile_no')
+                ->where('department_id', $dept_user->department_id)
+                ->orderBy('id', 'desc');
+
+            if ($request->filled('status')) {
+                $q->where('status', $request->status);
+            }
+
+            if ($request->filled('date_from') && $request->filled('date_to')) {
+                $q->whereBetween('created_at', [$request->date_from, $request->date_to]);
+            } elseif ($request->filled('date_from')) {
+                $q->whereDate('created_at', '>=', $request->date_from);
+            } elseif ($request->filled('date_to')) {
+                $q->whereDate('created_at', '<=', $request->date_to);
+            }
+
+            if ($request->filled('search')) {
+                $s = $request->search;
+                $q->where(function ($qq) use ($s) {
+                    $qq->where('project_title', 'like', "%{$s}%")
+                        ->orWhere('gstin', 'like', "%{$s}%")
+                        ->orWhereHas('user', function ($u) use ($s) {
+                            $u->where('authorized_person_name', 'like', "%{$s}%")
+                                ->orWhere('email_id', 'like', "%{$s}%")
+                                ->orWhere('mobile_no', 'like', "%{$s}%");
+                        });
+                });
+            }
+
+            $data = $q->paginate($perPage);
+
+            $items = collect($data->items())->map(function ($item) {
+                $item->connectivity_needs = $item->connectivity_needs ? json_decode($item->connectivity_needs) : [];
+                return $item;
+            });
+
+            return response()->json([
+                'status'     => 1,
+                'message'    => 'Investment applications fetched successfully',
+                'data'       => $items,
+                'pagination' => [
+                    'current_page' => $data->currentPage(),
+                    'last_page'    => $data->lastPage(),
+                    'per_page'     => $data->perPage(),
+                    'total'        => $data->total(),
+                ],
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 0, 'message' => 'Failed to fetch applications', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function investment_application_assign(Request $request)
+    {
+        try {
+            $request->validate([
+                'id'            => 'required|exists:investment_applications,id',
+                'department_id' => 'required|exists:departments,id',
+            ]);
+
+            $application = InvestmentApplication::where('id', $request->id)->first();
+            $application->update([
+                'department_id' => $request->department_id,
+                'status'        => 'under_review',
+            ]);
+
+            return response()->json(['status' => 1, 'message' => 'Application assigned to department successfully', 'data' => $application->fresh()], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 0, 'message' => 'Failed to assign application', 'error' => $e->getMessage()], 500);
+        }
+    }
+
     public function investment_application_update_status(Request $request)
     {
         try {
             $request->validate([
-                'id'         => 'required|exists:investment_applications,id',
-                'status'     => 'required|in:pending,under_review,approved,rejected',
-                'admin_note' => 'nullable|string',
+                'id'     => 'required|exists:investment_applications,id',
+                'status' => 'required|in:under_review,approved,rejected',
+                'remark' => 'nullable|string',
             ]);
 
-            $application = InvestmentApplication::where('id',$request->id)->first();
+            $application = InvestmentApplication::where('id', $request->id)->first();
             $application->update([
-                'status'     => $request->status,
-                'admin_note' => $request->admin_note,
+                'status' => $request->status,
+                'remark' => $request->remark,
             ]);
 
             return response()->json(['status' => 1, 'message' => 'Status updated successfully', 'data' => $application->fresh()], 200);
