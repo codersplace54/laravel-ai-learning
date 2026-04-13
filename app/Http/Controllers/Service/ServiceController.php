@@ -886,13 +886,13 @@ class ServiceController extends Controller
                         ]);
 
                         SmsService::send(
-                            $user->mobile_no,
+                            $application->user->mobile_no,
                             $sms['message'],
                             $sms['template_id']
                         );
 
                         SendWhatsAppNotification::dispatch(
-                            $user->mobile_no,
+                            $application->user->mobile_no,
                             'application_approved_v2',
                             [
                                 $application->applicationId,
