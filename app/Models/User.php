@@ -120,4 +120,9 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(DepartmentUser::class, 'user_id');
     }
+
+    public function whatsappLogs()
+    {
+        return $this->hasMany(WhatsappLog::class, 'user_id');
+    }
 }

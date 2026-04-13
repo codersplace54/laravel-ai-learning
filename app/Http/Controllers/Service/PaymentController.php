@@ -96,7 +96,7 @@ class PaymentController extends Controller
                     foreach ($items as $item) {
                         if ($item['amount'] > 0) {
                             $scheme_names[] = $item['scheme'];
-                            $fee_amounts[]  = (float) $item['amount'];
+                            $fee_amounts[]  = (int) $item['amount'];
                         }
                     }
                     continue;
@@ -126,7 +126,7 @@ class PaymentController extends Controller
                     $scheme_names[] = trim($application->service->egras_scheme_code ?? 'NA');
                 }
 
-                $fee_amounts[] = number_format($amount, 2, '.', '');
+                $fee_amounts[] = (int) $amount;
             }
 
             $scheme_count = count($scheme_names);
@@ -146,7 +146,7 @@ class PaymentController extends Controller
                         $operational_fee = (float) $service_fee_data['amount'];
                     }
 
-                    $service_fee_amount = number_format((float) $service_fee_data['amount'], 2, '.', '');
+                    $service_fee_amount = (int) $service_fee_data['amount'];
 
                     $scheme_names[] = '8443-00-117-45-01';
                     $fee_amounts[]  = $service_fee_amount;
@@ -252,6 +252,8 @@ class PaymentController extends Controller
             $form_html .= '</form>';
             // $form_html .= '<script>document.getElementById("egrasForm").submit();</script>';
             $form_html .= '</body></html>';
+
+            Log::channel('payment')->info('EGRAS form HTML: ' . $form_html);
 
             return $form_html;
         } catch (\Exception $e) {

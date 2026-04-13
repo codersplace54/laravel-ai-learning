@@ -485,11 +485,9 @@ class UserIncentiveApplicationController extends Controller
                 ->where('user_id', $user_id)
                 ->where('application_type', 'claim')
                 ->orderByDesc('decided_at')
-                ->with('proforma')
-                ->get()
-                ->unique('proforma_id')
-                ->values()
                 ->pluck('proforma_id')
+                ->unique()
+                ->values()
                 ->toArray();
 
             // only merge claim proforma ids that are also fully eligible
@@ -521,9 +519,9 @@ class UserIncentiveApplicationController extends Controller
                         ->when($request->filled('application_no'), fn($q) => $q->where('application_no', 'like', '%' . $request->application_no . '%'))
                         ->when($request->filled('status'), fn($q) => $q->where('workflow_status', $request->status))
                         ->orderByDesc('id')
-                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id', 'subsidy_report', 'remaining_claim');
+                        ->select('id', 'proforma_id', 'application_no', 'submitted_at', 'decided_at', 'workflow_status', 'user_id', 'subsidy_report', 'remaining_claim', 'application_type');
                 }])
-                ->select('id', 'scheme_id', 'code', 'title', 'description', 'claim_type')
+                ->select('id', 'scheme_id', 'code', 'title', 'description', 'claim_type', 'max_claim_count')
                 ->get();
 
             $response_data = [];
@@ -532,6 +530,8 @@ class UserIncentiveApplicationController extends Controller
 
                 $can_reapply_for_claim = $this->can_reapply_for_claim($user_id, $proforma);
                 $has_applications = isset($proforma->applications) && count($proforma->applications) > 0;
+
+                $send_back_statuses = ['sent_back_by_da', 'sent_back_by_gm', 'sent_back_by_slc'];
 
                 if (!$has_applications) {
                     $response_data[] = [
@@ -548,6 +548,7 @@ class UserIncentiveApplicationController extends Controller
                         'workflow_status'  => null,
                         'raw_status'       => null,
                         'is_editable'      => false,
+                        'is_send_back'     => false,
                         'can_reapply'      => false,
                         'claimed_amount'   => null,
                         'approved_amount'  => null,
@@ -579,6 +580,7 @@ class UserIncentiveApplicationController extends Controller
                         'workflow_status'  => $application ? $this->status_label($application->workflow_status) : null,
                         'raw_status'       => $application?->workflow_status,
                         'is_editable'      => $this->is_application_editable($application),
+                        'is_send_back'     => in_array($application->workflow_status, $send_back_statuses, true),
                         'can_reapply'      => $can_reapply_for_claim,
                         'claimed_amount'   => $claimed,
                         'approved_amount'  => $approved,
@@ -723,7 +725,7 @@ class UserIncentiveApplicationController extends Controller
                 $applications->whereIn('workflow_status', ['submitted','re_submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da']);
             } elseif ($designation == "General Manager") {
 
-                $applications->whereIn('workflow_status', ['approved_by_da', 'noc_issued', 'claim_approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm']);
+                $applications->whereIn('workflow_status', ['approved_by_da', 'noc_issued', 'claim_approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm', 'under_review_slc']);
             } elseif ($designation == "State Level Committee") {
 
                 $applications->whereIn('workflow_status', ['under_review_slc', 'claim_approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc']);
@@ -848,11 +850,6 @@ class UserIncentiveApplicationController extends Controller
 
             $application->current_reviewer_user_id = Auth::id();
 
-            $final_statuses = ['rejected_by_slc', 'rejected_by_da', 'rejected_by_gm', 'noc_issued', 'claim_approved_by_slc','claim_approved_by_gm'];
-            if (in_array($new_status, $final_statuses, true)) {
-                $application->decided_at = now();
-            }
-
             if (($new_status === 'noc_issued') && $application->application_type === 'eligibility') {
                 if (empty($application->eligibility_certificate_no)) {
                     $application->eligibility_certificate_no = 'ELG-' . date('y') . '-' . str_pad((string)$application->id, 6, '0', STR_PAD_LEFT);
@@ -897,6 +894,7 @@ class UserIncentiveApplicationController extends Controller
                 in_array($new_status, ['claim_approved_by_gm', 'claim_approved_by_slc', 'approved_by_da'], true)
                 && $application->application_type === 'claim'
                 && $application->subsidy_report
+                && !empty($approved_items)
             ) {
 
                 $report = json_decode($application->subsidy_report, true) ?: [];
@@ -908,7 +906,15 @@ class UserIncentiveApplicationController extends Controller
                         $qid = (string) ($item['question_id'] ?? '');
 
                         if ($approved_items && array_key_exists($qid, $approved_items)) {
-                            $item['approved'] = $approved_items[$qid];
+                            $approved_value = (float) $approved_items[$qid];
+                            if ($approved_value > (float) ($item['claimed'] ?? 0)) {
+                                DB::rollBack();
+                                return response()->json([
+                                    'status'  => 0,
+                                    'message' => 'Approved amount cannot exceed claimed amount for "' . ($item['label'] ?? $qid) . '".',
+                                ], 422);
+                            }
+                            $item['approved'] = $approved_value;
                         }
 
                         $claimed  = ($item['claimed'] ?? 0);
@@ -937,6 +943,10 @@ class UserIncentiveApplicationController extends Controller
 
             $application->workflow_status = $new_status;
 
+            $final_statuses = ['rejected_by_slc', 'rejected_by_da', 'rejected_by_gm', 'noc_issued', 'claim_approved_by_slc', 'claim_approved_by_gm'];
+            if (in_array($new_status, $final_statuses, true)) {
+                $application->decided_at = now();
+            }
 
             if ($request->file('eligibility_certificate_file')) {
                 $file = $request->eligibility_certificate_file;
@@ -1063,7 +1073,7 @@ class UserIncentiveApplicationController extends Controller
             if ($designation === 'Dealing Assistant') {
                 $allowed = ['submitted', 're_submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da'];
             } elseif ($designation === 'General Manager') {
-                $allowed = ['approved_by_da', 'noc_issued', 'claim_approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm'];
+                $allowed = ['approved_by_da', 'noc_issued', 'claim_approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm', 'under_review_slc'];
             } elseif ($designation === 'State Level Committee') {
                 $allowed = ['under_review_slc', 'claim_approved_by_slc', 'rejected_by_slc', 'sent_back_by_slc'];
             } else {

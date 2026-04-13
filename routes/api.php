@@ -47,6 +47,7 @@ use App\Http\Controllers\Admin\ActivityLogController;
 use app\Http\Controllers\DeployController;
 use App\Http\Controllers\GovernmentOrderController;
 use App\Http\Controllers\InvestorQueryController;
+use App\Http\Controllers\InvestmentApplicationController;
 use App\Http\Controllers\Service\ClearanceController;
 use App\Http\Controllers\TestingFacilityCapabilityController;
 use App\Http\Controllers\PublicNotificationController;
@@ -218,7 +219,13 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('investor-queries-list', [InvestorQueryController::class, 'investor_queries_list']);
         Route::post('investor-queries-update-status', [InvestorQueryController::class, 'investor_queries_update_status']);
+
+        Route::post('investment-applications-list', [InvestmentApplicationController::class, 'investment_applications_list']);
+        Route::post('investment-application-details', [InvestmentApplicationController::class, 'investment_application_details']);
+        Route::post('investment-application-update-status', [InvestmentApplicationController::class, 'investment_application_update_status']);
     });
+
+    Route::post('investment-application-store', [InvestmentApplicationController::class, 'investment_application_store']);
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
     Route::post('fetch-service-details', [ServiceMasterController::class, 'fetch_service_details']);
