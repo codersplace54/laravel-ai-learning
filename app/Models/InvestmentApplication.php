@@ -3,8 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-
 class InvestmentApplication extends Model
 {
     protected $fillable = [
@@ -33,14 +31,25 @@ class InvestmentApplication extends Model
         'other_requirements',
         'query_id',
         'status',
-        'department_id',
         'remark',
+        'action_taken_by',
         'heard_from',
     ];
 
 
-    public function user(): BelongsTo
+    public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function actionTaker()
+    {
+        return $this->belongsTo(User::class, 'action_taken_by');
+    }
+
+    public function departments()
+    {
+        return $this->belongsToMany(Department::class, 'investment_application_departments', 'investment_application_id', 'department_id')
+            ->withTimestamps();
     }
 }
