@@ -79,6 +79,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('logout', [AuthController::class, 'logout']);
         Route::post('change-password', [AuthController::class, 'change_password']);
+        Route::post('investment-application-store', [InvestmentApplicationController::class, 'investment_application_store']);
+        Route::post('investment-application-details', [InvestmentApplicationController::class, 'investment_application_details']);
     });
 
     Route::post('caf/unit-details-store', [UnitDetailController::class, 'unit_details_store_or_update']);
@@ -226,8 +228,6 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('investment-application-update-status', [InvestmentApplicationController::class, 'investment_application_update_status']);
     });
 
-    Route::post('investment-application-store', [InvestmentApplicationController::class, 'investment_application_store']);
-
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
     Route::post('fetch-service-details', [ServiceMasterController::class, 'fetch_service_details']);
     Route::post('service-questionnaire-view', [ServiceQuestionnaireController::class, 'service_questionnaire_view']);
@@ -294,6 +294,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('fetch-licence-numbers', [ClearanceController::class, 'fetch_licence_numbers']);
         Route::post('fetch-user-clearances', [ClearanceController::class, 'fetch_user_clearances']);
         Route::post('fetch-clearance-details', [ClearanceController::class, 'fetch_clearance_details']);
+
+        Route::post('investment-applications-list', [InvestmentApplicationController::class, 'investment_applications_list']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
@@ -358,7 +360,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-department-appeals/{user_id}', [AppealController::class, 'get_department_appeals']);
         Route::post('update-appeal-status', [AppealController::class, 'update_appeal_status']);
 
-        Route::post('investment-applications-by-department', [InvestmentApplicationController::class, 'investment_applications_by_department']);
+        Route::post('investment-applications-list', [InvestmentApplicationController::class, 'investment_applications_list']);
         Route::post('investment-application-update-status', [InvestmentApplicationController::class, 'investment_application_update_status']);
     });
 

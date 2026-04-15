@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\InvestmentApplication;
 use App\Models\DepartmentUser;
+use App\Jobs\SendWhatsAppNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -40,7 +41,7 @@ class InvestmentApplicationController extends Controller
             ]);
 
             $application = InvestmentApplication::create([
-                'user_id'                    => auth()->id(),
+                'user_id'                    => Auth::id(),
                 'aadhaar_or_business_id'     => $request->aadhaar_or_business_id,
                 'registered_office_address'  => $request->registered_office_address,
                 'communication_address'      => $request->communication_address,
@@ -71,6 +72,12 @@ class InvestmentApplicationController extends Controller
                 'query_id' => 'TR' . str_pad($application->id, 7, '0', STR_PAD_LEFT),
             ]);
 
+            $user = Auth::user();
+            $phone = $user->whatsapp_no ?? $user->mobile_no;
+            if ($phone) {
+                SendWhatsAppNotification::dispatch($phone, 'investor_application_received_v1', [$application->query_id]);
+            }
+
             return response()->json([
                 'status'  => 1,
                 'message' => 'Investment application submitted successfully',
@@ -87,34 +94,51 @@ class InvestmentApplicationController extends Controller
     {
         try {
             $request->validate([
-                'status'   => 'nullable|in:pending,under_review,approved,rejected',
-                'search'   => 'nullable|string|max:255',
-                'per_page' => 'nullable|integer|min:1|max:100',
+                'status'    => 'nullable|in:pending,under_review,approved,rejected',
+                'search'    => 'nullable|string|max:255',
+                'per_page'  => 'nullable|integer|min:1|max:100',
                 'date_from' => 'nullable|date',
                 'date_to'   => 'nullable|date|after_or_equal:date_from',
             ]);
 
+            $user    = Auth::user();
             $perPage = $request->per_page ?? 10;
 
-            $q = InvestmentApplication::query()->with('user:id,authorized_person_name,email_id,mobile_no')->orderBy('id', 'desc');
+            $base = InvestmentApplication::query();
 
-            if ($request->filled('status')) {
-                $q->where('status', $request->status);
+            if ($user->user_type === 'admin') {
+                // admin sees all
+            } elseif ($user->user_type === 'department') {
+                $dept_user = DepartmentUser::where('user_id', $user->id)
+                    ->whereIn('hierarchy_level', ['state1', 'state2', 'state3'])
+                    ->where('is_active', 1)
+                    ->first();
+
+                if (!$dept_user) {
+                    return response()->json(['status' => 0, 'message' => 'Access denied. Only state level department users can view investment applications.'], 403);
+                }
+
+                $base->whereHas('departments', function ($dq) use ($dept_user) {
+                    $dq->where('departments.id', $dept_user->department_id);
+                });
+            } else {
+                $base->where('user_id', $user->id);
             }
 
             if ($request->filled('date_from') && $request->filled('date_to')) {
-                $q->whereBetween('created_at', [$request->date_from, $request->date_to]);
+                $base->whereBetween('created_at', [$request->date_from, $request->date_to]);
             } elseif ($request->filled('date_from')) {
-                $q->whereDate('created_at', '>=', $request->date_from);
+                $base->whereDate('created_at', '>=', $request->date_from);
             } elseif ($request->filled('date_to')) {
-                $q->whereDate('created_at', '<=', $request->date_to);
+                $base->whereDate('created_at', '<=', $request->date_to);
             }
 
             if ($request->filled('search')) {
                 $s = $request->search;
-                $q->where(function ($qq) use ($s) {
+                $base->where(function ($qq) use ($s) {
                     $qq->where('project_title', 'like', "%{$s}%")
                         ->orWhere('gstin', 'like', "%{$s}%")
+                        ->orWhere('query_id', 'like', "%{$s}%")
                         ->orWhereHas('user', function ($u) use ($s) {
                             $u->where('authorized_person_name', 'like', "%{$s}%")
                                 ->orWhere('email_id', 'like', "%{$s}%")
@@ -123,16 +147,39 @@ class InvestmentApplicationController extends Controller
                 });
             }
 
-            $data = $q->paginate($perPage);
+            $counts = (clone $base)->selectRaw('status, count(*) as total')
+                ->groupBy('status')
+                ->pluck('total', 'status');
 
+            $summary = [
+                'total'        => (clone $base)->count(),
+                'pending'      => $counts['pending'] ?? 0,
+                'under_review' => $counts['under_review'] ?? 0,
+                'approved'     => $counts['approved'] ?? 0,
+                'rejected'     => $counts['rejected'] ?? 0,
+            ];
+
+            $q = (clone $base)->with([
+                'user:id,authorized_person_name,email_id,mobile_no',
+                'departments:id,name',
+                'actionTaker:id,authorized_person_name',
+            ])->orderBy('id', 'desc');
+
+            if ($request->filled('status')) {
+                $q->where('status', $request->status);
+            }
+
+            $data  = $q->paginate($perPage);
             $items = collect($data->items())->map(function ($item) {
                 $item->connectivity_needs = $item->connectivity_needs ? json_decode($item->connectivity_needs) : [];
+                $item->is_action_taken = !is_null($item->action_taken_by);
                 return $item;
             });
 
             return response()->json([
                 'status'     => 1,
                 'message'    => 'Investment applications fetched successfully',
+                'summary'    => $summary,
                 'data'       => $items,
                 'pagination' => [
                     'current_page' => $data->currentPage(),
@@ -153,8 +200,14 @@ class InvestmentApplicationController extends Controller
         try {
             $request->validate(['id' => 'required|exists:investment_applications,id']);
 
-            $application = InvestmentApplication::with('user:id,authorized_person_name,email_id,mobile_no')->where('id',$request->id)->first();
+            $application = InvestmentApplication::with([
+                'user:id,authorized_person_name,email_id,mobile_no',
+                'departments:id,name',
+                'actionTaker:id,authorized_person_name',
+            ])->where('id', $request->id)->first();
+
             $application->connectivity_needs = $application->connectivity_needs ? json_decode($application->connectivity_needs) : [];
+            $application->is_action_taken = !is_null($application->action_taken_by);
 
             return response()->json(['status' => 1, 'message' => 'Application details fetched', 'data' => $application], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -164,100 +217,29 @@ class InvestmentApplicationController extends Controller
         }
     }
 
-    public function investment_applications_by_department(Request $request)
-    {
-        try {
-            $request->validate([
-                'status'   => 'nullable|in:pending,under_review,approved,rejected',
-                'search'   => 'nullable|string|max:255',
-                'per_page' => 'nullable|integer|min:1|max:100',
-                'date_from' => 'nullable|date',
-                'date_to'   => 'nullable|date|after_or_equal:date_from',
-            ]);
-
-            $user = Auth::user();
-
-            $dept_user = DepartmentUser::where('user_id', $user->id)
-                ->whereIn('hierarchy_level', ['state1', 'state2', 'state3'])
-                ->where('is_active', 1)
-                ->first();
-
-            if (!$dept_user) {
-                return response()->json(['status' => 0, 'message' => 'Access denied. Only state level department users can view investment applications.'], 403);
-            }
-
-            $perPage = $request->per_page ?? 10;
-
-            $q = InvestmentApplication::query()
-                ->with('user:id,authorized_person_name,email_id,mobile_no')
-                ->where('department_id', $dept_user->department_id)
-                ->orderBy('id', 'desc');
-
-            if ($request->filled('status')) {
-                $q->where('status', $request->status);
-            }
-
-            if ($request->filled('date_from') && $request->filled('date_to')) {
-                $q->whereBetween('created_at', [$request->date_from, $request->date_to]);
-            } elseif ($request->filled('date_from')) {
-                $q->whereDate('created_at', '>=', $request->date_from);
-            } elseif ($request->filled('date_to')) {
-                $q->whereDate('created_at', '<=', $request->date_to);
-            }
-
-            if ($request->filled('search')) {
-                $s = $request->search;
-                $q->where(function ($qq) use ($s) {
-                    $qq->where('project_title', 'like', "%{$s}%")
-                        ->orWhere('gstin', 'like', "%{$s}%")
-                        ->orWhereHas('user', function ($u) use ($s) {
-                            $u->where('authorized_person_name', 'like', "%{$s}%")
-                                ->orWhere('email_id', 'like', "%{$s}%")
-                                ->orWhere('mobile_no', 'like', "%{$s}%");
-                        });
-                });
-            }
-
-            $data = $q->paginate($perPage);
-
-            $items = collect($data->items())->map(function ($item) {
-                $item->connectivity_needs = $item->connectivity_needs ? json_decode($item->connectivity_needs) : [];
-                return $item;
-            });
-
-            return response()->json([
-                'status'     => 1,
-                'message'    => 'Investment applications fetched successfully',
-                'data'       => $items,
-                'pagination' => [
-                    'current_page' => $data->currentPage(),
-                    'last_page'    => $data->lastPage(),
-                    'per_page'     => $data->perPage(),
-                    'total'        => $data->total(),
-                ],
-            ], 200);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            return response()->json(['status' => 0, 'message' => 'Failed to fetch applications', 'error' => $e->getMessage()], 500);
-        }
-    }
-
     public function investment_application_assign(Request $request)
     {
         try {
             $request->validate([
-                'id'            => 'required|exists:investment_applications,id',
-                'department_id' => 'required|exists:departments,id',
+                'id'             => 'required|exists:investment_applications,id',
+                'department_ids' => 'required|array|min:1',
+                'department_ids.*' => 'exists:departments,id',
+                'remark'         => 'nullable|string',
             ]);
 
-            $application = InvestmentApplication::where('id', $request->id)->first();
+            $application = InvestmentApplication::where('id',$request->id)->first();
+            $application->departments()->sync($request->department_ids);
+
             $application->update([
-                'department_id' => $request->department_id,
-                'status'        => 'under_review',
+                'status' => 'under_review',
+                'remark' => $request->remark,
             ]);
 
-            return response()->json(['status' => 1, 'message' => 'Application assigned to department successfully', 'data' => $application->fresh()], 200);
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Application assigned to department(s) successfully',
+                'data'    => $application->fresh()->load('departments:id,name'),
+            ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -269,16 +251,52 @@ class InvestmentApplicationController extends Controller
     {
         try {
             $request->validate([
-                'id'     => 'required|exists:investment_applications,id',
-                'status' => 'required|in:under_review,approved,rejected',
+                'id'     => 'required|integer',
+                'status' => 'required|in:pending,under_review,approved,rejected',
                 'remark' => 'nullable|string',
             ]);
+            
+            $user = Auth::user();
 
-            $application = InvestmentApplication::where('id', $request->id)->first();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            if ($user->user_type === 'department') {
+                $dept_user = DepartmentUser::where('user_id', $user->id)
+                    ->whereIn('hierarchy_level', ['state1', 'state2', 'state3'])
+                    ->where('is_active', 1)
+                    ->first();
+
+                if (!$dept_user) {
+                    return response()->json(['status' => 0, 'message' => 'Access denied.'], 403);
+                }
+
+                $application = InvestmentApplication::whereHas('departments', function ($dq) use ($dept_user) {
+                    $dq->where('departments.id', $dept_user->department_id);
+                })->where('id', $request->id)->first();
+
+                if (!$application) {
+                    return response()->json(['status' => 0, 'message' => 'Application not found or not assigned to your department.'], 404);
+                }
+            } else {
+                $application = InvestmentApplication::where('id', $request->id)->first();;
+            }
+
             $application->update([
-                'status' => $request->status,
-                'remark' => $request->remark,
+                'status'          => $request->status,
+                'remark'          => $request->remark,
+                'action_taken_by' => $user->id,
             ]);
+
+            $application->load('user');
+            $phone = $application->user->whatsapp_no ?? $application->user->mobile_no ?? null;
+            if ($phone) {
+                SendWhatsAppNotification::dispatch($phone, 'investor_app_update_v1', [
+                    $application->query_id,
+                    $request->remark ?? 'No remark provided',
+                ]);
+            }
 
             return response()->json(['status' => 1, 'message' => 'Status updated successfully', 'data' => $application->fresh()], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
