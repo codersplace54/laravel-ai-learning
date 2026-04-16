@@ -213,6 +213,7 @@ class UserIncentiveApplicationController extends Controller
             $application->proforma_id = $proforma->id;
             $application->scheme_id = $proforma->scheme->id;
             $application->user_id = Auth::id();
+            $application->district_id = $user->district_id;
             if (!$application->submitted_at) {
                 $application->application_date = now();
             }
@@ -719,9 +720,7 @@ class UserIncentiveApplicationController extends Controller
 
             if (!$is_slc) {
                 $assigned_district_codes = $department_users->pluck('district_id')->filter()->unique()->values()->all();
-                $applications->whereHas('user', function ($q) use ($assigned_district_codes) {
-                    $q->whereIn('district_id', $assigned_district_codes);
-                });
+                $applications->whereIn(DB::raw('COALESCE(user_incentive_applications.district_id, 272)'), $assigned_district_codes);
             }
 
 

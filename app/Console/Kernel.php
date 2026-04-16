@@ -9,10 +9,12 @@ class Kernel extends ConsoleKernel
 {
     protected $commands = [
         Commands\PaymentStatusCron::class,
+        Commands\SingleWindowReportCron::class,
     ];
 
     protected function schedule(Schedule $schedule)
     {
+        $schedule->command('report:single-window-native')->hourly();
     }
 
     protected function commands()

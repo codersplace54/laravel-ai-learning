@@ -459,6 +459,9 @@ Route::post('previous-investor-query', [InvestorQueryController::class, 'get_pre
 
 Route::post('government-orders-list', [GovernmentOrderController::class, 'government_orders_list']);
 
+Route::post('update-third-party-report', [ReportController::class, 'update_third_party_report']);
+Route::post('online-single-windows-report', [ReportController::class, 'online_single_windows_report']);
+
 Route::post('public-certificate-download', [CertificateController::class, 'public_certificate_download']);
 
 Route::post('get-all-information-wizards', [InformationWizardController::class, 'get_all_information_wizards']);
