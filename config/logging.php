@@ -199,6 +199,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'single_window_report' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/single_window_report.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];

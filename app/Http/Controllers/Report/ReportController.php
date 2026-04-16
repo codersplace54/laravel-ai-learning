@@ -18,6 +18,7 @@ use App\Models\Inspection;
 use App\Models\TripuraMasterData;
 use App\Models\Department;
 use App\Models\UserFeedback;
+use App\Models\SingleWindowReport;
 
 class ReportController extends Controller
 {
@@ -1490,6 +1491,87 @@ class ReportController extends Controller
                 'status' => 0,
                 'message' => 'Failed to generate report',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function update_third_party_report(Request $request)
+    {
+        try {
+            $request->validate([
+                'data'                          => 'required|array',
+                'data.*.service_id'             => 'required|integer|exists:service_masters,id',
+                'data.*.total_received'         => 'required|integer',
+                'data.*.total_processed'        => 'required|integer',
+                'data.*.total_approved'         => 'required|integer',
+                'data.*.max_time_to_approve'    => 'nullable|numeric',
+                'data.*.min_time_to_approve'    => 'nullable|numeric',
+                'data.*.avg_time_to_approve'    => 'nullable|numeric',
+                'data.*.median_time_to_approve' => 'nullable|numeric',
+                'data.*.avg_fee'                => 'nullable|numeric',
+            ]);
+
+            foreach ($request->data as $row) {
+                SingleWindowReport::updateOrCreate(
+                    ['type' => 'third_party', 'service_id' => $row['service_id']],
+                    [
+                        'total_received'         => $row['total_received'],
+                        'total_processed'        => $row['total_processed'],
+                        'total_approved'         => $row['total_approved'],
+                        'max_time_to_approve'    => $row['max_time_to_approve'] ?? 0,
+                        'min_time_to_approve'    => $row['min_time_to_approve'] ?? 0,
+                        'avg_time_to_approve'    => $row['avg_time_to_approve'] ?? 0,
+                        'median_time_to_approve' => $row['median_time_to_approve'] ?? 0,
+                        'avg_fee'                => $row['avg_fee'] ?? 0,
+                    ]
+                );
+            }
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Third party report updated successfully.',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function online_single_windows_report()
+    {
+        try {
+            $rows = SingleWindowReport::with(['service:id,department_id,service_title_or_description,target_days', 'service.department:id,name'])
+                ->whereIn('type', ['native', 'third_party'])
+                ->get()
+                ->map(function ($row) {
+                    return [
+                        'department_name'        => $row->service?->department?->name,
+                        'noc_description'        => $row->service?->service_title_or_description,
+                        'time_limit'             => $row->service?->target_days,
+                        'total_received'         => (int) $row->total_received,
+                        'total_processed'        => (int) $row->total_processed,
+                        'total_approved'         => (int) $row->total_approved,
+                        'max_time_to_approve'    => round($row->max_time_to_approve, 2),
+                        'min_time_to_approve'    => round($row->min_time_to_approve, 2),
+                        'avg_time_to_approve'    => round($row->avg_time_to_approve, 2),
+                        'median_time_to_approve' => round($row->median_time_to_approve, 2),
+                        'avg_fee'                => round($row->avg_fee, 2),
+                        'type'                   => $row->type,
+                    ];
+                })
+                ->values();
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Single window reports.',
+                'data'    => $rows,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
