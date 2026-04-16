@@ -38,6 +38,7 @@ class ProformaQuestionnaireController extends Controller
                 'upload_rule'           => 'nullable',
                 'upload_rule.max_size_mb'     => 'nullable|integer|max:25',
                 'sample_format'         => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
+                'display_rule'          => 'nullable|array',
             ]);
 
             DB::beginTransaction();
@@ -72,12 +73,16 @@ class ProformaQuestionnaireController extends Controller
                 'claim_per_unit'        => $request->claim_per_unit,
                 'claim_percentage'      => $request->claim_percentage,
                 'upload_rule'           => $request->upload_rule ? json_encode($request->upload_rule) : null,
+                'display_rule'          => $request->display_rule ? json_encode($request->display_rule) : null,
                 'created_by'            => $user->email_id,
                 'sample_format'         => $sample_format,
             ]);
 
             $proforma_questionnaire->upload_rule = $proforma_questionnaire->upload_rule
                 ? json_decode($proforma_questionnaire->upload_rule, true)
+                : null;
+            $proforma_questionnaire->display_rule = $proforma_questionnaire->display_rule
+                ? json_decode($proforma_questionnaire->display_rule, true)
                 : null;
 
             if ($proforma_questionnaire->sample_format) {
@@ -132,6 +137,7 @@ class ProformaQuestionnaireController extends Controller
                 'upload_rule'           => 'nullable',
                 'upload_rule.max_size_mb' => 'nullable|integer|max:5',
                 'sample_format'         => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
+                'display_rule'          => 'nullable|array',
             ]);
 
             DB::beginTransaction();
@@ -170,12 +176,16 @@ class ProformaQuestionnaireController extends Controller
                 'claim_per_unit'        => $request->claim_per_unit ?? $proforma_question->claim_per_unit,
                 'claim_percentage'      => $request->claim_percentage ?? $proforma_question->claim_percentage,
                 'upload_rule'           => $request->upload_rule ? json_encode($request->upload_rule) : $proforma_question->upload_rule,
+                'display_rule'          => $request->display_rule ? json_encode($request->display_rule) : $proforma_question->display_rule,
                 'updated_by'            => $user->email_id,
                 'sample_format'         => $sample_format ?? $proforma_question->sample_format,
             ]);
 
             $proforma_question->upload_rule = $proforma_question->upload_rule
                 ? json_decode($proforma_question->upload_rule, true)
+                : null;
+            $proforma_question->display_rule = $proforma_question->display_rule
+                ? json_decode($proforma_question->display_rule, true)
                 : null;
             if ($proforma_question->sample_format) {
                 $proforma_question->sample_format = asset(Storage::url($proforma_question->sample_format));
@@ -254,6 +264,9 @@ class ProformaQuestionnaireController extends Controller
                 $question->upload_rule = $question->upload_rule
                     ? json_decode($question->upload_rule, true)
                     : null;
+                $question->display_rule = $question->display_rule
+                    ? json_decode($question->display_rule, true)
+                    : null;
             }
 
             return response()->json([
@@ -282,6 +295,9 @@ class ProformaQuestionnaireController extends Controller
 
             $proforma_questionnaire->upload_rule = $proforma_questionnaire->upload_rule
                 ? json_decode($proforma_questionnaire->upload_rule, true)
+                : null;
+            $proforma_questionnaire->display_rule = $proforma_questionnaire->display_rule
+                ? json_decode($proforma_questionnaire->display_rule, true)
                 : null;
 
             if ($proforma_questionnaire->sample_format) {
