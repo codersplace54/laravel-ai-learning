@@ -29,6 +29,7 @@ class SingleWindowReportCron extends Command
                 DB::raw('AVG(CASE WHEN status = "approved" THEN approved_fee END) as avg_fee')
             )
             ->whereNotNull('application_date')
+            ->where('is_third_party',0)
             ->groupBy('service_id')
             ->get();
 
