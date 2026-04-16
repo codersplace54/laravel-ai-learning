@@ -1674,6 +1674,28 @@ class UserServiceApplicationController extends Controller
                 ];
             }
 
+            $user = $application->user;
+
+            $user_details = $user ? [
+                'id' => $user->id,
+                'name' => $user->authorized_person_name,
+                'phone' => $user->mobile_no,
+                'email' => $user->email_id,
+                'district_code' => $user->district->district_code,
+                'district_name' => $user->district->district_name,
+                'subdivision_code' => $user->subdivision->sub_lgd_code,
+                'subdivision_name' => $user->subdivision->sub_division,
+                'ulb_code' => $user->ulb->ulb_lgd_code,
+                'ulb_name' => $user->ulb->ulb_name,
+                'ward_code' => $user->ward->gp_vc_ward_lgd_code,
+                'ward_name' => $user->ward->name_of_gp_vc_or_ward,
+            ] : null;
+
+            $application->makeHidden(['user']);
+
+            if ($application->service) {
+                $application->service->makeHidden(['renewal_cycles']);
+            }
 
             return response()->json([
                 'status'            => 1,
@@ -1687,6 +1709,7 @@ class UserServiceApplicationController extends Controller
                 'payment_details' => $payment_details,
                 'feedback_details' => $feedback_details,
                 'appeal_details'   => $appeal_details,
+                'user'              => $user_details,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -4187,5 +4210,139 @@ class UserServiceApplicationController extends Controller
             'late_fee' => round($late_fee, 2),
             'renewal_fee' => round($total_payable, 2),
         ];
+    }
+
+    public function get_user_renewed_applications(Request $request)
+    {
+
+        try {
+
+
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $request->validate([
+                'user_id' => 'required|integer|exists:users,id',
+                'per_page'  => 'nullable|integer'
+            ]);
+
+            $per_page = $request->per_page ?? 10;
+
+            $query = UserServiceApplication::where('user_id', $request->user_id)
+                ->whereNotNull('previous_application_id')
+                ->where('status', '!=', 'expired')
+                ->with('my_feedback', 'service.department')
+                ->orderBy('application_date', 'desc');
+
+            if ($request->filled('date_from') && $request->filled('date_to')) {
+                $query->whereBetween('application_date', [$request->date_from, $request->date_to]);
+            } elseif ($request->filled('date_from')) {
+                $query->whereDate('application_date', '>=', $request->date_from);
+            } elseif ($request->filled('date_to')) {
+                $query->whereDate('application_date', '<=', $request->date_to);
+            }
+
+            if ($request->filled('service_id')) {
+                $query->where('service_id', $request->service_id);
+            }
+
+            if ($request->filled('department_id')) {
+                $query->whereHas('service', function ($q) use ($request) {
+                    $q->where('department_id', $request->department_id);
+                });
+            }
+
+            if ($request->filled('application_type')) {
+                $query->whereHas('service', function ($q) use ($request) {
+                    $q->where('noc_type', $request->application_type);
+                });
+            }
+
+            $service_user_application = $query->paginate($per_page);
+
+            if ($service_user_application->isEmpty()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No service user applications found for the given user_id.',
+                ], 404);
+            }
+
+            foreach ($service_user_application as $service) {
+                $service->application_data = json_decode($service->application_data, true);
+                $latest_workflow = $service->workflow()->latest('updated_at')->first();
+
+                if ($service->status === 'approved') {
+                    $appeal_for = 'approved';
+                } elseif ($service->status === 'extra_payment') {
+                    $appeal_for = 'extra_payment';
+                } elseif (!empty($service->max_processing_date) && now()->gt($service->max_processing_date)) {
+                    $appeal_for = 'max_processing_date_exceed';
+                } else {
+                    $appeal_for = null;
+                }
+
+                $appeal = $service->appeal;
+
+                if ($appeal) {
+                    if ($appeal->status === 'pending') {
+                        $appeal_for = 'in_progress';
+                    } elseif ($appeal->status === 'rejected') {
+                        $appeal_for = 'rejected';
+                    } elseif ($appeal->status === 'approved') {
+                        $appeal_for = 'your appeal request approved';
+                    }
+                }
+
+                $response_data[] = [
+                    'application_id' => $service->id,
+                    'service_id' => $service->service_id,
+                    'application_data' => $service->application_data,
+                    'previous_application_id' => $service->previous_application_id,
+                    'service_title_or_description' => $service->service->service_title_or_description ?? null,
+                    'application_type' => $service->service->noc_type ?? null,
+                    'department' => $service->service->department_id ?? null,
+                    'department_name' => $service->service->department->name ?? null,
+                    'application_number' => $service->applicationId ?? null,
+                    'application_date' => $service->application_date ?? null,
+                    'noc_payment_type' => $service->noc_payment_type ?? null,
+                    'NOC_expiry_date'  => $service->NOC_expiry_date ?? null,
+                    'payment_status'  => $service->payment_status ?? null,
+                    'status'  => $service->status ?? null,
+                    'renewal_date'  => $service->renewalYear ?? null,
+                    'allow_repeat_application' => $service->allow_repeat_application ?? null,
+                    'latest_workflow_status' => $latest_workflow?->status ?? null,
+                    'service_mode' => $service->service->service_mode ?? null,
+                    'already_rated' => $service->my_feedback ? true : false,
+                    'rating' => $service->my_feedback->satisfaction ?? null,
+                    'feedback_id' => $service->my_feedback->id ?? null,
+                    'is_certificate' => $service->NOC_certificate ? true : false,
+
+                    'appeal_for' => $appeal_for
+                ];
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Service user application fetched successfully.',
+                'data' => $response_data,
+                'pagination' => [
+                    'current_page' => $service_user_application->currentPage(),
+                    'per_page'     => $service_user_application->count(),
+                    'total'        => $service_user_application->total(),
+                    'last_page'    => $service_user_application->lastPage(),
+                    'next_page_url' => $service_user_application->nextPageUrl(),
+                    'prev_page_url' => $service_user_application->previousPageUrl(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 }
