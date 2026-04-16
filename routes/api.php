@@ -250,6 +250,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::match(['get', 'post'],'/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
         Route::post('calculate-fee', [UserServiceApplicationController::class, 'calculate_fee']);
         Route::post('calculate-industrial-estate-amounts', [UserServiceApplicationController::class, 'calculate_industrial_estate_amounts']);
+        Route::post('get-user-renewed-applications', [UserServiceApplicationController::class, 'get_user_renewed_applications']);
+        Route::post('update-user-unit-status', [UnitDetailController::class, 'update_user_unit_status']);
 
         Route::post('update-payment', [PaymentController::class, 'update_payment']);
         Route::post('user-service-applications-by-payment-status', [PaymentController::class, 'user_service_applications_by_payment_status']);

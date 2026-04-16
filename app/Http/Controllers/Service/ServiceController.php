@@ -587,8 +587,9 @@ class ServiceController extends Controller
 
             $application = UserServiceApplication::with([
                 'service:id,service_title_or_description',
-                'user:id,authorized_person_name,mobile_no,email_id',
-                'workflow.department:id,name'
+                'user:id,authorized_person_name,mobile_no,email_id,district_id,subdivision_id,ulb_id,ward_id',
+                'workflow.department:id,name',
+                'workflow.actionTaker:id,authorized_person_name,email_id'
             ])
                 ->where('id', $id)
                 ->first();
@@ -669,7 +670,9 @@ class ServiceController extends Controller
                         ? asset('storage/' . $history_data->status_file)
                         : null,
                     'action_taken_at' => $history_data->action_taken_at,
-                    'action_taken_by' => $history_data->action_taken_by,
+                    'action_taken_by' => optional($history_data->actionTaker)->authorized_person_name
+                        ? optional($history_data->actionTaker)->authorized_person_name . ' (' . optional($history_data->actionTaker)->email_id . ')'
+                        : null,
                 ];
             }
 
@@ -715,6 +718,14 @@ class ServiceController extends Controller
                     'name'  => $application->user->authorized_person_name,
                     'phone' => $application->user->mobile_no,
                     'email' => $application->user->email_id,
+                    'district_code'   => $application->user->district->district_code ?? null,
+                    'district_name' => $application->user->district->district_name ?? null,
+                    'subdivision_code'   => $application->user->subdivision->sub_lgd_code ?? null,
+                    'subdivision_name' =>  $application->user->subdivision->sub_division ?? null,
+                    'ulb_code'   => $application->user->ulb->ulb_lgd_code ?? null,
+                    'ulb_name' => $application->user->ulb->ulb_name ?? null,
+                    'ward_code'   => $application->user->ward->gp_vc_ward_lgd_code ?? null,
+                    'ward_name' => $application->user->ward->name_of_gp_vc_or_ward ?? null,
                 ],
                 'application_data' => $formatted_application_data,
                 'status'           => $application->status,

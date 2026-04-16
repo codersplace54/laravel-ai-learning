@@ -479,4 +479,35 @@ class UnitDetailController extends Controller
             ], 500);
         }
     }
+
+    public function update_user_unit_status(Request $request)
+    {
+
+
+        try {
+
+            $request->validate([
+                'id' => 'required|exists:user_units,id',
+                'status' => 'required|in:active,blocked',
+            ]);
+
+            $unit = UserUnit::findOrFail($request->id);
+
+            $unit->status = $request->status;
+            $unit->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User unit status updated successfully',
+                'data' => $unit
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
