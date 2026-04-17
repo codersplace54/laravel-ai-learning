@@ -47,7 +47,7 @@ class PanVerificationService
         } catch (Exception $e) {
             Log::channel('pan_verification')->error('PAN verification failed', [
                 'error' => $e->getMessage(),
-                'pan_data' => $pan_data
+                'pan'   => substr($pan_data['pan'] ?? '', 0, 2) . '********',
             ]);
             throw $e;
         }
@@ -151,21 +151,15 @@ class PanVerificationService
      */
     private function log_transaction(array $request, array $response): void
     {
-        // Save request details to files for debugging (similar to original PHP)
-        $headers_text = [];
-        foreach ($request['headers'] as $key => $value) {
-            $headers_text[] = "{$key}: {$value}";
-        }
-        
-        file_put_contents(storage_path('logs/last_request_headers.txt'), implode("\n", $headers_text));
-        file_put_contents(storage_path('logs/last_request_body.json'), json_encode($request['body'], JSON_UNESCAPED_SLASHES));
-        
-        // Log::info('PAN verification transaction', [
-        //     'request_headers' => $request['headers'],
-        //     'request_body' => $request['body'],
-        //     'response' => $response,
-        //     'timestamp' => now()
-        // ]);
+        $safe_headers = $request['headers'];
+        file_put_contents(
+            storage_path('logs/last_request_headers.txt'),
+            implode("\n", array_map(
+                fn($k, $v) => "{$k}: {$v}",
+                array_keys($safe_headers),
+                $safe_headers
+            ))
+        );
     }
 
     /**

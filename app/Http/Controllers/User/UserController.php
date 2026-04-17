@@ -1040,21 +1040,40 @@ class UserController extends Controller
 
             DB::beginTransaction();
 
-            $user_otp = Otp::where('mobile_no', $mobile_no)
-                ->where('code', $otp_code)
-                ->first();
+            $user_otp = Otp::where('mobile_no', $mobile_no)->first();
 
             if (!$user_otp) {
                 DB::rollBack();
                 return response()->json([
                     'status' => 0,
-                    'message' => 'Invalid OTP. Please enter the correct OTP and try again.',
+                    'message' => 'OTP not found. Please request a new OTP.',
                 ], 422);
             }
 
+            if ($user_otp->isLocked()) {
+                DB::rollBack();
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Too many incorrect OTP attempts. Please request a new OTP and try again.',
+                ], 429);
+            }
 
+            if ($user_otp->code !== $otp_code) {
 
-            $user_otp->update(['is_verified' => 1]);
+                $user_otp->recordFailedAttempt();
+
+                $remaining = Otp::MAX_FAILED_ATTEMPTS - $user_otp->fresh()->failed_attempts;
+
+                DB::commit();
+                return response()->json([
+                    'status' => 0,
+                    'message' => $remaining > 0
+                        ? "Invalid OTP. $remaining attempt(s) remaining."
+                        : 'Too many incorrect OTP attempts. Please request a new OTP and try again.',
+                ], 422);
+            }
+
+            $user_otp->update(['is_verified' => 1, 'failed_attempts' => 0]);
 
             DB::commit();
 

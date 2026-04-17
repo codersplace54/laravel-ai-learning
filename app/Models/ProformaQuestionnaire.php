@@ -25,6 +25,7 @@ class ProformaQuestionnaire extends Model
         'validation_required',
         'field_rules',
         'upload_rule',
+        'display_rule',
         'created_by',
         'updated_by',
         'sample_format',
