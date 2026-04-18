@@ -1265,7 +1265,6 @@ class UserController extends Controller
                 'ward',
             ])
                 ->where('user_id', $user->id)
-                ->where('status', 'active')
                 ->orderBy('id', 'desc')
                 ->get()
                 ->map(function ($unit) {
@@ -1393,7 +1392,7 @@ class UserController extends Controller
 
         try{
 
-        
+
         $pan = strtoupper(trim($data['pan']));
         $secret = config('services.pan_lookup.key');
 
