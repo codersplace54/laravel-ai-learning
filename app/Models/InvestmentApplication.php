@@ -34,6 +34,7 @@ class InvestmentApplication extends Model
         'remark',
         'action_taken_by',
         'heard_from',
+        'dpr_or_other_documents',
     ];
 
 

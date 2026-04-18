@@ -29,6 +29,7 @@ class ProformaQuestionnaire extends Model
         'created_by',
         'updated_by',
         'sample_format',
+        'special_relaxation',
     ];
 
     protected $casts = [
