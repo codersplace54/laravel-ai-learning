@@ -18,6 +18,11 @@ class ProformaQuestionnaireController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
+            $validation = $this->validateRules($request);
+            if ($validation !== true) {
+                return $validation;
+            }
+
             $request->validate([
                 'proforma_id'           => 'required|integer|exists:proformas,id',
                 'question_label'        => 'required|string',
@@ -39,6 +44,7 @@ class ProformaQuestionnaireController extends Controller
                 'upload_rule.max_size_mb'     => 'nullable|integer|max:25',
                 'sample_format'         => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
                 'display_rule'          => 'nullable|array',
+                'special_relaxation'    => 'nullable|array',
             ]);
 
             DB::beginTransaction();
@@ -74,6 +80,7 @@ class ProformaQuestionnaireController extends Controller
                 'claim_percentage'      => $request->claim_percentage,
                 'upload_rule'           => $request->upload_rule ? json_encode($request->upload_rule) : null,
                 'display_rule'          => $request->display_rule ? json_encode($request->display_rule) : null,
+                'special_relaxation'    => $request->special_relaxation ? json_encode($request->special_relaxation) : null,
                 'created_by'            => $user->email_id,
                 'sample_format'         => $sample_format,
             ]);
@@ -83,6 +90,9 @@ class ProformaQuestionnaireController extends Controller
                 : null;
             $proforma_questionnaire->display_rule = $proforma_questionnaire->display_rule
                 ? json_decode($proforma_questionnaire->display_rule, true)
+                : null;
+            $proforma_questionnaire->special_relaxation = $proforma_questionnaire->special_relaxation
+                ? json_decode($proforma_questionnaire->special_relaxation, true)
                 : null;
 
             if ($proforma_questionnaire->sample_format) {
@@ -116,6 +126,11 @@ class ProformaQuestionnaireController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
+            $validation = $this->validateRules($request);
+            if ($validation !== true) {
+                return $validation;
+            }
+
             $request->validate([
                 'id'                    => 'required|integer|exists:proforma_questionnaires,id',
                 'proforma_id'           => 'required|integer|exists:proformas,id',
@@ -138,6 +153,7 @@ class ProformaQuestionnaireController extends Controller
                 'upload_rule.max_size_mb' => 'nullable|integer|max:5',
                 'sample_format'         => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
                 'display_rule'          => 'nullable|array',
+                'special_relaxation'    => 'nullable|array',
             ]);
 
             DB::beginTransaction();
@@ -177,6 +193,7 @@ class ProformaQuestionnaireController extends Controller
                 'claim_percentage'      => $request->claim_percentage ?? $proforma_question->claim_percentage,
                 'upload_rule'           => $request->upload_rule ? json_encode($request->upload_rule) : $proforma_question->upload_rule,
                 'display_rule'          => $request->display_rule ? json_encode($request->display_rule) : $proforma_question->display_rule,
+                'special_relaxation'    => $request->special_relaxation ? json_encode($request->special_relaxation) : $proforma_question->special_relaxation,
                 'updated_by'            => $user->email_id,
                 'sample_format'         => $sample_format ?? $proforma_question->sample_format,
             ]);
@@ -186,6 +203,9 @@ class ProformaQuestionnaireController extends Controller
                 : null;
             $proforma_question->display_rule = $proforma_question->display_rule
                 ? json_decode($proforma_question->display_rule, true)
+                : null;
+            $proforma_question->special_relaxation = $proforma_question->special_relaxation
+                ? json_decode($proforma_question->special_relaxation, true)
                 : null;
             if ($proforma_question->sample_format) {
                 $proforma_question->sample_format = asset(Storage::url($proforma_question->sample_format));
@@ -267,6 +287,9 @@ class ProformaQuestionnaireController extends Controller
                 $question->display_rule = $question->display_rule
                     ? json_decode($question->display_rule, true)
                     : null;
+                $question->special_relaxation = $question->special_relaxation
+                    ? json_decode($question->special_relaxation, true)
+                    : null;
             }
 
             return response()->json([
@@ -299,6 +322,9 @@ class ProformaQuestionnaireController extends Controller
             $proforma_questionnaire->display_rule = $proforma_questionnaire->display_rule
                 ? json_decode($proforma_questionnaire->display_rule, true)
                 : null;
+            $proforma_questionnaire->special_relaxation = $proforma_questionnaire->special_relaxation
+                ? json_decode($proforma_questionnaire->special_relaxation, true)
+                : null;
 
             if ($proforma_questionnaire->sample_format) {
                 $proforma_questionnaire->sample_format = asset(Storage::url($proforma_questionnaire->sample_format));
@@ -312,5 +338,30 @@ class ProformaQuestionnaireController extends Controller
         } catch (\Exception $e) {
             return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
         }
+    }
+
+    private function validateRules(Request $request)
+    {
+        if ($request->has('display_rule')) {
+            foreach ($request->display_rule as $rule) {
+                $allowed_keys = ['target_question_id', 'condition_operator', 'start_value', 'end_value'];
+                $extra_keys = array_diff(array_keys($rule), $allowed_keys);
+                if (!empty($extra_keys)) {
+                    return response()->json(['status' => 0, 'message' => 'Invalid keys in display_rule. Only these keys are allowed: ' . implode(', ', $allowed_keys)], 422);
+                }
+            }
+        }
+
+        if ($request->has('special_relaxation')) {
+            foreach ($request->special_relaxation as $relaxation) {
+                $allowed_keys = ['target_question_id', 'condition_operator', 'start_value', 'end_value', 'is_extra_claim', 'extra_claim_per_unit', 'extra_claim_percentage', 'max_claim_amount'];
+                $extra_keys = array_diff(array_keys($relaxation), $allowed_keys);
+                if (!empty($extra_keys)) {
+                    return response()->json(['status' => 0, 'message' => 'Invalid keys in special_relaxation. Only these keys are allowed: ' . implode(', ', $allowed_keys)], 422);
+                }
+            }
+        }
+
+        return true;
     }
 }

@@ -652,6 +652,12 @@ class UserIncentiveApplicationController extends Controller
                 $data['upload_rule'] = $question->upload_rule
                     ? json_decode($question->upload_rule, true)
                     : null;
+                $data['display_rule'] = $question->display_rule
+                    ? json_decode($question->display_rule, true)
+                    : null;
+                $data['special_relaxation'] = $question->special_relaxation
+                    ? json_decode($question->special_relaxation, true)
+                    : null;
 
                 $data['sample_format'] = $question->sample_format
                     ? asset(Storage::url($question->sample_format))
@@ -1367,62 +1373,162 @@ class UserIncentiveApplicationController extends Controller
 
     private function build_subsidy_report($proformaId, $answers): array
     {
-
-        $claim_questions = ProformaQuestionnaire::where('proforma_id', $proformaId)
+        $all_questions = ProformaQuestionnaire::where('proforma_id', $proformaId)
             ->where('status', 1)
-            ->where('is_claim', 'yes')
-            ->get(['id', 'question_label', 'claim_per_unit', 'claim_percentage']);
+            ->get(['id', 'question_label', 'is_claim', 'claim_per_unit', 'claim_percentage', 'special_relaxation']);
+
+        $relaxation_map = []; 
+
+        foreach ($all_questions as $q) {
+            if (!empty($q->special_relaxation)) {
+                $rules = json_decode($q->special_relaxation, true);
+
+                if (!empty($rules) && is_array($rules)) {
+                    foreach ($rules as $rule) {
+                        $target_id      = (string) ($rule['target_question_id'] ?? '');
+                        $condition_q_id = (string) $q->id;
+                        $user_answer    = $answers[$condition_q_id]['value'] ?? null;
+
+                        if ($user_answer !== null && $user_answer !== '' && $this->check_relaxation_condition($user_answer, $rule)) {
+                            if (!isset($relaxation_map[$target_id])) {
+                                $relaxation_map[$target_id] = [];
+                            }
+                            $relaxation_map[$target_id][] = $rule;
+                        }
+                    }
+                }
+            }
+        }
+
+        $claim_questions = $all_questions->where('is_claim', 'yes');
 
         $subsidy_items = [];
-        $claim_total = 0.0;
+        $claim_total   = 0.0;
 
         foreach ($claim_questions as $q) {
-            $qid = (string)$q->id;
-            $value = $answers[$qid]['value'] ?? null;
-            $base = (int)($value);
+            $qid        = (string) $q->id;
+            $base_value = (float) ($answers[$qid]['value'] ?? 0);
 
-            $basis = null;
-            $claimed = 0.0;
+            $basis         = null;
             $rate_per_unit = null;
-            $percentage  = null;
+            $percentage    = null;
+            $base_claimed  = 0.0;
 
             if (!empty($q->claim_per_unit) && $q->claim_per_unit > 0) {
-                $basis = 'per_unit';
-                $rate_per_unit = $q->claim_per_unit;
-                $claimed = round($base * $rate_per_unit, 2);
+                $basis         = 'per_unit';
+                $rate_per_unit = (float) $q->claim_per_unit;
+                $base_claimed  = round($base_value * $rate_per_unit, 2);
             } elseif (!empty($q->claim_percentage) && $q->claim_percentage > 0) {
-                $basis = 'percentage';
-                $percentage = $q->claim_percentage;
-                $claimed = round($base * ($percentage / 100), 2);
-            } else {
-                continue;
+                $basis        = 'percentage';
+                $percentage   = (float) $q->claim_percentage;
+                $base_claimed = round($base_value * ($percentage / 100), 2);
             }
 
-            $claim_total += $claimed;
+            if ($basis !== null) {
+                $relaxation_applied = false;
+                $relaxation_detail  = null;
+                $claimed            = $base_claimed;
 
-            $subsidy_items[] = [
-                'question_id'   => (int)$q->id,
-                'label'         => $q->question_label,
-                'basis'         => $basis,
-                'base_value'    => $base,
-                'rate_per_unit' => $rate_per_unit,
-                'percentage'    => $percentage,
-                'claimed'       => $claimed,
-                'approved'      => null,
-                'status'        => 'eligible',
-                'remarks'       => null,
-            ];
+                if (!empty($relaxation_map[$qid])) {
+                    $best_rule  = null;
+                    $best_extra = -1.0;
+
+                    foreach ($relaxation_map[$qid] as $rule) {
+                        if (($rule['extra_claim_per_unit'] ?? null) > 0) {
+                            $extra = round($base_value * (float) $rule['extra_claim_per_unit'], 2);
+                        } elseif (($rule['extra_claim_percentage'] ?? null) > 0) {
+                            $extra = round($base_value * ((float) $rule['extra_claim_percentage'] / 100), 2);
+                        } else {
+                            $extra = 0.0;
+                        }
+
+                        if ($extra > $best_extra) {
+                            $best_extra = $extra;
+                            $best_rule  = $rule;
+                        }
+                    }
+
+                    // handle max claim amount
+                    if ($best_rule && $best_extra > 0) {
+                        $raw_total = $base_claimed + $best_extra;
+                        $cap       = isset($best_rule['max_claim_amount']) && $best_rule['max_claim_amount'] > 0
+                            ? (float) $best_rule['max_claim_amount']
+                            : null;
+
+                        $claimed            = round($cap ? min($raw_total, $cap) : $raw_total, 2);
+                        $relaxation_applied = true;
+                        $relaxation_detail  = [
+                            'extra_claim_per_unit'   => $best_rule['extra_claim_per_unit'] ?? null,
+                            'extra_claim_percentage' => $best_rule['extra_claim_percentage'] ?? null,
+                            'extra_amount'           => round($claimed - $base_claimed, 2),
+                            'max_claim_amount'       => $cap,
+                            'cap_applied'            => $cap && $raw_total > $cap,
+                        ];
+                    }
+                }
+
+                $claim_total += $claimed;
+
+                $subsidy_items[] = [
+                    'question_id'        => (int) $q->id,
+                    'label'              => $q->question_label,
+                    'basis'              => $basis,
+                    'base_value'         => $base_value,
+                    'rate_per_unit'      => $rate_per_unit,
+                    'percentage'         => $percentage,
+                    'base_claimed'       => $base_claimed,
+                    'relaxation_applied' => $relaxation_applied,
+                    'relaxation_detail'  => $relaxation_detail,
+                    'claimed'            => $claimed,
+                    'approved'           => null,
+                    'status'             => 'eligible',
+                    'remarks'            => null,
+                ];
+            }
         }
 
         return [
             'subsidy_items' => $subsidy_items,
-            'payments' => [],
-            'totals' => [
+            'payments'      => [],
+            'totals'        => [
                 'claimed'   => round($claim_total, 2),
                 'approved'  => 0.0,
                 'disbursed' => 0.0,
             ],
         ];
+    }
+
+    private function check_relaxation_condition($user_answer, array $rule): bool
+    {
+        $operator    = $rule['condition_operator'] ?? '=';
+        $start_value = $rule['start_value'] ?? null;
+        $end_value   = $rule['end_value'] ?? null;
+
+        $answer = trim((string) $user_answer);
+
+        switch ($operator) {
+            case '=':
+                return strtolower($answer) === strtolower((string) $start_value);
+            case '!=':
+                return strtolower($answer) !== strtolower((string) $start_value);
+            case '>':
+                return is_numeric($answer) && is_numeric($start_value) && (float) $answer > (float) $start_value;
+            case '<':
+                return is_numeric($answer) && is_numeric($start_value) && (float) $answer < (float) $start_value;
+            case '>=':
+                return is_numeric($answer) && is_numeric($start_value) && (float) $answer >= (float) $start_value;
+            case '<=':
+                return is_numeric($answer) && is_numeric($start_value) && (float) $answer <= (float) $start_value;
+            case 'between':
+                return is_numeric($answer) && is_numeric($start_value) && is_numeric($end_value)
+                    && (float) $answer >= (float) $start_value
+                    && (float) $answer <= (float) $end_value;
+            case 'in':
+                $allowed = array_map('trim', explode(',', (string) $start_value));
+                return in_array($answer, $allowed, true);
+            default:
+                return false;
+        }
     }
 
     private function validate_proforma_file_inputs(Request $request): void

@@ -7,6 +7,7 @@ use App\Models\DepartmentUser;
 use App\Jobs\SendWhatsAppNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class InvestmentApplicationController extends Controller
 {
@@ -38,7 +39,15 @@ class InvestmentApplicationController extends Controller
                 'connectivity_needs.*'       => 'nullable|string',
                 'other_requirements'         => 'nullable|string',
                 'heard_from'                 => 'required',
+                'dpr_or_other_documents'     => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:5120',
             ]);
+
+            $dpr_or_other_documents = null;
+            if ($request->file('dpr_or_other_documents')) {
+                $file = $request->file('dpr_or_other_documents');
+                $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+                $dpr_or_other_documents = $file->storeAs('uploads/' . Auth::id() . '/investment_applications', $filename, 'public');
+            }
 
             $application = InvestmentApplication::create([
                 'user_id'                    => Auth::id(),
@@ -65,6 +74,7 @@ class InvestmentApplicationController extends Controller
                 'connectivity_needs'         => $request->connectivity_needs ? json_encode($request->connectivity_needs) : null,
                 'other_requirements'         => $request->other_requirements,
                 'heard_from'                 => $request->heard_from,
+                'dpr_or_other_documents'     => $dpr_or_other_documents,
                 'status'                     => 'pending',
             ]);
 
@@ -173,6 +183,7 @@ class InvestmentApplicationController extends Controller
             $items = collect($data->items())->map(function ($item) {
                 $item->connectivity_needs = $item->connectivity_needs ? json_decode($item->connectivity_needs) : [];
                 $item->is_action_taken = !is_null($item->action_taken_by);
+                $item->dpr_or_other_documents = $item->dpr_or_other_documents ? asset('storage/' . $item->dpr_or_other_documents) : null;
                 return $item;
             });
 
@@ -208,6 +219,7 @@ class InvestmentApplicationController extends Controller
 
             $application->connectivity_needs = $application->connectivity_needs ? json_decode($application->connectivity_needs) : [];
             $application->is_action_taken = !is_null($application->action_taken_by);
+            $application->dpr_or_other_documents = $application->dpr_or_other_documents ? asset('storage/' . $application->dpr_or_other_documents) : null;
 
             return response()->json(['status' => 1, 'message' => 'Application details fetched', 'data' => $application], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
