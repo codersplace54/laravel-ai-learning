@@ -397,29 +397,47 @@ class AuthController extends Controller
 
             DB::beginTransaction();
 
-            $user_otp = Otp::where('mobile_no', $mobile_no)
-                ->where('code', $otp_code)
-                ->first();
+            $user_otp = Otp::where('mobile_no', $mobile_no)->first();
 
             if (!$user_otp) {
                 DB::rollBack();
                 return response()->json([
                     'status'  => 0,
-                    'message' => 'Invalid OTP. Please enter the correct OTP and try again.',
+                    'message' => 'OTP not found. Please request a new OTP.',
                 ], 422);
             }
 
+            if ($user_otp->isLocked()) {
+                DB::rollBack();
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Too many incorrect OTP attempts. Please request a new OTP and try again.',
+                ], 429);
+            }
 
+            if ($user_otp->code !== $otp_code) {
 
-            $user_otp->update([
-                'is_verified' => 1,
-            ]);
+                $user_otp->recordFailedAttempt();
+                
+                $remaining = Otp::MAX_FAILED_ATTEMPTS - $user_otp->fresh()->failed_attempts;
+
+                DB::commit();
+
+                return response()->json([
+                    'status'  => 0,
+                    'message' => $remaining > 0
+                        ? "Invalid OTP. $remaining attempt(s) remaining."
+                        : 'Too many incorrect OTP attempts. Please request a new OTP and try again.',
+                ], 422);
+            }
+
+            $user_otp->update(['is_verified' => 1, 'failed_attempts' => 0]);
 
             DB::commit();
 
             return response()->json([
                 'status'  => 1,
-                'message' => 'Otp verified successfully.',
+                'message' => 'OTP verified successfully.',
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -528,10 +546,12 @@ class AuthController extends Controller
 
             DB::commit();
 
+            $masked = 'XXXXXX' . substr($sms_mobile_no, -4);
+
             return response()->json([
-                'status'        => 1,
-                'message'       => 'OTP sent successfully.',
-                'mobile_no'     => $sms_mobile_no,
+                'status'  => 1,
+                'message' => 'OTP sent successfully.',
+                'mobile_no' => $masked,
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -600,19 +620,35 @@ class AuthController extends Controller
 
             DB::beginTransaction();
 
-            $otp_row = Otp::where('mobile_no', $mobile_no)
-                ->where('code', $otp_code)
-                ->first();
+            $otp_row = Otp::where('mobile_no', $mobile_no)->first();
 
             if (!$otp_row) {
                 DB::rollBack();
                 return response()->json([
                     'status'  => 0,
-                    'message' => 'Invalid OTP. Please enter the correct OTP and try again.',
+                    'message' => 'OTP not found. Please request a new OTP.',
                 ], 422);
             }
 
-            $otp_row->update(['is_verified' => 1]);
+            if ($otp_row->isLocked()) {
+                DB::rollBack();
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'OTP has been invalidated due to too many failed attempts. Please request a new OTP.',
+                ], 429);
+            }
+
+            if ($otp_row->code !== $otp_code) {
+                $otp_row->recordFailedAttempt();
+                $remaining = Otp::MAX_FAILED_ATTEMPTS - $otp_row->fresh()->failed_attempts;
+                DB::commit();
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Invalid OTP.' . ($remaining > 0 ? " $remaining attempt(s) remaining." : ' OTP invalidated.'),
+                ], 422);
+            }
+
+            $otp_row->update(['is_verified' => 1, 'failed_attempts' => 0]);
 
             DB::commit();
 
@@ -997,9 +1033,9 @@ class AuthController extends Controller
     public function check_session()
     {
         try {
-            
+
             $user = JWTAuth::parseToken()->authenticate();
-            
+
             if (!$user) {
                 return response()->json([
                     'status' => 0,

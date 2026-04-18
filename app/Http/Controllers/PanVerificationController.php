@@ -65,7 +65,7 @@ class PanVerificationController extends Controller
                 return response()->json([
                     'success' => true,
                     'message' => 'PAN verification completed successfully',
-                    'pan'                     => $pan,
+                    'pan'                     => $this->mask_pan($pan),
                     'pan_status'              => 'E',
                     'pan_status_description'  => 'Existing and Valid',
                     'name_match'              => true,
@@ -132,12 +132,13 @@ class PanVerificationController extends Controller
             }
 
             if (!empty($pan_data)) {
+                $raw_pan = $pan_data['pan'] ?? null;
                 return response()->json([
                     'success' => $is_pan_verified,
                     'message' => $is_pan_verified
                         ? 'PAN verification completed successfully'
                         : $fail_message,
-                    'pan'                     => $pan_data['pan'] ?? null,
+                    'pan'                     => $raw_pan ? $this->mask_pan($raw_pan) : null,
                     'pan_status'              => $pan_data['pan_status'] ?? null,
                     'pan_status_description'  => $pan_data['pan_status_description'] ?? null,
                     'name_match'              => ($pan_data['name_match'] ?? null) === 'Y',
@@ -166,6 +167,10 @@ class PanVerificationController extends Controller
         }
     }
 
+    private function mask_pan(string $pan): string
+    {
+        return substr($pan, 0, 2) . str_repeat('*', 6) . substr($pan, -2);
+    }
 
     /**
      * Verify multiple PANs (batch verification)
