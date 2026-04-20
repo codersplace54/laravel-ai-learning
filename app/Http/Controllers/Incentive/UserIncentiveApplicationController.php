@@ -24,25 +24,26 @@ class UserIncentiveApplicationController extends Controller
 {
     public function user_proforma_application_store(Request $request)
     {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+        }
+
+        $is_save_only = $request->save_data == 1;
+
+        $request->validate([
+            'application_id'   => 'nullable|integer|exists:user_incentive_applications,id',
+            'save_data'        => 'required|integer|in:0,1',
+            'proforma_id'      => 'required|integer|exists:proformas,id',
+            'files'        => 'nullable|array',
+            'files.*'      => 'array',
+            'files.*.*'    => 'file|max:10240|mimes:pdf,jpg,jpeg,png,avif,webp',
+            'form_answers_json'  => 'required_unless:save_data,1',
+        ]);
+        
         try {
 
-            $user = Auth::user();
-
-            if (!$user) {
-                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
-            }
-
-            $is_save_only = $request->save_data == 1;
-
-            $request->validate([
-                'application_id'   => 'nullable|integer|exists:user_incentive_applications,id',
-                'save_data'        => 'required|integer|in:0,1',
-                'proforma_id'      => 'required|integer|exists:proformas,id',
-                'files'        => 'nullable|array',
-                'files.*'      => 'array',
-                'files.*.*'    => 'file|max:10240|mimes:pdf,jpg,jpeg,png,avif,webp',
-                'form_answers_json'  => 'required_unless:save_data,1',
-            ]);
 
             if (!$is_save_only) {
                 $errors = $this->validate_required_questions($request);
@@ -69,6 +70,7 @@ class UserIncentiveApplicationController extends Controller
                     ->first();
 
                 $is_draft_submission = $existing_application && $existing_application->workflow_status === 'draft';
+                $is_sent_back        = $existing_application && in_array($existing_application->workflow_status, ['sent_back_by_da', 'sent_back_by_gm', 'sent_back_by_slc']);
 
                 // A user could change the proforma_id in the URL to open a claim form they are not eligible for
                 $can_apply = $this->can_apply_for_this_claim($user->id, $proforma);
@@ -79,7 +81,7 @@ class UserIncentiveApplicationController extends Controller
                     ], 422);
                 }
 
-                if (!$is_draft_submission) {
+                if (!$is_draft_submission && !$is_sent_back) {
                     $can_reapply = $this->can_reapply_for_claim($user->id, $proforma);
                     if (!$can_reapply) {
                         return response()->json([
@@ -91,8 +93,8 @@ class UserIncentiveApplicationController extends Controller
             }
 
             $application = UserIncentiveApplication::where('id', $request->application_id)
-            ->where('user_id', Auth::id())
-            ->first();
+                ->where('user_id', Auth::id())
+                ->first();
 
             if (!$application) {
                 $application = new UserIncentiveApplication();
@@ -245,7 +247,7 @@ class UserIncentiveApplicationController extends Controller
                     ], 422);
                 }
 
-                if (empty($application->application_no) && $request->save_data !== 1 ) {
+                if (empty($application->application_no) && $request->save_data !== 1) {
                     $application->application_no = 'INE-' . date('y') . '-' . str_pad((string)$application->id, 6, '0', STR_PAD_LEFT);
                 }
 
@@ -302,13 +304,6 @@ class UserIncentiveApplicationController extends Controller
                 'message' => 'Draft saved successfully.',
                 'data'    => array_merge($application->toArray(), ['application_id' => $application->id]),
             ], 201);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-
-            return response()->json([
-                'status'  => 0,
-                'message' => 'Validation failed.',
-                'errors'  => $e->errors(),
-            ], 422);
         } catch (\Exception $e) {
 
             DB::rollBack();
@@ -698,7 +693,7 @@ class UserIncentiveApplicationController extends Controller
 
             $request->validate([
                 'department'     => 'nullable|string|in:DA,GM,SLC',
-                'status' => 'nullable|string|in:submitted,re_submitted,approved_by_da,rejected_by_da,sent_back_by_da,noc_issued,claim_approved_by_gm,rejected_by_gm,sent_back_by_gm,under_review_slc,claim_approved_by_slc,rejected_by_slc,sent_back_by_slc',                
+                'status' => 'nullable|string|in:submitted,re_submitted,approved_by_da,rejected_by_da,sent_back_by_da,noc_issued,claim_approved_by_gm,rejected_by_gm,sent_back_by_gm,under_review_slc,claim_approved_by_slc,rejected_by_slc,sent_back_by_slc',
                 'scheme_id'      => 'nullable|integer|exists:schemes,id',
                 'proforma_id'    => 'nullable|integer|exists:proformas,id',
                 'applicant_name' => 'nullable|string|max:255',
@@ -732,7 +727,7 @@ class UserIncentiveApplicationController extends Controller
 
             if ($designation == 'Dealing Assistant') {
 
-                $applications->whereIn('workflow_status', ['submitted','re_submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da']);
+                $applications->whereIn('workflow_status', ['submitted', 're_submitted', 'approved_by_da', 'rejected_by_da', 'sent_back_by_da']);
             } elseif ($designation == "General Manager") {
 
                 $applications->whereIn('workflow_status', ['approved_by_da', 'noc_issued', 'claim_approved_by_gm', 'rejected_by_gm', 'sent_back_by_gm', 'under_review_slc']);
@@ -798,25 +793,27 @@ class UserIncentiveApplicationController extends Controller
 
     public function update_application_status(Request $request)
     {
+        $request->validate([
+            'application_id' => 'required|integer|exists:user_incentive_applications,id',
+            'new_status'     => 'required | string',
+            'remarks'        => 'nullable|string'
+                . '|required_if:new_status,rejected_by_da'
+                . '|required_if:new_status,sent_back_by_da'
+                . '|required_if:new_status,rejected_by_gm'
+                . '|required_if:new_status,sent_back_by_gm'
+                . '|required_if:new_status,rejected_by_slc'
+                . '|required_if:new_status,sent_back_by_slc',
+            'approved_items' => 'nullable',
+            'review_file' => 'nullable|file',
+            'eligibility_certificate_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png',
+        ]);
+
         try {
             if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $request->validate([
-                'application_id' => 'required|integer|exists:user_incentive_applications,id',
-                'new_status'     => 'required | string',
-                'remarks'        => 'nullable|string'
-                    . '|required_if:new_status,rejected_by_da'
-                    . '|required_if:new_status,sent_back_by_da'
-                    . '|required_if:new_status,rejected_by_gm'
-                    . '|required_if:new_status,sent_back_by_gm'
-                    . '|required_if:new_status,rejected_by_slc'
-                    . '|required_if:new_status,sent_back_by_slc',
-                'approved_items' => 'nullable',
-                'review_file' => 'nullable|file',
-                'eligibility_certificate_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png',
-            ]);
+
 
             $application_type = UserIncentiveApplication::where('id', $request->application_id)->value('application_type');
             $is_gm_noc_issuance = $request->new_status === 'noc_issued' && $application_type === 'eligibility';
@@ -927,7 +924,11 @@ class UserIncentiveApplicationController extends Controller
                         $qid = (string) ($item['question_id'] ?? '');
 
                         if ($approved_items && array_key_exists($qid, $approved_items)) {
-                            $approved_value = (float) $approved_items[$qid];
+                            $approved_value  = (float) $approved_items[$qid];
+                            $max_claim       = !empty($item['relaxation_detail']['max_claim_amount'])
+                                ? (float) $item['relaxation_detail']['max_claim_amount']
+                                : null;
+
                             if ($approved_value > (float) ($item['claimed'] ?? 0)) {
                                 DB::rollBack();
                                 return response()->json([
@@ -935,6 +936,15 @@ class UserIncentiveApplicationController extends Controller
                                     'message' => 'Approved amount cannot exceed claimed amount for "' . ($item['label'] ?? $qid) . '".',
                                 ], 422);
                             }
+
+                            if ($max_claim !== null && $approved_value > $max_claim) {
+                                DB::rollBack();
+                                return response()->json([
+                                    'status'  => 0,
+                                    'message' => 'Approved amount cannot exceed max claim amount of ' . $max_claim . ' for "' . ($item['label'] ?? $qid) . '".',
+                                ], 422);
+                            }
+
                             $item['approved'] = $approved_value;
                         }
 
@@ -975,7 +985,7 @@ class UserIncentiveApplicationController extends Controller
                 $eligibility_certificate_path = $file->storeAs("uploads/{$user->id}/incentive_certificates", $filename, 'public');
                 $application->eligibility_certificate_path = $eligibility_certificate_path;
             }
-                        $application->save();
+            $application->save();
 
 
             if ($request->file('review_file')) {
@@ -1008,14 +1018,6 @@ class UserIncentiveApplicationController extends Controller
                     'eligibility_certificate_no' => $application->eligibility_certificate_no,
                 ],
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-
-
-            return response()->json([
-                'status'  => 0,
-                'message' => 'Validation failed.',
-                'errors'  => $e->errors(),
-            ], 422);
         } catch (\Exception $e) {
 
 
@@ -1070,14 +1072,14 @@ class UserIncentiveApplicationController extends Controller
 
     public function application_details(Request $request)
     {
+        $request->validate([
+            'application_id' => 'required|integer|exists:user_incentive_applications,id',
+        ]);
         try {
             if (!Auth::check()) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
 
-            $request->validate([
-                'application_id' => 'required|integer|exists:user_incentive_applications,id',
-            ]);
 
             $user = User::with('department_user')->find(Auth::id());
             $designation = $user?->department_user?->designation;
@@ -1135,9 +1137,57 @@ class UserIncentiveApplicationController extends Controller
                 ];
             });
 
-            $subsidy_report = $application->application_type === 'claim' && $application->subsidy_report
-                ? json_decode($application->subsidy_report, true)
-                : null;
+            $subsidy_report = null;
+            if ($application->application_type === 'claim' && $application->subsidy_report) {
+                $subsidy_report = json_decode($application->subsidy_report, true);
+
+                if (!empty($subsidy_report['subsidy_items'])) {
+                    
+                    $all_questions_map = ProformaQuestionnaire::where('proforma_id', $application->proforma->id)
+                        ->where('status', 1)
+                        ->get(['id', 'question_label', 'special_relaxation'])
+                        ->keyBy('id');
+
+                    foreach ($subsidy_report['subsidy_items'] as &$item) {
+                        unset($item['relaxation_detail']);
+
+                        if (!empty($item['relaxation_applied'])) {
+                            $q_id             = $item['question_id'];
+                            $matched_rules    = [];
+
+                            if (isset($all_questions_map[$q_id])) {
+                                $sr = json_decode($all_questions_map[$q_id]->special_relaxation, true) ?? [];
+
+                                foreach ($sr as $rule) {
+                                    $cond_id     = $rule['target_question_id'] ?? null;
+                                    $user_answer = $cond_id ? ($answers[$cond_id]['value'] ?? null) : null;
+
+                                    if ($user_answer !== null && $this->check_relaxation_condition($user_answer, $rule)) {
+                                        $matched_rules[] = [
+                                            'condition_question' => $all_questions_map[$cond_id]->question_label ?? null,
+                                            'condition_answer'   => $user_answer,
+                                            'extra_per_unit'     => $rule['extra_claim_per_unit'] ?? null,
+                                            'extra_percentage'   => $rule['extra_claim_percentage'] ?? null,
+                                            'max_claim_amount'   => $rule['max_claim_amount'] ?? null,
+                                        ];
+                                    }
+                                }
+                            }
+
+                            $item['relaxation_breakdown'] = [
+                                'base_claimed'   => $item['base_claimed'],
+                                'extra_amount'   => round($item['claimed'] - $item['base_claimed'], 2),
+                                'final_claimed'  => $item['claimed'],
+                                'cap_applied'    => $item['claimed'] < ($item['base_claimed'] + round($item['claimed'] - $item['base_claimed'], 2) + 0.001),
+                                'matched_rules'  => $matched_rules,
+                            ];
+                        } else {
+                            $item['relaxation_breakdown'] = null;
+                        }
+                    }
+                    unset($item);
+                }
+            }
 
             $latest_workflow_history = IncentiveWorkflowHistory::where('application_id', $application->id)
                 ->orderByDesc('action_taken_at')
@@ -1187,12 +1237,6 @@ class UserIncentiveApplicationController extends Controller
                 'message' => 'Application details fetched successfully.',
                 'data'    => $data,
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'status'  => 0,
-                'message' => 'Validation failed.',
-                'errors'  => $e->errors(),
-            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => 0,
@@ -1205,14 +1249,15 @@ class UserIncentiveApplicationController extends Controller
 
     public function track_application(Request $request)
     {
-        try {
-            if (!Auth::check()) {
-                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
-            }
+        if (!Auth::check()) {
+            return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+        }
 
-            $request->validate([
-                'application_id' => 'required|integer|exists:user_incentive_applications,id',
-            ]);
+        $request->validate([
+            'application_id' => 'required|integer|exists:user_incentive_applications,id',
+        ]);
+
+        try {
 
             $application = UserIncentiveApplication::with(['proforma.scheme', 'user'])
                 ->find($request->application_id);
@@ -1277,8 +1322,12 @@ class UserIncentiveApplicationController extends Controller
             $completed_to_statuses = $history->pluck('to_status')->toArray();
 
             $terminal_statuses = [
-                'rejected_by_da', 'rejected_by_gm', 'rejected_by_slc',
-                'noc_issued', 'claim_approved_by_slc', 'claim_approved_by_gm',
+                'rejected_by_da',
+                'rejected_by_gm',
+                'rejected_by_slc',
+                'noc_issued',
+                'claim_approved_by_slc',
+                'claim_approved_by_gm',
             ];
             $is_terminal = in_array($application->workflow_status, $terminal_statuses, true);
 
@@ -1334,8 +1383,6 @@ class UserIncentiveApplicationController extends Controller
                 'message' => 'Application tracking details fetched successfully.',
                 'data'    => $data,
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['status' => 0, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
         }
@@ -1344,15 +1391,16 @@ class UserIncentiveApplicationController extends Controller
 
     public function preview_subsidy_report(Request $request)
     {
-        try {
-            if (!Auth::check()) {
-                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
-            }
+        if (!Auth::check()) {
+            return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+        }
 
-            $request->validate([
-                'proforma_id'       => 'required|integer|exists:proformas,id',
-                'form_answers_json' => 'required|string',
-            ]);
+        $request->validate([
+            'proforma_id'       => 'required|integer|exists:proformas,id',
+            'form_answers_json' => 'required|string',
+        ]);
+
+        try {
 
             $answers = json_decode($request->form_answers_json, true) ?? [];
 
@@ -1363,8 +1411,6 @@ class UserIncentiveApplicationController extends Controller
                 'message' => 'Subsidy report preview generated successfully.',
                 'data'    => $subsidy,
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['status' => 0, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
         }
@@ -1377,7 +1423,7 @@ class UserIncentiveApplicationController extends Controller
             ->where('status', 1)
             ->get(['id', 'question_label', 'is_claim', 'claim_per_unit', 'claim_percentage', 'special_relaxation']);
 
-        $relaxation_map = []; 
+        $relaxation_map = [];
 
         foreach ($all_questions as $q) {
             if (!empty($q->special_relaxation)) {
@@ -1385,15 +1431,16 @@ class UserIncentiveApplicationController extends Controller
 
                 if (!empty($rules) && is_array($rules)) {
                     foreach ($rules as $rule) {
-                        $target_id      = (string) ($rule['target_question_id'] ?? '');
-                        $condition_q_id = (string) $q->id;
-                        $user_answer    = $answers[$condition_q_id]['value'] ?? null;
+                        $this_question_id = (string) $q->id;
+                        $condition_q_id    = (string) ($rule['target_question_id'] ?? '');
+                        $user_answer       = $answers[$condition_q_id]['value'] ?? null;
+                        $condition_q_label = $all_questions->firstWhere('id', (int) $condition_q_id)?->question_label ?? '';
 
                         if ($user_answer !== null && $user_answer !== '' && $this->check_relaxation_condition($user_answer, $rule)) {
-                            if (!isset($relaxation_map[$target_id])) {
-                                $relaxation_map[$target_id] = [];
+                            if (!isset($relaxation_map[$this_question_id])) {
+                                $relaxation_map[$this_question_id] = [];
                             }
-                            $relaxation_map[$target_id][] = $rule;
+                            $relaxation_map[$this_question_id][] = $rule;
                         }
                     }
                 }
@@ -1430,39 +1477,30 @@ class UserIncentiveApplicationController extends Controller
                 $claimed            = $base_claimed;
 
                 if (!empty($relaxation_map[$qid])) {
-                    $best_rule  = null;
-                    $best_extra = -1.0;
+                    $total_extra = 0.0;
+                    $lowest_cap  = null;
 
                     foreach ($relaxation_map[$qid] as $rule) {
-                        if (($rule['extra_claim_per_unit'] ?? null) > 0) {
-                            $extra = round($base_value * (float) $rule['extra_claim_per_unit'], 2);
-                        } elseif (($rule['extra_claim_percentage'] ?? null) > 0) {
-                            $extra = round($base_value * ((float) $rule['extra_claim_percentage'] / 100), 2);
-                        } else {
-                            $extra = 0.0;
+                        if (($rule['extra_claim_per_unit'] ?? null) !== null && $rule['extra_claim_per_unit'] != 0) {
+                            $total_extra += round($base_value * (float) $rule['extra_claim_per_unit'], 2);
+                        } elseif (($rule['extra_claim_percentage'] ?? null) !== null && $rule['extra_claim_percentage'] != 0) {
+                            $total_extra += round($base_value * ((float) $rule['extra_claim_percentage'] / 100), 2);
                         }
 
-                        if ($extra > $best_extra) {
-                            $best_extra = $extra;
-                            $best_rule  = $rule;
+                        if (!empty($rule['max_claim_amount']) && $rule['max_claim_amount'] > 0) {
+                            $rule_cap   = (float) $rule['max_claim_amount'];
+                            $lowest_cap = $lowest_cap === null ? $rule_cap : min($lowest_cap, $rule_cap);
                         }
                     }
 
-                    // handle max claim amount
-                    if ($best_rule && $best_extra > 0) {
-                        $raw_total = $base_claimed + $best_extra;
-                        $cap       = isset($best_rule['max_claim_amount']) && $best_rule['max_claim_amount'] > 0
-                            ? (float) $best_rule['max_claim_amount']
-                            : null;
-
-                        $claimed            = round($cap ? min($raw_total, $cap) : $raw_total, 2);
+                    if ($total_extra != 0) {
+                        $raw_total          = $base_claimed + $total_extra;
+                        $claimed            = round($lowest_cap ? min($raw_total, $lowest_cap) : $raw_total, 2);
                         $relaxation_applied = true;
                         $relaxation_detail  = [
-                            'extra_claim_per_unit'   => $best_rule['extra_claim_per_unit'] ?? null,
-                            'extra_claim_percentage' => $best_rule['extra_claim_percentage'] ?? null,
-                            'extra_amount'           => round($claimed - $base_claimed, 2),
-                            'max_claim_amount'       => $cap,
-                            'cap_applied'            => $cap && $raw_total > $cap,
+                            'extra_amount'   => round($claimed - $base_claimed, 2),
+                            'max_claim_amount' => $lowest_cap,
+                            'cap_applied'    => $lowest_cap && $raw_total > $lowest_cap,
                         ];
                     }
                 }
@@ -1812,7 +1850,7 @@ class UserIncentiveApplicationController extends Controller
                 'sl_no'               => $index + 1,
                 'proforma_name'       => $row->proforma_name,
                 'scheme_name'         => $row->scheme_name,
-                'application_received'=> (int) $row->application_received,
+                'application_received' => (int) $row->application_received,
                 'approved'            => (int) $row->approved,
                 'disbursed'           => (int) $row->disbursed,
                 'avg_processing_time' => $row->avg_processing_time ? round($row->avg_processing_time, 2) : null,
