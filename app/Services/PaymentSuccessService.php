@@ -89,6 +89,29 @@ class PaymentSuccessService
                 app(CertificateController::class)->auto_generate_certificate($application);
             }
 
+            if ($application->service_id == 107) {
+                $jal_board_payload = [
+                    'swaagat_user_id' => $application->user_id,
+                    'application_id'  => $application->applicationId,
+                    'transaction_id'  => $cin,
+                ];
+
+                $jal_board_response = Http::acceptJson()->asJson()->timeout(20)
+                    ->post('https://tjbbilling.tripura.gov.in/newconnection/tjbupdateconnectionfee', $jal_board_payload);
+
+                if ($jal_board_response->successful()) {
+                    Log::channel('payment')->info('Jal Board payment update success', [
+                        'status_code' => $jal_board_response->status(),
+                        'response'    => $jal_board_response->json(),
+                    ]);
+                } else {
+                    Log::channel('payment')->error('Jal Board payment update failed', [
+                        'status_code' => $jal_board_response->status(),
+                        'response'    => $jal_board_response->body(),
+                    ]);
+                }
+            }
+
             if ($application->is_third_party == 1) {
                 $url     = 'https://pwdwrtripura.in/api/third-party/payment-update';
                 $payload = [
