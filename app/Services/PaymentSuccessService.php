@@ -89,6 +89,7 @@ class PaymentSuccessService
                 app(CertificateController::class)->auto_generate_certificate($application);
             }
 
+            // Tripura Jal Board
             if ($application->service_id == 107) {
                 $jal_board_payload = [
                     'swaagat_user_id' => $application->user_id,
