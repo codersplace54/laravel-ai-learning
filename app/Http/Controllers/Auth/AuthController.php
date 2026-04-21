@@ -644,7 +644,7 @@ class AuthController extends Controller
                 DB::commit();
                 return response()->json([
                     'status'  => 0,
-                    'message' => 'Invalid OTP.' . ($remaining > 0 ? " $remaining attempt(s) remaining." : ' OTP invalidated.'),
+                    'message' => 'Invalid OTP.' . ($remaining > 0 ? " $remaining attempt(s) remaining." : ' Too many incorrect OTP attempts. Please request a new OTP and try again.'),
                 ], 422);
             }
 
