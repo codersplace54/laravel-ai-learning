@@ -15,6 +15,7 @@ class DepartmentUser extends Model
         'block_id',
         'subdivision_id',
         'district_id',
+        'ch_name',
         'hierarchy_level',
         'is_active',
         'inspector',
