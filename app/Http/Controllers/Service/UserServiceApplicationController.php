@@ -4165,18 +4165,13 @@ class UserServiceApplicationController extends Controller
             ? $application->application_data
             : json_decode($application->application_data ?? '[]', true);
 
-        $old_contract_count = (int) (
-            $old_deposit->old_no_of_contract_labour
-            ?? $old_application_data[882]
-            ?? 0
-        );
-
-        $old_ismw_count = (int) (
-            $old_deposit->old_no_of_ismw_labour
-            ?? $old_application_data[883]
-            ?? 0
-        );
-
+        if ($old_deposit) {
+            $old_contract_count = (int) ($old_deposit->no_of_contract_labour ?? 0);
+            $old_ismw_count     = (int) ($old_deposit->no_of_ismw_labour ?? 0);
+        } else {
+            $old_contract_count = (int) ($old_application_data[882] ?? 0);
+            $old_ismw_count     = (int) ($old_application_data[883] ?? 0);
+        }
         $old_data = [
             882 => $old_contract_count,
             883 => $old_ismw_count,

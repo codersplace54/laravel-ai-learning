@@ -25,6 +25,7 @@ use App\Models\Concerns\LogsModelActivity;
 use App\Models\EnterpriseDetail;
 use Laravel\SerializableClosure\Signers\Hmac;
 use App\Jobs\SendWhatsAppNotification;
+use App\Models\TripuraMasterData;
 
 class UserController extends Controller
 {
@@ -48,6 +49,7 @@ class UserController extends Controller
                     'subdivision_id' => 'nullable|integer|exists:tripura_master_data,sub_lgd_code',
                     'ulb_id' => 'nullable|integer|exists:tripura_master_data,ulb_lgd_code',
                     'ward_id' => 'nullable|integer|exists:tripura_master_data,gp_vc_ward_lgd_code',
+                    'ch_name'      => 'nullable|string',
                     'registered_enterprise_address' => 'nullable|string',
                     'registered_enterprise_city' => ['nullable', 'string', 'not_regex:/[0-9]/'],
                     'user_type' => 'required|string|in:individual,department,admin',
@@ -66,6 +68,7 @@ class UserController extends Controller
                     'locations.*.district_id' => 'nullable|integer|exists:tripura_master_data,district_code',
                     'locations.*.subdivision_id' => 'nullable|integer|exists:tripura_master_data,sub_lgd_code',
                     'locations.*.block_id' => 'nullable|integer',
+                    'locations.*.ch_name' => 'nullable|string',
                 ],
                 [
                     'name_of_enterprise.required' => 'Enterprise name is required.',
@@ -145,6 +148,24 @@ class UserController extends Controller
                 }
             }
 
+            $district_name = null;
+
+            if ($request->district_id) {
+                $district = TripuraMasterData::where('district_code', $request->district_id)->first();
+
+                $district_name = $district->district_name ?? null;
+            }
+
+            $ch_name = null;
+
+            if ($district_name) {
+                if (strtolower($district_name) === 'west tripura') {
+                    $ch_name = $request->ch_name;
+                } else {
+                    $ch_name = $district_name;
+                }
+            }
+
 
             $user = User::create([
                 'name_of_enterprise' => $request->name_of_enterprise,
@@ -166,12 +187,29 @@ class UserController extends Controller
                 'is_mobile_verified' => $request->user_type === 'individual' ? 1 : 0,
                 'dob' => $request->dob ? Carbon::createFromFormat('d/m/Y', $request->dob)->format('Y-m-d') : null,
                 'is_pan_verified' => $request->user_type === 'individual' ? 1 : 0,
+                'ch_name' => $ch_name,
             ]);
 
             if ($user->user_type == "department") {
 
                 $locations = $request->locations ?? [null];
                 foreach ($locations as $location) {
+
+                    $district_name = null;
+                    $ch_name = null;
+
+                    if (!empty($location['district_id'])) {
+                        $district = TripuraMasterData::where('district_code', $location['district_id'])->first();
+                        $district_name = $district->district_name ?? null;
+
+                        if ($district_name) {
+                            if (strtolower($district_name) === 'west tripura') {
+                                $ch_name = $location['ch_name'] ?? null;
+                            } else {
+                                $ch_name = $district_name;
+                            }
+                        }
+                    }
 
                     DepartmentUser::create([
                         'user_id' => $user->id,
@@ -180,6 +218,7 @@ class UserController extends Controller
                         'block_id' => $location['block_id'] ?? null,
                         'subdivision_id' => $location['subdivision_id'] ?? null,
                         'district_id' => $location['district_id'] ?? null,
+                        'ch_name' => $ch_name,
                         'hierarchy_level' => $request->hierarchy_level,
                         'is_active' => 1,
                         'inspector' => $request->inspector ?? 'no',
@@ -347,6 +386,7 @@ class UserController extends Controller
                 $rules['locations.*.district_id'] = 'nullable|integer|exists:tripura_master_data,district_code';
                 $rules['locations.*.subdivision_id'] = 'nullable|integer|exists:tripura_master_data,sub_lgd_code';
                 $rules['locations.*.block_id'] = 'nullable|integer';
+                $rules['locations.*.ch_name'] = 'nullable|string';
             }
 
             if ($request->dob !== null) {
@@ -468,6 +508,20 @@ class UserController extends Controller
                 $update_data['dob'] = Carbon::createFromFormat('d/m/Y', $request->dob)->format('Y-m-d');
             }
 
+            $district_id = $request->district_id ?? $user->district_id;
+
+            if ($district_id) {
+                $district = TripuraMasterData::where('district_code', $district_id)->first();
+
+                if ($district) {
+                    if (strtolower($district->district_name) === 'west tripura') {
+                        $update_data['ch_name'] = $request->ch_name ?? null;
+                    } else {
+                        $update_data['ch_name'] = $district->district_name;
+                    }
+                }
+            }
+
             $user->update($update_data);
 
             if ($user->user_type === 'individual') {
@@ -510,6 +564,22 @@ class UserController extends Controller
                 $locations = $request->locations ?? [null];
 
                 foreach ($locations as $location) {
+
+                    $district_name = null;
+                    $ch_name = null;
+
+                    if (!empty($location['district_id'])) {
+                        $district = TripuraMasterData::where('district_code', $location['district_id'])->first();
+                        $district_name = $district->district_name ?? null;
+
+                        if ($district_name) {
+                            if (strtolower($district_name) === 'west tripura') {
+                                $ch_name = $location['ch_name'] ?? null;
+                            } else {
+                                $ch_name = $district_name;
+                            }
+                        }
+                    }
                     DepartmentUser::create([
                         'user_id' => $user->id,
                         'department_id' => $request->department_id,
@@ -517,6 +587,7 @@ class UserController extends Controller
                         'block_id' => $location['block_id'] ?? null,
                         'subdivision_id' => $location['subdivision_id'] ?? null,
                         'district_id' => $location['district_id'] ?? null,
+                        'ch_name' => $ch_name,
                         'hierarchy_level' => $request->hierarchy_level,
                         'is_active' => 1,
                         'created_by' =>  $auth_user->email_id,
@@ -524,7 +595,6 @@ class UserController extends Controller
                         'inspector' =>  $request->inspector ?? "no"
                     ]);
                 }
-
             }
 
             $locations = $user->department_user_location->map(function ($loc) {
@@ -535,6 +605,7 @@ class UserController extends Controller
                     'subdivision_name' => $loc->subdivision->sub_division ?? null,
                     'block_id'       => $loc->block_id,
                     'block_name'       => $loc->ulb->ulb_name ?? null,
+                    'ch_name'       => $loc->ch_name ?? null,
                 ];
             });
 
@@ -554,6 +625,7 @@ class UserController extends Controller
                 'ulb_code'                 => $user->ulb->ulb_lgd_code ?? null,
                 'ward_name'                         => $user->ward->name_of_gp_vc_or_ward ?? null,
                 'ward_code'                      => $user->ward->gp_vc_ward_lgd_code ?? null,
+                'ch_name'                      => $user->ch_name ?? null,
                 'user_type' => $user->user_type,
                 'registered_enterprise_address' => $user->registered_enterprise_address,
                 'registered_enterprise_city' => $user->registered_enterprise_city,
@@ -674,7 +746,7 @@ class UserController extends Controller
 
 
             $user = Auth::user();
-            $user = User::where('id',$user->id)->with([
+            $user = User::where('id', $user->id)->with([
                 'district',
                 'subdivision',
                 'ulb',
@@ -1390,67 +1462,67 @@ class UserController extends Controller
             'sig' => ['required', 'string'],
         ]);
 
-        try{
+        try {
 
 
-        $pan = strtoupper(trim($data['pan']));
-        $secret = config('services.pan_lookup.key');
+            $pan = strtoupper(trim($data['pan']));
+            $secret = config('services.pan_lookup.key');
 
-        $expected = hash_hmac('sha256', $pan, $secret);
-        if (!hash_equals($expected, $data['sig'])) {
-            return response()->json([
-                'status' => 0,
-                'message' => 'Invalid signature.',
-            ], 401);
-        }
+            $expected = hash_hmac('sha256', $pan, $secret);
+            if (!hash_equals($expected, $data['sig'])) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Invalid signature.',
+                ], 401);
+            }
 
-        $user = User::with(['district', 'subdivision', 'ulb'])->where('pan', $pan)->first();
+            $user = User::with(['district', 'subdivision', 'ulb'])->where('pan', $pan)->first();
 
-        if (!$user) {
-            $enterprise_details = EnterpriseDetail::where('business_pan_no', $pan)->first();
-            if ($enterprise_details) {
+            if (!$user) {
+                $enterprise_details = EnterpriseDetail::where('business_pan_no', $pan)->first();
+                if ($enterprise_details) {
+                    return response()->json([
+                        'status' => 1,
+                        'message' => 'User found.',
+                        'data' => [
+                            'name_of_enterprise' => $enterprise_details->enterprise_name,
+                            'authorized_person_name' => $enterprise_details->authorized_representative_name,
+                            'mobile_no' => $enterprise_details->authorized_representative_mobile_no,
+                            'email_id' => $enterprise_details->authorized_representative_email_id,
+                            'address' => $enterprise_details->enterprise_address,
+                            'district_lgd_code' => null,
+                            'subdivision_lgd_code' => null,
+                            'block_lgd_code' => null,
+                            'is_pan_verified' => 0,
+                        ],
+                    ]);
+                }
+            }
+
+            if (!$user) {
                 return response()->json([
                     'status' => 1,
-                    'message' => 'User found.',
-                    'data' => [
-                        'name_of_enterprise' => $enterprise_details->enterprise_name,
-                        'authorized_person_name' => $enterprise_details->authorized_representative_name,
-                        'mobile_no' => $enterprise_details->authorized_representative_mobile_no,
-                        'email_id' => $enterprise_details->authorized_representative_email_id,
-                        'address' => $enterprise_details->enterprise_address,
-                        'district_lgd_code' => null,
-                        'subdivision_lgd_code' => null,
-                        'block_lgd_code' => null,
-                        'is_pan_verified' => 0,
-                    ],
+                    'message' => 'No user found.',
+                    'data' => [],
                 ]);
             }
-        }
 
-        if (!$user) {
             return response()->json([
                 'status' => 1,
-                'message' => 'No user found.',
-                'data' => [],
+                'message' => 'User found.',
+                'data' => [
+                    'name_of_enterprise' => $user->name_of_enterprise,
+                    'authorized_person_name' => $user->authorized_person_name,
+                    'mobile_no' => $user->mobile_no,
+                    'email_id' => $user->email_id,
+                    'address' => $user->registered_enterprise_address,
+                    'district_lgd_code' => $user->district_id,
+                    'subdivision_lgd_code' => $user->subdivision_id,
+                    'block_lgd_code' => $user->ulb_id,
+                    'is_pan_verified' => $user->is_pan_verified,
+                ],
             ]);
-        }
-
-        return response()->json([
-            'status' => 1,
-            'message' => 'User found.',
-            'data' => [
-                'name_of_enterprise' => $user->name_of_enterprise,
-                'authorized_person_name' => $user->authorized_person_name,
-                'mobile_no' => $user->mobile_no,
-                'email_id' => $user->email_id,
-                'address' => $user->registered_enterprise_address,
-                'district_lgd_code' => $user->district_id,
-                'subdivision_lgd_code' => $user->subdivision_id,
-                'block_lgd_code' => $user->ulb_id,
-                'is_pan_verified' => $user->is_pan_verified,
-            ],
-        ]);
-        }catch (\Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'status' => 0,

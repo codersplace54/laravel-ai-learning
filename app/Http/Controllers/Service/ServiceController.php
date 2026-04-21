@@ -1270,7 +1270,14 @@ class ServiceController extends Controller
                         } elseif (str_starts_with($hierarchy_level, 'subdivision')) {
                             $loc->orWhere('subdivision_id', $d->subdivision_id);
                         } elseif (str_starts_with($hierarchy_level, 'district')) {
-                            $loc->orWhere('district_id', $d->district_id);
+                            if (strtolower($d->district->district_name ?? '') === 'west tripura') {
+                                $loc->orWhere(function ($q) use ($d) {
+                                    $q->where('district_id', $d->district_id)
+                                        ->where('ch_name', $d->ch_name);
+                                });
+                            } else {
+                                $loc->orWhere('district_id', $d->district_id);
+                            }
                         }
                         // elseif (str_starts_with($hierarchy_level, 'state')) {
                         // }
