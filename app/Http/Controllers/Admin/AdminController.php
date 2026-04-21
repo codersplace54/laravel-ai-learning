@@ -215,6 +215,7 @@ class AdminController extends Controller
             }
 
             $per_page = $request->get('per_page', 10);
+            $query->orderBy('id', 'desc');
 
             $department_users = $query->paginate($per_page)
                 ->through(function ($user) {

@@ -4156,10 +4156,62 @@ class UserServiceApplicationController extends Controller
         ]);
     }
 
-    private function calculate_labour_renewal_fee($application, $application_data, $cycle)
+    // private function calculate_labour_renewal_fee($application, $application_data, $cycle)
+    // {
+
+    //     $old_deposit = LabourDeposit::where('application_id', $application->id)->first();
+
+    //     $old_application_data = is_array($application->application_data)
+    //         ? $application->application_data
+    //         : json_decode($application->application_data ?? '[]', true);
+
+    //     if ($old_deposit) {
+    //         $old_contract_count = (int) ($old_deposit->no_of_contract_labour ?? 0);
+    //         $old_ismw_count     = (int) ($old_deposit->no_of_ismw_labour ?? 0);
+    //     } else {
+    //         $old_contract_count = (int) ($old_application_data[882] ?? 0);
+    //         $old_ismw_count     = (int) ($old_application_data[883] ?? 0);
+    //     }
+    //     $old_data = [
+    //         882 => $old_contract_count,
+    //         883 => $old_ismw_count,
+    //     ];
+
+    //     $old_calculated = $this->calculate_labour_deposit(37, $old_data, [882, 883]);
+
+    //     $old_contract_deposit = (float) ($old_calculated[882]['deposit'] ?? 0);
+    //     $old_ismw_deposit     = (float) ($old_calculated[883]['deposit'] ?? 0);
+
+    //     $calculated = $this->calculate_labour_deposit(37, $application_data, [882, 883]);
+
+    //     $new_contract_deposit = (float) ($calculated[882]['deposit'] ?? 0);
+    //     $new_ismw_deposit     = (float) ($calculated[883]['deposit'] ?? 0);
+
+    //     $contract_fee = (float) ($calculated[882]['fee'] ?? 0);
+    //     $ismw_fee     = (float) ($calculated[883]['fee'] ?? 0);
+
+    //     $contract_deposit_payable = max(0, $new_contract_deposit - $old_contract_deposit);
+    //     $ismw_deposit_payable     = max(0, $new_ismw_deposit - $old_ismw_deposit);
+
+    //     $base_fee = $contract_fee + $ismw_fee;
+
+    //     $late_fee = $this->calculate_late_fee($application, $cycle, $base_fee);
+
+    //     $total_payable = $contract_deposit_payable + $ismw_deposit_payable + $base_fee + $late_fee;
+
+    //     return [
+    //         'base_fee' => round($base_fee, 2),
+    //         'deposit_difference' => round($contract_deposit_payable + $ismw_deposit_payable, 2),
+    //         'late_fee' => round($late_fee, 2),
+    //         'renewal_fee' => round($total_payable, 2),
+    //     ];
+    // }
+    private function calculate_labour_renewal_fee($application, $application_data, $cycle, $old_deposit = null)
     {
 
-        $old_deposit = LabourDeposit::where('application_id', $application->id)->first();
+        if (!$old_deposit) {
+            $old_deposit = LabourDeposit::where('application_id', $application->id)->first();
+        }
 
         $old_application_data = is_array($application->application_data)
             ? $application->application_data
@@ -4172,6 +4224,7 @@ class UserServiceApplicationController extends Controller
             $old_contract_count = (int) ($old_application_data[882] ?? 0);
             $old_ismw_count     = (int) ($old_application_data[883] ?? 0);
         }
+
         $old_data = [
             882 => $old_contract_count,
             883 => $old_ismw_count,
@@ -4194,16 +4247,18 @@ class UserServiceApplicationController extends Controller
         $ismw_deposit_payable     = max(0, $new_ismw_deposit - $old_ismw_deposit);
 
         $base_fee = $contract_fee + $ismw_fee;
-
         $late_fee = $this->calculate_late_fee($application, $cycle, $base_fee);
 
-        $total_payable = $contract_deposit_payable + $ismw_deposit_payable + $base_fee + $late_fee;
+        $total_payable = $contract_deposit_payable
+            + $ismw_deposit_payable
+            + $base_fee
+            + $late_fee;
 
         return [
-            'base_fee' => round($base_fee, 2),
-            'deposit_difference' => round($contract_deposit_payable + $ismw_deposit_payable, 2),
-            'late_fee' => round($late_fee, 2),
-            'renewal_fee' => round($total_payable, 2),
+            'base_fee'            => round($base_fee, 2),
+            'deposit_difference'  => round($contract_deposit_payable + $ismw_deposit_payable, 2),
+            'late_fee'            => round($late_fee, 2),
+            'renewal_fee'         => round($total_payable, 2),
         ];
     }
 
