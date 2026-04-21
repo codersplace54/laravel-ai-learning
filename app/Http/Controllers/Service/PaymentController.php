@@ -122,6 +122,9 @@ class PaymentController extends Controller
 
                 if ($application->is_third_party == 1 && $application->egras_scheme_code) {
                     $scheme_names[] = trim($application->egras_scheme_code);
+                } elseif ($application->service_id == 107) {
+                    // Jal Board
+                    $scheme_names[] = '8229-00-200-35-51';
                 } else {
                     $scheme_names[] = trim($application->service->egras_scheme_code ?? 'NA');
                 }
