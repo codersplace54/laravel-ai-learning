@@ -29,6 +29,7 @@ use App\Http\Controllers\Incentive\SchemeController;
 use App\Http\Controllers\Incentive\ProformaController;
 use App\Http\Controllers\Incentive\ProformaQuestionnaireController;
 use App\Http\Controllers\Incentive\UserIncentiveApplicationController;
+use App\Http\Controllers\AnnexureController;
 use App\Http\Controllers\SchemaController;
 use App\Http\Middleware\JWTActivityMiddleware;
 use App\Http\Controllers\Report\ReportController;
@@ -472,5 +473,10 @@ Route::post('get-information-wizard-filters', [InformationWizardController::clas
 Route::post('incentive-dashboard', [UserIncentiveApplicationController::class, 'incentive_dashboard']);
 Route::post('incentive/scheme-list', [SchemeController::class, 'scheme_list']);
 Route::post('incentive/proforma-list', [ProformaController::class, 'proforma_list']);
+
+Route::prefix('annexure')->group(function () {
+    Route::post('incentive-dashboard', [AnnexureController::class, 'incentive_dashboard']);
+    Route::post('incentive-dashboard-filters', [AnnexureController::class, 'incentive_dashboard_filters']);
+});
 
 Route::post('public-holiday-disabled-dates', [HolidayController::class, 'holiday_disabled_dates']);
