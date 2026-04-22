@@ -1105,9 +1105,7 @@ class CertificateController extends Controller
         try {
             $request->validate([
                 'certificate_number' => 'required|string|max:255',
-
-                'mobile_no'          => 'nullable|string|max:20',
-                'date_of_issue'      => 'required|date',
+                'date_of_issue'      => 'nullable|date',
             ], [
                 [
                     'certificate_number.required' => 'License Id or Application ID is required.',
@@ -1118,15 +1116,9 @@ class CertificateController extends Controller
 
             $application = UserServiceApplication::query()
                 ->where(function ($qq) use ($request) {
-                    $qq->where('applicationid', $request->certificate_number)
+                    $qq->where('applicationId', $request->certificate_number)
                         ->orWhere('license_id', $request->certificate_number);
                 });
-
-            if ($request->filled('mobile_no')) {
-                $application->whereHas('user', function ($query) use ($request) {
-                    $query->where('mobile_no', $request->mobile_no);
-                });
-            }
 
             if ($request->filled('date_of_issue')) {
                 $application->whereDate('NOC_generationDate', $request->date_of_issue);
@@ -1153,7 +1145,6 @@ class CertificateController extends Controller
                 'data'    => [
                     'id'                 => $certificate->id,
                     'certificate_number' => $certificateNumber,
-                    'mobile_no'          => optional($certificate->user)->mobile_no,
                     'date_of_issue'      => $certificate->NOC_generationDate,
                     'certificate_url'    => $certificateUrl,
                 ],

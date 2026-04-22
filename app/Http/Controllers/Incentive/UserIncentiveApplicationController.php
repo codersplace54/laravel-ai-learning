@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Incentive;
 use App\Http\Controllers\Controller;
 use App\Models\EnterpriseDetail;
 use App\Models\Incentive;
+use App\Models\LineOfActivity;
 use App\Models\IncentiveWorkflowHistory;
 use Illuminate\Http\Request;
 use App\Models\UserIncentiveApplication;
@@ -497,6 +498,20 @@ class UserIncentiveApplicationController extends Controller
             });
 
             $eligible_claim_proforma_ids = array_values(array_unique(array_merge($eligible_claim_proforma_ids, $user_claim_proform_ids)));
+
+            // filter out claim proformas whose scheme no longer covers the users dob
+            $dob = User::where('id', $user_id)->value('dob');
+            if ($dob) {
+                $valid_scheme_ids = Scheme::where('status', 1)
+                    ->whereDate('policy_start_date', '<=', $dob)
+                    ->whereDate('policy_end_date', '>=', $dob)
+                    ->pluck('id');
+
+                $eligible_claim_proforma_ids = Proforma::whereIn('id', $eligible_claim_proforma_ids)
+                    ->whereIn('scheme_id', $valid_scheme_ids)
+                    ->pluck('id')
+                    ->toArray();
+            }
 
             $request->validate([
                 'application_no'   => 'nullable|string|max:50',
@@ -1319,8 +1334,6 @@ class UserIncentiveApplicationController extends Controller
                 ];
             }
 
-            $completed_to_statuses = $history->pluck('to_status')->toArray();
-
             $terminal_statuses = [
                 'rejected_by_da',
                 'rejected_by_gm',
@@ -1331,25 +1344,36 @@ class UserIncentiveApplicationController extends Controller
             ];
             $is_terminal = in_array($application->workflow_status, $terminal_statuses, true);
 
-            // Append upcoming steps not yet completed
-            foreach ($pipeline as $step) {
-                $already_done = in_array($step['to_status'], $completed_to_statuses, true);
-                if (!$already_done && !$is_terminal) {
-                    $history_data->push([
-                        'step'                  => $step['step'],
-                        'role'                  => $step['role'],
-                        'label'                 => $step['label'],
-                        'to_status'             => $step['to_status'],
-                        'to_status_label'       => $this->status_label($step['to_status']),
-                        'from_status'           => null,
-                        'from_status_label'     => null,
-                        'remarks'               => null,
-                        'review_file'           => null,
-                        'action_taken_at'       => null,
-                        'action_taken_by'       => null,
-                        'action_taken_email_id' => null,
-                        'is_completed'          => false,
-                    ]);
+            $current_status = $application->workflow_status;
+            $pending_from_step = null;
+            if (!$is_terminal) {
+                foreach ($pipeline as $step) {
+                    $step_already_reached = $history->where('to_status', $step['to_status'])->isNotEmpty();
+                    $last_submission_at = $history->whereIn('to_status', ['submitted', 're_submitted'])->last()?->action_taken_at;
+                    $reached_after_last_submission = $last_submission_at
+                        ? $history->where('to_status', $step['to_status'])->where('action_taken_at', '>=', $last_submission_at)->isNotEmpty()
+                        : $step_already_reached;
+
+                    if (!$reached_after_last_submission) {
+                        if ($pending_from_step === null || $step['step'] >= $pending_from_step) {
+                            $history_data->push([
+                                'step'                  => $step['step'],
+                                'role'                  => $step['role'],
+                                'label'                 => $step['label'],
+                                'to_status'             => 'pending',
+                                'to_status_label'       => 'Pending',
+                                'from_status'           => null,
+                                'from_status_label'     => null,
+                                'remarks'               => null,
+                                'review_file'           => null,
+                                'action_taken_at'       => null,
+                                'action_taken_by'       => null,
+                                'action_taken_email_id' => null,
+                                'is_completed'          => false,
+                            ]);
+                            $pending_from_step = $step['step'];
+                        }
+                    }
                 }
             }
 
@@ -1777,6 +1801,7 @@ class UserIncentiveApplicationController extends Controller
                 'scheme_id'          => 'nullable|integer|exists:schemes,id',
                 'proforma_id'        => 'nullable|integer|exists:proformas,id',
                 'district_code'      => 'nullable|string',
+                'sector'             => 'nullable|string',
                 'application_status' => 'nullable|string',
                 'from_date'          => 'nullable|date',
                 'to_date'            => 'nullable|date|after_or_equal:from_date',
@@ -1787,19 +1812,21 @@ class UserIncentiveApplicationController extends Controller
                 ->join('schemes', 'schemes.id', '=', 'user_incentive_applications.scheme_id')
                 ->join('users', 'users.id', '=', 'user_incentive_applications.user_id')
                 ->leftJoin('tripura_master_data as tmd', 'tmd.district_code', '=', 'users.district_id')
+                ->leftJoin('line_of_activities', 'line_of_activities.user_id', '=', 'user_incentive_applications.user_id')
                 ->whereNotNull('user_incentive_applications.submitted_at')
                 ->when($request->filled('scheme_id'),          fn($q) => $q->where('user_incentive_applications.scheme_id', $request->scheme_id))
                 ->when($request->filled('proforma_id'),        fn($q) => $q->where('user_incentive_applications.proforma_id', $request->proforma_id))
                 ->when($request->filled('district_code'),      fn($q) => $q->where('users.district_id', $request->district_code))
+                ->when($request->filled('sector'),             fn($q) => $q->where('line_of_activities.thrust_sector', $request->sector))
                 ->when($request->filled('application_status'), fn($q) => $q->where('user_incentive_applications.workflow_status', $request->application_status))
                 ->when($request->filled('from_date'),          fn($q) => $q->whereDate('user_incentive_applications.submitted_at', '>=', $request->from_date))
                 ->when($request->filled('to_date'),            fn($q) => $q->whereDate('user_incentive_applications.submitted_at', '<=', $request->to_date));
 
-            $all_ids = (clone $base)->pluck('user_incentive_applications.id');
+            $all_ids = (clone $base)->distinct()->pluck('user_incentive_applications.id');
 
             $total_received  = $all_ids->count();
-            $total_approved  = (clone $base)->whereIn('user_incentive_applications.workflow_status', ['noc_issued', 'claim_approved_by_gm', 'claim_approved_by_slc', 'approved_by_da'])->count();
-            $total_disbursed = (clone $base)->whereIn('user_incentive_applications.workflow_status', ['claim_approved_by_slc', 'claim_approved_by_gm'])->count();
+            $total_approved  = (clone $base)->whereIn('user_incentive_applications.workflow_status', ['noc_issued', 'claim_approved_by_gm', 'claim_approved_by_slc', 'approved_by_da'])->distinct()->count('user_incentive_applications.id');
+            $total_disbursed = (clone $base)->whereIn('user_incentive_applications.workflow_status', ['claim_approved_by_slc', 'claim_approved_by_gm'])->distinct()->count('user_incentive_applications.id');
 
             $processing_times = UserIncentiveApplication::whereIn('id', $all_ids)
                 ->whereNotNull('decided_at')
@@ -1826,14 +1853,15 @@ class UserIncentiveApplicationController extends Controller
                     'proformas.id as proforma_id',
                     'proformas.title as proforma_name',
                     'schemes.title as scheme_name',
-                    DB::raw('COUNT(user_incentive_applications.id) as application_received'),
+                    'line_of_activities.thrust_sector as sector',
+                    DB::raw('COUNT(DISTINCT user_incentive_applications.id) as application_received'),
                     DB::raw('SUM(user_incentive_applications.workflow_status IN ("noc_issued","claim_approved_by_gm","claim_approved_by_slc","approved_by_da")) as approved'),
                     DB::raw('SUM(user_incentive_applications.workflow_status IN ("claim_approved_by_slc","claim_approved_by_gm")) as disbursed'),
                     DB::raw('AVG(CASE WHEN user_incentive_applications.decided_at IS NOT NULL THEN DATEDIFF(user_incentive_applications.decided_at, user_incentive_applications.submitted_at) END) as avg_processing_time'),
                     DB::raw('MIN(CASE WHEN user_incentive_applications.decided_at IS NOT NULL THEN DATEDIFF(user_incentive_applications.decided_at, user_incentive_applications.submitted_at) END) as min_time'),
                     DB::raw('MAX(CASE WHEN user_incentive_applications.decided_at IS NOT NULL THEN DATEDIFF(user_incentive_applications.decided_at, user_incentive_applications.submitted_at) END) as max_time')
                 )
-                ->groupBy('proformas.id', 'proformas.title', 'schemes.title')
+                ->groupBy('proformas.id', 'proformas.title', 'schemes.title', 'line_of_activities.thrust_sector')
                 ->orderBy('proformas.id')
                 ->get();
 
@@ -1847,19 +1875,22 @@ class UserIncentiveApplicationController extends Controller
                 ->groupBy('proforma_id');
 
             $table_data = $proforma_rows->map(fn($row, $index) => [
-                'sl_no'               => $index + 1,
-                'proforma_name'       => $row->proforma_name,
-                'scheme_name'         => $row->scheme_name,
+                'sl_no'                => $index + 1,
+                'proforma_name'        => $row->proforma_name,
+                'scheme_name'          => $row->scheme_name,
+                'sector'               => $row->sector,
                 'application_received' => (int) $row->application_received,
-                'approved'            => (int) $row->approved,
-                'disbursed'           => (int) $row->disbursed,
-                'avg_processing_time' => $row->avg_processing_time ? round($row->avg_processing_time, 2) : null,
-                'min_time'            => $row->min_time,
-                'max_time'            => $row->max_time,
-                'median_time'         => $this->calculate_median(
+                'approved'             => (int) $row->approved,
+                'disbursed'            => (int) $row->disbursed,
+                'avg_processing_time'  => $row->avg_processing_time ? round($row->avg_processing_time, 2) : null,
+                'min_time'             => $row->min_time,
+                'max_time'             => $row->max_time,
+                'median_time'          => $this->calculate_median(
                     ($decided_days_by_proforma[$row->proforma_id] ?? collect())->pluck('days')
                 ),
             ]);
+
+            $sector_list = LineOfActivity::distinct()->orderBy('thrust_sector')->pluck('thrust_sector')->filter()->values();
 
             return response()->json([
                 'status'  => 1,
@@ -1874,7 +1905,8 @@ class UserIncentiveApplicationController extends Controller
                         'min_time'             => $min_time,
                         'max_time'             => $max_time,
                     ],
-                    'table_data' => $table_data,
+                    'table_data'  => $table_data,
+                    'sector_list' => $sector_list,
                 ],
             ]);
         } catch (\Exception $e) {

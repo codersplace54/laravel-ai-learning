@@ -2009,6 +2009,31 @@ class UserServiceApplicationController extends Controller
 
     public function third_party_return(Request $request)
     {
+        try {
+            $request->validate([
+                'applicationId'        => 'required|string',
+                'status'               => 'required|string|in:draft,submitted,under_review,approved,rejected,re_submitted,send_back,saved,expired,pending,noc_issued,extra_payment',
+                'payment_status'       => 'nullable|string|in:pending,paid,failed',
+                'max_processing_date'  => 'nullable|date',
+                'noc_number'           => 'nullable|string|max:255',
+                'noc_valid_till'       => 'nullable|date',
+                'remarks'              => 'nullable|string',
+                'service_id'           => 'nullable|integer|exists:service_masters,id',
+                'user_id'              => 'nullable|integer|exists:users,id',
+                'approved_fee'         => 'nullable|numeric|min:0',
+                'extra_payment'        => 'nullable|numeric|min:0',
+                'application_date'     => 'nullable|date',
+                'updation_date'        => 'nullable|date',
+                'egras_account_head'   => 'nullable|string|max:255',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => 0,
+                'message' => 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        }
+
         $external_id         = $request->input('applicationId');
         $status              = $request->input('status');
         $payment_status      = $request->input('payment_status');
