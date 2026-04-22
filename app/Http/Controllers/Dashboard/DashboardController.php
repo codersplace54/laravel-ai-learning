@@ -766,7 +766,7 @@ class DashboardController extends Controller
 
             $total_queries = UserFeedback::count();
 
-            $noc_issued = UserServiceApplication::whereIN('status', ['noc_issued', 'approved'])->count();
+            $noc_issued = UserServiceApplication::whereIn('status', ['noc_issued', 'approved'])->tap($date_filter)->count();
 
 
             $total_count_pending_application = UserServiceApplication::whereIn('status', ['submitted', 're_submitted', 'pending', 'under_review', 'extra_payment', 'send_back'])

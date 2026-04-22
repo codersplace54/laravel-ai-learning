@@ -2013,7 +2013,7 @@ class UserServiceApplicationController extends Controller
             $request->validate([
                 'applicationId'        => 'required|string',
                 'status'               => 'required|string|in:draft,submitted,under_review,approved,rejected,re_submitted,send_back,saved,expired,pending,noc_issued,extra_payment',
-                'payment_status'       => 'nullable|string|in:pending,paid,failed',
+                'payment_status'       => 'nullable|string|in:pending,paid,failed,initiated,success',
                 'max_processing_date'  => 'nullable|date',
                 'noc_number'           => 'nullable|string|max:255',
                 'noc_valid_till'       => 'nullable|date',
