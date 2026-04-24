@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\LineOfActivity;
 use App\Models\UserIncentiveApplication;
 use App\Models\TripuraMasterData;
+use App\Models\Scheme;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -22,88 +23,91 @@ class AnnexureController extends Controller
                 'to_date'            => 'nullable|date|after_or_equal:from_date',
             ]);
 
-            $base = UserIncentiveApplication::query()
-                ->join('proformas', 'proformas.id', '=', 'user_incentive_applications.proforma_id')
-                ->join('schemes', 'schemes.id', '=', 'user_incentive_applications.scheme_id')
-                ->join('users', 'users.id', '=', 'user_incentive_applications.user_id')
-                ->leftJoin('line_of_activities', 'line_of_activities.user_id', '=', 'users.id')
-                ->leftJoin('tripura_master_data as tmd', 'tmd.district_code', '=', 'users.district_id')
-                ->whereNotNull('user_incentive_applications.submitted_at')
-                ->when($request->filled('scheme_id'),          fn($q) => $q->where('user_incentive_applications.scheme_id', $request->scheme_id))
-                ->when($request->filled('sector'),             fn($q) => $q->where('line_of_activities.thrust_sector', $request->sector))
-                ->when($request->filled('district_code'),      fn($q) => $q->where('users.district_id', $request->district_code))
-                ->when($request->filled('application_status'), fn($q) => $q->where('user_incentive_applications.workflow_status', $request->application_status))
-                ->when($request->filled('from_date'),          fn($q) => $q->whereDate('user_incentive_applications.submitted_at', '>=', $request->from_date))
-                ->when($request->filled('to_date'),            fn($q) => $q->whereDate('user_incentive_applications.submitted_at', '<=', $request->to_date));
+            $sector_user_ids = null;
+            if ($request->filled('sector')) {
+                $sector_user_ids = LineOfActivity::where('thrust_sector', $request->sector)
+                    ->pluck('user_id')
+                    ->unique()
+                    ->values();
+            }
 
-            $all_ids = (clone $base)->pluck('user_incentive_applications.id');
+            $apps = UserIncentiveApplication::query()
+                // ->whereNotNull('submitted_at')
+                ->when($request->filled('scheme_id'),          fn($q) => $q->where('scheme_id', $request->scheme_id))
+                ->when($request->filled('application_status'), fn($q) => $q->where('workflow_status', $request->application_status))
+                ->when($request->filled('from_date'),          fn($q) => $q->whereDate('submitted_at', '>=', $request->from_date))
+                ->when($request->filled('to_date'),            fn($q) => $q->whereDate('submitted_at', '<=', $request->to_date))
+                ->when($sector_user_ids !== null,              fn($q) => $q->whereIn('user_id', $sector_user_ids))
+                ->when($request->filled('district_code'),      fn($q) => $q->whereHas('user', fn($u) => $u->where('district_id', $request->district_code)))
+                ->with(['proforma.scheme', 'user'])
+                ->get();
 
-            $total_received  = $all_ids->count();
-            $total_approved  = (clone $base)->whereIn('user_incentive_applications.workflow_status', ['noc_issued', 'claim_approved_by_gm', 'claim_approved_by_slc', 'approved_by_da'])->count();
-            $total_disbursed = (clone $base)->whereIn('user_incentive_applications.workflow_status', ['claim_approved_by_slc', 'claim_approved_by_gm'])->count();
+            $total_received  = $apps->count();
+            $approved_statuses  = ['noc_issued', 'claim_approved_by_gm', 'claim_approved_by_slc', 'approved_by_da'];
+            $disbursed_statuses = ['claim_approved_by_slc', 'claim_approved_by_gm'];
+            $total_approved  = $apps->whereIn('workflow_status', $approved_statuses)->count();
+            $total_disbursed = $apps->whereIn('workflow_status', $disbursed_statuses)->count();
 
-            $processing_times = UserIncentiveApplication::whereIn('id', $all_ids)
-                ->whereNotNull('decided_at')
-                ->selectRaw('DATEDIFF(decided_at, submitted_at) as days')
-                ->pluck('days')
+            $processing_days = $apps->filter(fn($a) => $a->decided_at)
+                ->map(fn($a) => $a->submitted_at->diffInDays($a->decided_at))
                 ->filter(fn($d) => $d >= 0)
                 ->sort()
                 ->values();
 
-            $count       = $processing_times->count();
-            $avg_time    = $count > 0 ? round($processing_times->avg(), 2) : null;
-            $min_time    = $count > 0 ? $processing_times->min() : null;
-            $max_time    = $count > 0 ? $processing_times->max() : null;
-            $median_time = $this->calculate_median($processing_times);
+            $count       = $processing_days->count();
+            $avg_time    = $count > 0 ? round($processing_days->avg(), 2) : null;
+            $min_time    = $count > 0 ? $processing_days->min() : null;
+            $max_time    = $count > 0 ? $processing_days->max() : null;
+            $median_time = $this->calculate_median($processing_days);
 
-            $rows = (clone $base)
-                ->select(
-                    'proformas.id as proforma_id',
-                    'proformas.title as metric',
-                    'schemes.title as scheme_name',
-                    'line_of_activities.thrust_sector as sector',
-                    'tmd.district_name as district',
-                    DB::raw('MIN(user_incentive_applications.submitted_at) as period_start'),
-                    DB::raw('MAX(user_incentive_applications.submitted_at) as period_end'),
-                    DB::raw('COUNT(DISTINCT user_incentive_applications.id) as applications_received'),
-                    DB::raw('SUM(user_incentive_applications.workflow_status IN ("noc_issued","claim_approved_by_gm","claim_approved_by_slc","approved_by_da")) as applications_approved'),
-                    DB::raw('SUM(user_incentive_applications.workflow_status IN ("claim_approved_by_slc","claim_approved_by_gm")) as applications_disbursed'),
-                    DB::raw('AVG(CASE WHEN user_incentive_applications.decided_at IS NOT NULL THEN DATEDIFF(user_incentive_applications.decided_at, user_incentive_applications.submitted_at) END) as avg_processing_time'),
-                    DB::raw('MIN(CASE WHEN user_incentive_applications.decided_at IS NOT NULL THEN DATEDIFF(user_incentive_applications.decided_at, user_incentive_applications.submitted_at) END) as min_time'),
-                    DB::raw('MAX(CASE WHEN user_incentive_applications.decided_at IS NOT NULL THEN DATEDIFF(user_incentive_applications.decided_at, user_incentive_applications.submitted_at) END) as max_time')
-                )
-                ->groupBy('proformas.id', 'proformas.title', 'schemes.title', 'line_of_activities.thrust_sector', 'tmd.district_name')
-                ->orderBy('proformas.id')
-                ->get();
-
-            $proforma_ids = $rows->pluck('proforma_id');
-
-            $days_by_proforma = UserIncentiveApplication::whereIn('user_incentive_applications.id', $all_ids)
-                ->whereNotNull('decided_at')
-                ->whereIn('proforma_id', $proforma_ids)
-                ->selectRaw('proforma_id, DATEDIFF(decided_at, submitted_at) as days')
+            // district name lookup (one per code)
+            $district_names = TripuraMasterData::whereNotNull('district_code')
+                ->select('district_code', 'district_name')
                 ->get()
-                ->groupBy('proforma_id');
+                ->unique('district_code')
+                ->pluck('district_name', 'district_code');
 
-            $table_data = $rows->values()->map(fn($row, $index) => [
-                'sl_no'                  => $index + 1,
-                'metric'                 => $row->metric,
-                'scheme'                 => $row->scheme_name,
-                'sector'                 => $row->sector,
-                'district'               => $row->district,
-                'application_period'     => $row->period_start && $row->period_end
-                    ? date('M Y', strtotime($row->period_start)) . ' - ' . date('M Y', strtotime($row->period_end))
-                    : null,
-                'applications_received'  => (int) $row->applications_received,
-                'applications_approved'  => (int) $row->applications_approved,
-                'applications_disbursed' => (int) $row->applications_disbursed,
-                'avg_processing_time'    => $row->avg_processing_time ? round($row->avg_processing_time, 2) : null,
-                'median_time'            => $this->calculate_median(
-                    ($days_by_proforma[$row->proforma_id] ?? collect())->pluck('days')
-                ),
-                'min_time'               => $row->min_time,
-                'max_time'               => $row->max_time,
-            ]);
+            // sector lookup per user
+            $sector_map = LineOfActivity::whereIn('user_id', $apps->pluck('user_id')->unique())
+                ->select('user_id', 'thrust_sector')
+                ->get()
+                ->unique('user_id')
+                ->pluck('thrust_sector', 'user_id');
+
+            $grouped = $apps->groupBy(fn($a) => implode('|', [
+                $a->proforma_id,
+                $sector_map[$a->user_id] ?? '',
+                $a->user->district_id ?? '',
+            ]));
+
+            $table_data = $grouped->values()->map(function ($group, $index) use ($approved_statuses, $disbursed_statuses, $district_names, $sector_map) {
+                $first       = $group->first();
+                $days        = $group->filter(fn($a) => $a->decided_at)
+                    ->map(fn($a) => $a->submitted_at->diffInDays($a->decided_at))
+                    ->filter(fn($d) => $d >= 0)
+                    ->sort()
+                    ->values();
+
+                $district_code = $first->user->district_id ?? null;
+
+                return [
+                    'sl_no'                  => $index + 1,
+                    'metric'                 => $first->proforma->title ?? null,
+                    'scheme'                 => $first->proforma->scheme->title ?? null,
+                    'sector'                 => $sector_map[$first->user_id] ?? null,
+                    'district'               => $district_code ? ($district_names[$district_code] ?? $district_code) : null,
+                    'application_period'     => $group->min('submitted_at') && $group->max('submitted_at')
+                        ? date('M Y', strtotime($group->min('submitted_at'))) . ' - ' . date('M Y', strtotime($group->max('submitted_at')))
+                        : null,
+                    'applications_received'  => $group->count(),
+                    'applications_approved'  => $group->whereIn('workflow_status', $approved_statuses)->count(),
+                    'applications_disbursed' => $group->whereIn('workflow_status', $disbursed_statuses)->count(),
+                    'avg_processing_time'    => $days->count() > 0 ? round($days->avg(), 2) : null,
+                    'median_time'            => $this->calculate_median($days),
+                    'min_time'               => $days->count() > 0 ? $days->min() : null,
+                    'max_time'               => $days->count() > 0 ? $days->max() : null,
+                ];
+            });
 
             return response()->json([
                 'status'  => 1,
@@ -137,9 +141,9 @@ class AnnexureController extends Controller
             $districts = TripuraMasterData::whereNotNull('district_name')
                 ->whereNotNull('district_code')
                 ->select('district_code', 'district_name')
-                ->distinct()
-                ->orderBy('district_name')
-                ->get();
+                ->get()
+                ->unique('district_code')
+                ->values();
 
             $statuses = [
                 ['value' => 'submitted',             'label' => 'Received'],
@@ -155,11 +159,7 @@ class AnnexureController extends Controller
             return response()->json([
                 'status'  => 1,
                 'message' => 'Filter options fetched successfully.',
-                'data'    => [
-                    'sectors'   => $sectors,
-                    'districts' => $districts,
-                    'statuses'  => $statuses,
-                ],
+                'data'    => compact('sectors', 'districts', 'statuses'),
             ]);
         } catch (\Exception $e) {
             return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);

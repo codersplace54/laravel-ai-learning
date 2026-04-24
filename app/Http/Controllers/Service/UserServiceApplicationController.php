@@ -34,6 +34,7 @@ use App\Traits\LogsActivity;
 use App\Traits\PaymentMapTrait;
 use App\Http\Controllers\Service\CertificateController;
 use App\Models\LabourDeposit;
+use Illuminate\Support\Facades\Log;
 
 class UserServiceApplicationController extends Controller
 {
@@ -2009,6 +2010,8 @@ class UserServiceApplicationController extends Controller
 
     public function third_party_return(Request $request)
     {
+        Log::info("Third party return called" . json_encode($request->all()));
+        
         try {
             $request->validate([
                 'applicationId'        => 'required|string',
@@ -2042,7 +2045,6 @@ class UserServiceApplicationController extends Controller
         $noc_valid_till      = $request->input('noc_valid_till');
         $remarks             = $request->input('remarks');
         $service_id          = $request->input('service_id');
-        $user_id             = $request->input('user_id');
         $approved_fee        = $request->input('approved_fee');
         $extra_payment       = $request->input('extra_payment');
         $application_date    = $request->input('application_date');
@@ -2050,7 +2052,7 @@ class UserServiceApplicationController extends Controller
         $egras_account_head  = $request->input('egras_account_head');
 
         DB::beginTransaction();
-
+        $user_id = Auth::id();
         try {
             $data = UserServiceApplication::where('external_application_id', $external_id)->first();
 
