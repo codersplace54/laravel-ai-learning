@@ -87,6 +87,7 @@ class AdminController extends Controller
                         'pan'  => $user->pan,
                         'user_name'  => $user->user_name,
                         'bin'   => $user->bin,
+                        'ch_name'       => $user->ch_name ?? null,
                         'district_code'   => $user->district->district_code ?? null,
                         'district_name' => $user->district->district_name ?? null,
                         'subdivision_code'   => $user->subdivision->sub_lgd_code ?? null,

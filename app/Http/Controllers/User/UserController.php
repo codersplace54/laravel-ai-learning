@@ -977,6 +977,7 @@ class UserController extends Controller
                     'subdivision_name' => $loc->subdivision->sub_division ?? null,
                     'block_id'       => $loc->block_id,
                     'block_name'       => $loc->ulb->ulb_name ?? null,
+                    'ch_name'       => $loc->ch_name,
                 ];
             });
 
