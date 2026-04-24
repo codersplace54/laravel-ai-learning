@@ -3360,6 +3360,97 @@ class UserServiceApplicationController extends Controller
         }
     }
 
+    // public function get_service_renewal_cycles(Request $request)    // will remove later after checking the new function
+    // {
+
+    //     $request->validate([
+    //         'service_id' => 'nullable|integer|exists:service_masters,id',
+    //         'application_id' => 'nullable|integer|exists:user_service_applications,id'
+    //     ]);
+
+    //     $service = ServiceMaster::with('renewalCycles')->find($request->service_id);
+
+    //     if (!$service) {
+    //         return response()->json([
+    //             'status' => 0,
+    //             'message' => 'Service not found'
+    //         ], 404);
+    //     }
+
+    //     $renewal_period_days = [
+    //         'monthly'     => 30,
+    //         'quarterly'   => 90,
+    //         'half_yearly' => 182,
+    //         'annually'    => 365,
+    //         'biannual'    => 182,
+    //         'biennial'    => 730,
+    //         'triennial'   => 1095,
+    //         '4year'       => 1460,
+    //         '5year'       => 1825,
+    //     ];
+
+    //     $cycles = [];
+
+    //     if ($request->filled('application_id')) {
+    //         $application = UserServiceApplication::find($request->application_id);
+    //         if ($application && !empty($application->NOC_expiry_date)) {
+    //             $expiry_date = Carbon::parse($application->NOC_expiry_date);
+    //         } else {
+    //             $expiry_date = null;
+    //         }
+    //     } else {
+    //         $expiry_date = null;
+    //     }
+
+    //     if (!$expiry_date) {
+    //         if (!empty($service->noc_validity)) {
+    //             $expiry_date = Carbon::today()->addDays((int) $service->noc_validity);
+    //         } elseif (!empty($service->fixed_expiry_date)) {
+    //             $expiry_date = Carbon::parse($service->fixed_expiry_date);
+    //         }
+    //     }
+
+    //     foreach ($service->renewalCycles as $cycle) {
+
+    //         $renewal_start = null;
+    //         $renewal_end   = null;
+
+    //         if ($expiry_date) {
+    //             $renewal_start = $expiry_date->copy()->addDay();
+
+    //             if ($cycle->renewal_period === 'custom' && !empty($cycle->renewal_period_custom)) {
+    //                 $days = (int) preg_replace('/[^0-9]/', '', $cycle->renewal_period_custom);
+    //                 if ($days > 0) {
+    //                     $renewal_end = $renewal_start->copy()->addDays($days);
+    //                 }
+    //             } elseif (isset($renewal_period_days[$cycle->renewal_period])) {
+    //                 $renewal_end = $renewal_start->copy()->addDays($renewal_period_days[$cycle->renewal_period]);
+    //             }
+    //         }
+
+    //         $cycles[] = [
+    //             'id'                  => $cycle->id,
+    //             'renewal_title'       => $cycle->renewal_title ?? null,
+    //             'application_expiry_date' => $expiry_date ? $expiry_date->toDateString() : null,
+    //             'renewal_start_date' => optional($renewal_start)->toDateString(),
+    //             'renewal_end_date'   => optional($renewal_end)->toDateString(),
+    //             'pre_window_days'    => $cycle->renewal_window_days,
+    //             'post_window_days'   => $cycle->renewal_target_days,
+    //             'late_fee_type'      => $cycle->late_fee_calculation_dynamic,
+    //             'late_fee_amount'    => $cycle->late_fee_fixed_amount,
+    //             'late_fee_applicable' => $cycle->late_fee_applicable,
+    //         ];
+    //     }
+
+    //     return response()->json([
+    //         'status' => 1,
+    //         'message' => 'Renewal cycles fetched successfully',
+    //         'service_id' => $service->id,
+    //         'service_name' => $service->service_title_or_description,
+    //         'cycles' => $cycles
+    //     ]);
+    // }
+
     public function get_service_renewal_cycles(Request $request)
     {
 
@@ -3415,19 +3506,46 @@ class UserServiceApplicationController extends Controller
             $renewal_start = null;
             $renewal_end   = null;
 
-            if ($expiry_date) {
+            if (!empty($cycle->fixed_renewal_start_date) && !empty($cycle->fixed_renewal_end_date)) {
+
+                $renewal_start = Carbon::parse($cycle->fixed_renewal_start_date);
+                $renewal_end   = Carbon::parse($cycle->fixed_renewal_end_date);
+            } elseif ($expiry_date && (
+                !empty($cycle->renewal_window_days) ||
+                !empty($cycle->renewal_target_days)
+            )) {
+
+                $pre_days  = (int) $cycle->renewal_window_days;
+                $post_days = (int) $cycle->renewal_target_days;
+
+                $renewal_start = $expiry_date->copy()->subDays($pre_days);
+                $renewal_end   = $expiry_date->copy()->addDays($post_days);
+            } elseif ($expiry_date) {
+
                 $renewal_start = $expiry_date->copy()->addDay();
 
                 if ($cycle->renewal_period === 'custom' && !empty($cycle->renewal_period_custom)) {
+
                     $days = (int) preg_replace('/[^0-9]/', '', $cycle->renewal_period_custom);
+
                     if ($days > 0) {
                         $renewal_end = $renewal_start->copy()->addDays($days);
                     }
                 } elseif (isset($renewal_period_days[$cycle->renewal_period])) {
-                    $renewal_end = $renewal_start->copy()->addDays($renewal_period_days[$cycle->renewal_period]);
+
+                    $renewal_end = $renewal_start->copy()->addDays(
+                        $renewal_period_days[$cycle->renewal_period]
+                    );
                 }
             }
 
+            $today = Carbon::today();
+
+            if ($renewal_start && $renewal_end) {
+                if ($today->lt($renewal_start) || $today->gt($renewal_end)) {
+                    continue;
+                }
+            }
             $cycles[] = [
                 'id'                  => $cycle->id,
                 'renewal_title'       => $cycle->renewal_title ?? null,
@@ -4101,6 +4219,95 @@ class UserServiceApplicationController extends Controller
         return $result;
     }
 
+    private function calculate_labour_deposit_renewal($service_id, $application_data, $target_question_ids = [])
+    {
+        $rules = RenewalFeeRule::where('service_id', $service_id)
+            ->whereIn('question_id', $target_question_ids)
+            ->orderBy('priority')
+            ->get();
+
+        $result = [];
+
+        foreach ($target_question_ids as $qid) {
+
+            $result[$qid] = [
+                'deposit' => 0,
+                'fee'     => 0,
+            ];
+
+            $user_answer = $application_data[$qid]
+                ?? $application_data[(string)$qid]
+                ?? null;
+
+            if ($user_answer === null) continue;
+
+            if (is_numeric($user_answer)) {
+                $user_answer = (float) $user_answer;
+            }
+
+            foreach ($rules->where('question_id', $qid) as $rule) {
+
+                if ($rule->condition_label_question_id) {
+
+                    $pre_value = $application_data[$rule->condition_label_question_id] ?? null;
+                    if ($pre_value === null) continue;
+
+                    if (is_numeric($pre_value)) {
+                        $pre_value = (float) $pre_value;
+                    }
+
+                    $pre_match = match ($rule->pre_condition_operator) {
+                        '='  => $pre_value == $rule->pre_condition_value,
+                        '!=' => $pre_value != $rule->pre_condition_value,
+                        '<'  => $pre_value <  $rule->pre_condition_value,
+                        '<=' => $pre_value <= $rule->pre_condition_value,
+                        '>'  => $pre_value >  $rule->pre_condition_value,
+                        '>=' => $pre_value >= $rule->pre_condition_value,
+                        'between' => $pre_value >= $rule->pre_start_value &&
+                            $pre_value <= $rule->pre_end_value,
+                        default => true,
+                    };
+
+                    if (!$pre_match) continue;
+                }
+
+                $match = match ($rule->condition_operator) {
+                    '='  => $user_answer == $rule->condition_value_start,
+                    '!=' => $user_answer != $rule->condition_value_start,
+                    '<'  => $user_answer <  $rule->condition_value_start,
+                    '<=' => $user_answer <= $rule->condition_value_start,
+                    '>'  => $user_answer >  $rule->condition_value_start,
+                    '>=' => $user_answer >= $rule->condition_value_start,
+                    'between' => $user_answer >= $rule->condition_value_start &&
+                        $user_answer <= $rule->condition_value_end,
+                    default => true,
+                };
+
+                if (!$match) continue;
+
+                $temp = 0;
+
+                if (!empty($rule->per_unit_fee)) {
+                    $temp += $user_answer * (float) $rule->per_unit_fee;
+                }
+
+                if (!empty($rule->fixed_calculated_fee)) {
+                    $temp += (float) $rule->fixed_calculated_fee;
+                }
+
+                if ($rule->condition_operator === 'between') {
+                    $result[$qid]['fee'] = $temp;
+                    break;
+                } else {
+                    $result[$qid]['deposit'] += $temp;
+                }
+            }
+        }
+
+        return $result;
+    }
+
+
     private function store_labour_deposit_renewal($old_application, $new_application, $final_data, $late_fee)
     {
 
@@ -4118,7 +4325,7 @@ class UserServiceApplicationController extends Controller
             883 => $old_ismw_count,
         ];
 
-        $old_calculated = $this->calculate_labour_deposit(
+        $old_calculated = $this->calculate_labour_deposit_renewal(
             37,
             $old_data,
             [882, 883]
@@ -4127,7 +4334,7 @@ class UserServiceApplicationController extends Controller
         $old_contract_deposit = (float) ($old_calculated[882]['deposit'] ?? 0);
         $old_ismw_deposit     = (float) ($old_calculated[883]['deposit'] ?? 0);
 
-        $calculated = $this->calculate_labour_deposit(
+        $calculated = $this->calculate_labour_deposit_renewal(
             $new_application->service_id,
             $final_data,
             [882, 883]
@@ -4231,6 +4438,7 @@ class UserServiceApplicationController extends Controller
     //         'renewal_fee' => round($total_payable, 2),
     //     ];
     // }
+
     private function calculate_labour_renewal_fee($application, $application_data, $cycle, $old_deposit = null)
     {
 
@@ -4238,29 +4446,27 @@ class UserServiceApplicationController extends Controller
             $old_deposit = LabourDeposit::where('application_id', $application->id)->first();
         }
 
-        $old_application_data = is_array($application->application_data)
-            ? $application->application_data
-            : json_decode($application->application_data ?? '[]', true);
+        $old_contract_count = (int) (
+            $old_deposit->no_of_contract_labour
+            ?? ($application->application_data[882] ?? 0)
+        );
 
-        if ($old_deposit) {
-            $old_contract_count = (int) ($old_deposit->no_of_contract_labour ?? 0);
-            $old_ismw_count     = (int) ($old_deposit->no_of_ismw_labour ?? 0);
-        } else {
-            $old_contract_count = (int) ($old_application_data[882] ?? 0);
-            $old_ismw_count     = (int) ($old_application_data[883] ?? 0);
-        }
+        $old_ismw_count = (int) (
+            $old_deposit->no_of_ismw_labour
+            ?? ($application->application_data[883] ?? 0)
+        );
 
         $old_data = [
             882 => $old_contract_count,
             883 => $old_ismw_count,
         ];
 
-        $old_calculated = $this->calculate_labour_deposit(37, $old_data, [882, 883]);
+        $old_calculated = $this->calculate_labour_deposit_renewal(37, $old_data, [882, 883]);
 
         $old_contract_deposit = (float) ($old_calculated[882]['deposit'] ?? 0);
         $old_ismw_deposit     = (float) ($old_calculated[883]['deposit'] ?? 0);
 
-        $calculated = $this->calculate_labour_deposit(37, $application_data, [882, 883]);
+        $calculated = $this->calculate_labour_deposit_renewal(37, $application_data, [882, 883]);
 
         $new_contract_deposit = (float) ($calculated[882]['deposit'] ?? 0);
         $new_ismw_deposit     = (float) ($calculated[883]['deposit'] ?? 0);
