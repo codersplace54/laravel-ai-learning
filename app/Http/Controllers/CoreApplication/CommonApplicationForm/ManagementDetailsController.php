@@ -435,7 +435,7 @@ class ManagementDetailsController extends Controller
                             'user_id' => $user->id,
                             'name' => $head['name'],
                             'permanent_address' => $head['permanent_address'] ?? null,
-                            'mobile_number' => $director['mobile_number'],
+                            'mobile_number' => $head['mobile_number'],
                         ]);
                     }
                     if (isset($head_record)) {
