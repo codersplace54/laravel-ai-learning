@@ -2011,7 +2011,7 @@ class UserServiceApplicationController extends Controller
     public function third_party_return(Request $request)
     {
         Log::info("Third party return called" . json_encode($request->all()));
-        
+
         try {
             $request->validate([
                 'applicationId'        => 'required|string',
@@ -2021,8 +2021,8 @@ class UserServiceApplicationController extends Controller
                 'noc_number'           => 'nullable|string|max:255',
                 'noc_valid_till'       => 'nullable|date',
                 'remarks'              => 'nullable|string',
-                'service_id'           => 'nullable|integer|exists:service_masters,id',
-                'user_id'              => 'nullable|integer|exists:users,id',
+                'service_id'           => 'required|integer|exists:service_masters,id',
+                'user_id'              => 'required|integer|exists:users,id',
                 'approved_fee'         => 'nullable|numeric|min:0',
                 'extra_payment'        => 'nullable|numeric|min:0',
                 'application_date'     => 'nullable|date',
@@ -2038,21 +2038,29 @@ class UserServiceApplicationController extends Controller
         }
 
         $external_id         = $request->input('applicationId');
-        $status              = $request->input('status');
         $payment_status      = $request->input('payment_status');
         $max_processing_date = $request->input('max_processing_date'); // expected: 2026-02-17
         $noc_number          = $request->input('noc_number');
         $noc_valid_till      = $request->input('noc_valid_till');
         $remarks             = $request->input('remarks');
         $service_id          = $request->input('service_id');
+        $user_id             = $request->input('user_id');
         $approved_fee        = $request->input('approved_fee');
         $extra_payment       = $request->input('extra_payment');
         $application_date    = $request->input('application_date');
         $updation_date       = $request->input('updation_date');
         $egras_account_head  = $request->input('egras_account_head');
+        
+        if ($request->status == 'pending') {
+            $status = 'initiated';
+        } elseif ($request->status == 'paid') {
+            $status = 'success';
+        } else {
+            $status = $request->input('status');
+        }
 
         DB::beginTransaction();
-        $user_id = Auth::id();
+
         try {
             $data = UserServiceApplication::where('external_application_id', $external_id)->first();
 
@@ -2077,6 +2085,7 @@ class UserServiceApplicationController extends Controller
                     'egras_scheme_code'            => $egras_account_head,
                 ]);
             } else {
+
                 $data = UserServiceApplication::create([
                     'user_id'                 => $user_id,
                     'service_id'              => $service_id,
