@@ -2016,7 +2016,7 @@ class UserServiceApplicationController extends Controller
             $request->validate([
                 'applicationId'        => 'required|string',
                 'status'               => 'required|string|in:draft,submitted,under_review,approved,rejected,re_submitted,send_back,saved,expired,pending,noc_issued,extra_payment',
-                'payment_status'       => 'nullable|string|in:pending,paid,failed,initiated,success',
+                'payment_status'       => 'nullable|string|in:pending,paid,failed,initiated,success', //failed,initiated,success (in system)
                 'max_processing_date'  => 'nullable|date',
                 'noc_number'           => 'nullable|string|max:255',
                 'noc_valid_till'       => 'nullable|date',
@@ -2050,13 +2050,14 @@ class UserServiceApplicationController extends Controller
         $application_date    = $request->input('application_date');
         $updation_date       = $request->input('updation_date');
         $egras_account_head  = $request->input('egras_account_head');
+        $status = $request->input('status');
 
-        if ($request->status == 'pending') {
-            $status = 'initiated';
-        } elseif ($request->status == 'paid') {
-            $status = 'success';
+        if ($request->payment_status == 'pending') {
+            $payment_status = 'initiated';
+        } elseif ($request->payment_status == 'paid') {
+            $payment_status = 'success';
         } else {
-            $status = $request->input('status');
+            $payment_status = $request->input('payment_status');
         }
 
         DB::beginTransaction();
@@ -2077,7 +2078,7 @@ class UserServiceApplicationController extends Controller
                     'extra_payment'       => $extra_payment ?? $data->extra_payment,
 
                     'external_status'              => $status,
-                    'external_payment_status'      => $payment_status,
+                    // 'external_payment_status'      => $payment_status,
                     'external_max_processing_date' => $max_processing_date ?? $data->external_max_processing_date,
                     'external_noc_number'          => $noc_number ?? $data->external_noc_number,
                     'external_valid_till'          => $noc_valid_till ?? $data->external_valid_till,
@@ -2103,7 +2104,7 @@ class UserServiceApplicationController extends Controller
                     'extra_payment'           => $extra_payment,
 
                     'external_status'              => $status,
-                    'external_payment_status'      => $payment_status,
+                    // 'external_payment_status'      => $payment_status,
                     'external_max_processing_date' => $max_processing_date,
                     'external_noc_number'          => $noc_number,
                     'external_valid_till'          => $noc_valid_till,
@@ -2113,8 +2114,7 @@ class UserServiceApplicationController extends Controller
                 ]);
             }
 
-            if ($payment_status === 'pending' && (float) $approved_fee > 0) {
-                $payment_order = PaymentOrder::where('user_id', $user_id)
+                if (in_array($payment_status, ['pending', 'initiated']) && (float) $approved_fee > 0) {                $payment_order = PaymentOrder::where('user_id', $user_id)
                     ->where('application_id', json_encode([$data->id]))
                     ->first();
 
