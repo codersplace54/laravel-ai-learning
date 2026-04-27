@@ -56,8 +56,8 @@ class AnnexureController extends Controller
 
             $count       = $processing_days->count();
             $avg_time    = $count > 0 ? round($processing_days->avg(), 2) : null;
-            $min_time    = $count > 0 ? $processing_days->min() : null;
-            $max_time    = $count > 0 ? $processing_days->max() : null;
+            $min_time    = $count > 0 ? round($processing_days->min(), 2) : null;
+            $max_time    = $count > 0 ? round($processing_days->max(), 2) : null;
             $median_time = $this->calculate_median($processing_days);
 
             // district name lookup (one per code)
