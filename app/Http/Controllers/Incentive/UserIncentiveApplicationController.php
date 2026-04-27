@@ -117,7 +117,7 @@ class UserIncentiveApplicationController extends Controller
 
             foreach ($incoming_answers as $qid => $payload) {
                 if (!isset($answers[$qid])) {
-                    $answers[$qid] = ['value' => null, 'files' => []];
+                    $answers[$qid] = ['value' => null, 'files' => $existing_answers[$qid]['files'] ?? []];
                 }
                 if (array_key_exists('value', $payload)) {
                     $answers[$qid]['value'] = $payload['value'];
@@ -192,8 +192,7 @@ class UserIncentiveApplicationController extends Controller
                     $existing_files = [];
                 }
 
-                // $answers[$question_id]['files'] = array_values(array_merge($existing_files, $new_files_for_question));
-                $answers[$question_id]['files'] = $new_files_for_question ?: $existing_files;
+                $answers[$question_id]['files'] = array_values(array_merge($existing_files, $new_files_for_question));
 
                 $answers[$question_id]['value'] = $answers[$question_id]['value'] ?? null;
             }
