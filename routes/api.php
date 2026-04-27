@@ -477,6 +477,10 @@ Route::post('incentive/proforma-list', [ProformaController::class, 'proforma_lis
 Route::prefix('annexure')->group(function () {
     Route::post('incentive-dashboard', [AnnexureController::class, 'incentive_dashboard']);
     Route::post('incentive-dashboard-filters', [AnnexureController::class, 'incentive_dashboard_filters']);
+
+    Route::post('queries-sla-dashboard', [AnnexureController::class, 'queries_sla_dashboard']);
+    Route::post('queries-resolution-tracker', [AnnexureController::class, 'queries_resolution_tracker']);
+    Route::post('queries-dashboard-filters', [AnnexureController::class, 'queries_dashboard_filters']);
 });
 
 Route::post('public-holiday-disabled-dates', [HolidayController::class, 'holiday_disabled_dates']);

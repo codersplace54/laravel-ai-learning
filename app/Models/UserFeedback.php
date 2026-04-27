@@ -15,8 +15,15 @@ class UserFeedback extends Model
         'satisfaction',
         'feedback',
         'suggestions',
+        'resolved_at',
+        'escalated',
         'created_at',
         'updated_at',
+    ];
+
+    protected $casts = [
+        'resolved_at' => 'datetime',
+        'escalated'   => 'boolean',
     ];
 
     public function service()
