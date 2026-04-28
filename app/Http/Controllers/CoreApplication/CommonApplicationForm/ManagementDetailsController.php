@@ -501,8 +501,9 @@ class ManagementDetailsController extends Controller
             $partnerDetails = PartnerSharePresidentOrSecretaryDetail::where('user_id', $user->id)->get();
             $boardDirectors = BoardOfDirector::where('user_id', $user->id)->get();
             $chiefHeads = ChiefAdministrativeHead::where('user_id', $user->id)->get();
+            $constitution = EnterpriseDetail::where('user_id', $user->id)->value('constitution_of_enterprise');
 
-            if (! $management_details) {
+            if (! $management_details && !$constitution) {
                 return response()->json([
                     'status' => 0,
                     'message' => 'Management details not found.',
@@ -519,8 +520,6 @@ class ManagementDetailsController extends Controller
                     'factory_managers_signature'
                 ]
             );
-
-            $constitution = EnterpriseDetail::where('user_id', $user->id)->value('constitution_of_enterprise');
 
             $partnerDetails_array = $this->get_file_urls(
                 $partnerDetails,
@@ -550,6 +549,10 @@ class ManagementDetailsController extends Controller
 
     private function get_file_urls($data, $fields)
     {
+        if (is_null($data)) {
+            return null;
+        }
+
         if ($data instanceof \Illuminate\Support\Collection) {
             return $data->map(function ($item) use ($fields) {
                 return $this->get_file_urls($item, $fields);
