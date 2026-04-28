@@ -2088,7 +2088,7 @@ class UserServiceApplicationController extends Controller
                     'external_application_id' => $external_id,
                     'applicationId'           => $external_id,
                     'status'                  => $status,
-                    'payment_status'          => $payment_status ?? 'initiated',
+                    'payment_status'          => $payment_status ?? 'pending',
                     'max_processing_date'     => $max_processing_date,
                     'license_id'              => $noc_number,
                     'NOC_expiry_date'         => $noc_valid_till,
@@ -2096,7 +2096,7 @@ class UserServiceApplicationController extends Controller
                     // 'bin'                  => $request->input('bin'), // no column named bin in user_service_applications
                     'approved_fee'            => $approved_fee,
                     'total_fee'               => $approved_fee,
-                    'extra_payment'           => $extra_payment,
+                    'extra_payment'           => $extra_payment ?? null,
 
                     'external_status'              => $status,
                     'external_payment_status'      => $external_payment_status ?? 'pending',
@@ -2133,7 +2133,6 @@ class UserServiceApplicationController extends Controller
 
             DB::commit();
 
-            // Activity log — non-critical, outside transaction
             $user_obj = User::find($user_id);
             if ($user_obj) {
                 $this->logActivity('Third party application callback', $data, $user_obj, [
@@ -2143,7 +2142,6 @@ class UserServiceApplicationController extends Controller
                 ], 'Third party callback');
             }
 
-            // Status log — fire-and-forget, failures silently ignored
             try {
                 ThirdPartyStatusLog::create([
                     'service_id'         => $service_id,

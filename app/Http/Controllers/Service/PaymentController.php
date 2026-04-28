@@ -496,9 +496,14 @@ class PaymentController extends Controller
             }
 
             $user_id = Auth::id();
+            
+            $payment_statuses = [$request->payment_status];
 
+        if ($request->payment_status === 'pending') {
+            $payment_statuses = ['pending', 'initiated'];
+        }
             $service_user_applications = UserServiceApplication::where('user_id', $user_id)
-                ->where('payment_status', $request->payment_status)
+                ->whereIn('payment_status', $payment_statuses)
                 ->where(function ($query) {
                     $query->where(function ($q) {
                         $q->whereNotNull('extra_payment')
@@ -506,6 +511,7 @@ class PaymentController extends Controller
                     })
                         ->orWhere(function ($q) {
                             $q->whereNull('extra_payment')
+                            ->orWhere('extra_payment', 0)
                                 ->where(function ($subq) {
                                     $subq->where('effective_fee', '>', 0)
                                         ->orWhere('total_fee', '>', 0);
