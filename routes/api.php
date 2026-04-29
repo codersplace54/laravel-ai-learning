@@ -227,6 +227,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('investment-application-details', [InvestmentApplicationController::class, 'investment_application_details']);
         Route::post('investment-application-assign', [InvestmentApplicationController::class, 'investment_application_assign']);
         Route::post('investment-application-update-status', [InvestmentApplicationController::class, 'investment_application_update_status']);
+
+        Route::post('annexure/individual-queries-tracker', [AnnexureController::class, 'individual_queries_tracker']);
+        Route::post('service-feedback-add-remark', [FeedbackController::class, 'service_feedback_add_remark']);
+
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
@@ -365,6 +369,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('investment-applications-list', [InvestmentApplicationController::class, 'investment_applications_list']);
         Route::post('investment-application-update-status', [InvestmentApplicationController::class, 'investment_application_update_status']);
+
+        Route::post('annexure/individual-queries-tracker', [AnnexureController::class, 'individual_queries_tracker']);
+        Route::post('service-feedback-add-remark', [FeedbackController::class, 'service_feedback_add_remark']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
@@ -478,8 +485,7 @@ Route::prefix('annexure')->group(function () {
     Route::post('incentive-dashboard', [AnnexureController::class, 'incentive_dashboard']);
     Route::post('incentive-dashboard-filters', [AnnexureController::class, 'incentive_dashboard_filters']);
 
-    Route::post('queries-sla-dashboard', [AnnexureController::class, 'queries_sla_dashboard']);
-    Route::post('queries-resolution-tracker', [AnnexureController::class, 'queries_resolution_tracker']);
+    Route::post('service-level-queries', [AnnexureController::class, 'service_level_queries']);
     Route::post('queries-dashboard-filters', [AnnexureController::class, 'queries_dashboard_filters']);
 });
 

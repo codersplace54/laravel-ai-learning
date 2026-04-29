@@ -9,6 +9,7 @@ class UserFeedback extends Model
     protected $table = 'user_feedbacks';
     protected $fillable = [
         'id',
+        'ticket_id',
         'user_id',
         'service_id',
         'department_id',
@@ -16,6 +17,7 @@ class UserFeedback extends Model
         'feedback',
         'suggestions',
         'resolved_at',
+        'remark',
         'escalated',
         'created_at',
         'updated_at',
