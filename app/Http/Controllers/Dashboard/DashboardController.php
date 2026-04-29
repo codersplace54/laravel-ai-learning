@@ -297,7 +297,7 @@ class DashboardController extends Controller
                     ->where('status', 'pending')
                     ->where('hierarchy_level', $hierarchy_level)
                     ->whereHas('application', function ($q) use ($department_id) {
-                        $q->whereIn('payment_status', ['paid', 'success'])
+                        $q->where('payment_status','paid')
                             ->where('department_id', $department_id);
                     })
 
@@ -773,7 +773,7 @@ class DashboardController extends Controller
                 ->tap($date_filter)
                 ->count();
 
-            $total_payments = UserServiceApplication::whereIN('payment_status', ['paid', 'success'])
+            $total_payments = UserServiceApplication::where('payment_status', 'paid')
                 ->where('paid_amount', '>', 0)
                 ->tap($date_filter)
                 ->count();

@@ -169,11 +169,11 @@ class ProfessionTaxApplicationImport implements ToCollection, WithHeadingRow
 
         $status = $status_map[$status_key] ?? 'under_review';
 
-        $payment_status = 'success';
+        $payment_status = 'paid';
         if (!empty($payment_status_raw)) {
             $payment_map = [
                 'unpaid' => 'pending',
-                'paid' => 'success',
+                'paid'   => 'paid',
             ];
             $payment_status = $payment_map[$payment_status_raw] ?? 'pending';
         }

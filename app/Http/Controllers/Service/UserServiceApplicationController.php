@@ -2055,7 +2055,7 @@ class UserServiceApplicationController extends Controller
             $request->validate([
                 'applicationId'        => 'required|string',
                 'status'               => 'required|string|in:draft,submitted,under_review,approved,rejected,re_submitted,send_back,saved,expired,pending,noc_issued,extra_payment',
-                'payment_status'       => 'nullable|string|in:pending,paid,failed,initiated,success', //failed,initiated,success (in system)
+                'payment_status'       => 'nullable|string|in:pending,paid,failed,initiated,success',
                 'max_processing_date'  => 'nullable|date',
                 'noc_number'           => 'nullable|string|max:255',
                 'noc_valid_till'       => 'nullable|date',
@@ -2076,6 +2076,13 @@ class UserServiceApplicationController extends Controller
             ], 422);
         }
 
+        $raw_payment_status = $request->payment_status;
+        $normalized_payment_status = match ($raw_payment_status) {
+            'success'          => 'paid',
+            'initiated'        => 'pending',
+            default            => $raw_payment_status,
+        };
+
         $external_id         = $request->input('applicationId');
         $max_processing_date = $request->input('max_processing_date');
         $noc_number          = $request->input('noc_number');
@@ -2089,11 +2096,6 @@ class UserServiceApplicationController extends Controller
         $updation_date       = $request->input('updation_date');
         $egras_account_head  = $request->input('egras_account_head');
         $status              = $this->map_to_application_status($request->input('status'));
-
-        $payment_status = $this->map_to_payment_status($request->input('payment_status'), 'payment_status');
-
-        $external_payment_status = $this->map_to_payment_status($request->input('payment_status'), 'external_payment_status');
-
         DB::beginTransaction();
 
         try {
@@ -2102,7 +2104,7 @@ class UserServiceApplicationController extends Controller
             if ($data) {
                 $data->update([
                     'status'              => $status,
-                    'payment_status'      => $payment_status ?? $data->payment_status,
+                    'payment_status'      => $normalized_payment_status ?? $data->payment_status,
                     'max_processing_date' => $max_processing_date ?? $data->max_processing_date,
                     'license_id'          => $noc_number ?? $data->noc_number,
                     'NOC_expiry_date'     => $noc_valid_till ?? $data->noc_valid_till,
@@ -2112,7 +2114,7 @@ class UserServiceApplicationController extends Controller
                     'extra_payment'       => $extra_payment ?? $data->extra_payment,
 
                     'external_status'              => $status,
-                    'external_payment_status'      => $external_payment_status ?? $data->external_payment_status,
+                    'external_payment_status'      => $normalized_payment_status ?? $data->external_payment_status,
                     'external_max_processing_date' => $max_processing_date ?? $data->external_max_processing_date,
                     'external_noc_number'          => $noc_number ?? $data->external_noc_number,
                     'external_valid_till'          => $noc_valid_till ?? $data->external_valid_till,
@@ -2127,7 +2129,7 @@ class UserServiceApplicationController extends Controller
                     'external_application_id' => $external_id,
                     'applicationId'           => $external_id,
                     'status'                  => $status,
-                    'payment_status'          => $payment_status ?? 'pending',
+                    'payment_status'          => $normalized_payment_status ?? 'pending',
                     'max_processing_date'     => $max_processing_date,
                     'license_id'              => $noc_number,
                     'NOC_expiry_date'         => $noc_valid_till,
@@ -2138,7 +2140,7 @@ class UserServiceApplicationController extends Controller
                     'extra_payment'           => $extra_payment ?? null,
 
                     'external_status'              => $status,
-                    'external_payment_status'      => $external_payment_status ?? 'pending',
+                    'external_payment_status'      => $normalized_payment_status ?? 'pending',
                     'external_max_processing_date' => $max_processing_date,
                     'external_noc_number'          => $noc_number,
                     'external_valid_till'          => $noc_valid_till,
@@ -2148,7 +2150,7 @@ class UserServiceApplicationController extends Controller
                 ]);
             }
 
-            if (in_array($payment_status, ['pending', 'initiated']) && (float) $approved_fee > 0) {
+            if ((float) $approved_fee > 0) {
                 $payment_order = PaymentOrder::where('user_id', $user_id)
                     ->where('application_id', json_encode([$data->id]))
                     ->first();
@@ -2160,12 +2162,16 @@ class UserServiceApplicationController extends Controller
                         'payment_amount'     => $approved_fee,
                         'payment_created_on' => now(),
                         'payment_updated_on' => now(),
-                        'payment_status'     => 'initiated',
+                        'payment_status'     => 'pending',
                         'transaction_id'     => null,
                     ]);
-
+                } else {
                     $payment_order->update([
-                        'order_id' => 'SW' . $payment_order->id,
+                        'payment_created_on' => now(),
+                        'payment_updated_on' => now(),
+                        'payment_amount'     => $approved_fee > 0 ? $approved_fee : $payment_order->payment_amount,
+                        'payment_status'     => $normalized_payment_status,
+                        'transaction_id'     => $request->transaction_id ?? $payment_order->transaction_id,
                     ]);
                 }
             }
@@ -2177,7 +2183,7 @@ class UserServiceApplicationController extends Controller
                 $this->logActivity('Third party application callback', $data, $user_obj, [
                     'external_application_id' => $external_id,
                     'status'                  => $status,
-                    'payment_status'          => $payment_status,
+                    'payment_status'          => $normalized_payment_status,
                 ], 'Third party callback');
             }
 
@@ -2193,7 +2199,7 @@ class UserServiceApplicationController extends Controller
                     'action_by'          => $request->input('action_by'),
                     'remark'             => $remarks,
                     'payment_amount'     => $approved_fee,
-                    'payment_status'     => $payment_status, // pending/paid/failed
+                    'payment_status'     => $normalized_payment_status, // pending/paid/failed
                     'payment_url'        => $request->input('payment_url'),
                     'egras_account_head' => $request->input('egras_account_head'),
                     'noc_url'            => $request->input('noc_url'),
@@ -2217,6 +2223,7 @@ class UserServiceApplicationController extends Controller
                 'success' => 0,
                 'message' => 'Failed to process callback',
                 'error'   => $e->getMessage(),
+                'line' => $e->getLine()
             ], 500);
         }
     }
@@ -2257,16 +2264,19 @@ class UserServiceApplicationController extends Controller
                 $application_status = 'under_review';
             }
 
-            $payment_status = $this->map_to_payment_status($request->input('payment_status'), 'payment_status');
-
-            $external_payment_status = $this->map_to_payment_status($request->input('payment_status'), 'external_payment_status');
+            $raw_payment_status = $request->payment_status;
+            $normalized_payment_status = match ($raw_payment_status) {
+                'success'          => 'paid',
+                'initiated'        => 'pending',
+                default            => $raw_payment_status,
+            };
 
             $application = UserServiceApplication::where('external_application_id', $request->application_id)->first();
 
             if ($application) {
                 $application->update([
                     'status'                  => $application_status,
-                    'payment_status'          => $payment_status ?? $application->payment_status,
+                    'payment_status'          => $normalized_payment_status ?? $application->payment_status,
                     'external_application_id' => $request->application_id,
                     'external_status'         => $request->service_status,
                     'external_payment_status' => $external_payment_status ?? $application->external_payment_status,
@@ -2289,7 +2299,7 @@ class UserServiceApplicationController extends Controller
                     'action_by'          => $request->action_by,
                     'remark'             => $request->remark,
                     'payment_amount'     => $request->payment_amount,
-                    'payment_status'     => $external_payment_status,
+                    'payment_status'     => $normalized_payment_status,
                     'payment_url'        => $request->payment_url,
                     'egras_account_head' => $request->egras_account_head,
                     'noc_url'            => $request->noc_url,
@@ -2312,7 +2322,7 @@ class UserServiceApplicationController extends Controller
                             'payment_amount'     => $amount,
                             'payment_created_on' => now(),
                             'payment_updated_on' => now(),
-                            'payment_status'     => 'initiated',
+                            'payment_status'     => 'pending',
                             'transaction_id'     => $request->transaction_id ?? null,
                         ]);
 
@@ -2326,7 +2336,7 @@ class UserServiceApplicationController extends Controller
                         $payment_order->update([
                             'payment_amount'     => $amount > 0 ? $amount : $payment_order->payment_amount,
                             'payment_updated_on' => now(),
-                            'payment_status'     => $request->payment_status,
+                            'payment_status'     => $normalized_payment_status,
                             'transaction_id'     => $request->transaction_id ?? $payment_order->transaction_id,
                         ]);
                     }
@@ -2362,40 +2372,6 @@ class UserServiceApplicationController extends Controller
         return in_array($status, $valid) ? $status : 'submitted';
     }
 
-    private function map_to_payment_status(?string $status, string $column): ?string
-    {
-        if (!$status) {
-            return null;
-        }
-
-        $status = strtolower(trim($status));
-
-        if ($column === 'payment_status') {
-            if ($status === 'pending') {
-                return 'initiated';
-            }
-
-            if ($status === 'success') {
-                return 'paid';
-            }
-
-            return $status;
-        }
-
-        if ($column === 'external_payment_status') {
-            if ($status === 'initiated') {
-                return 'pending';
-            }
-
-            if ($status === 'success') {
-                return 'paid';
-            }
-
-            return $status;
-        }
-
-        return $status;
-    }
 
     public function get_all_applications_list(Request $request)
     {
@@ -2630,7 +2606,7 @@ class UserServiceApplicationController extends Controller
 
             $application = UserServiceApplication::where('id', $request->application_id)->first();
 
-            if (in_array($application->payment_status, ['paid', 'success'])) {
+            if ($application->payment_status === 'paid') {
                 return response()->json([
                     'status' => 0,
                     'message' => 'This application is already marked as paid.',
@@ -2691,7 +2667,7 @@ class UserServiceApplicationController extends Controller
             PaymentOrder::create([
                 'application_id'    => json_encode([(int) $request->application_id]),
                 'user_id'           => $application->user_id,
-                'payment_status'    => 'success',
+                'payment_status'    => 'paid',
                 'payment_amount'    => $current_payment,
                 'gateway'           => 'offline',
                 'GRN_number'        => $request->GRN_number,
@@ -3859,40 +3835,6 @@ class UserServiceApplicationController extends Controller
     }
 
 
-    private function map_payment_status(?string $status, string $type = 'internal')
-    {
-        if (!$status) {
-            return null;
-        }
-
-        $status = strtolower($status);
-
-        if ($type === 'internal') {
-            if ($status === 'pending') {
-                return 'initiated';
-            }
-
-            if ($status === 'paid') {
-                return 'success';
-            }
-
-            return $status;
-        }
-
-        if ($type === 'external') {
-            if ($status === 'initiated') {
-                return 'pending';
-            }
-
-            if ($status === 'success') {
-                return 'paid';
-            }
-
-            return $status;
-        }
-
-        return $status;
-    }
 
     private function collect_question_ids_recursive(array $data, array &$question_ids): void
     {

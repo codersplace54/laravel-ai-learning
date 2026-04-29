@@ -692,7 +692,7 @@ class ServiceController extends Controller
             ];
 
             $payment_details = PaymentOrder::whereJsonContains('application_id', $application->id)
-                ->whereNot('payment_status', "initiated")
+                ->whereNot('payment_status', 'pending')
                 ->get()
                 ->map(function ($p) {
                     return [
@@ -1257,7 +1257,7 @@ class ServiceController extends Controller
                 ->where('status', 'pending')
                 ->where('hierarchy_level', $hierarchy_level)
                 ->whereHas('application', function ($q) use ($department_id) {
-                    $q->whereIn('payment_status', ['paid', 'success'])
+                    $q->where('payment_status', 'paid')
                         ->where('department_id', $department_id);
                 });
 
