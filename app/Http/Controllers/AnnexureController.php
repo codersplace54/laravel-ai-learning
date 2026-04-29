@@ -143,7 +143,7 @@ class AnnexureController extends Controller
 
     const SLA_DAYS = 7;
 
-    public function queries_sla_dashboard(Request $request)
+    public function service_level_queries(Request $request)
     {
         try {
             $request->validate([
@@ -175,13 +175,18 @@ class AnnexureController extends Controller
             });
 
             if ($request->filled('sla_status')) {
-                $feedbacks = $feedbacks->filter(
-                    fn($fb) => $request->sla_status === 'met' ? $fb->sla_met === true : $fb->sla_met === false
-                )->values();
+                if ($request->sla_status == 'met') {
+                    $feedbacks = $feedbacks->where('sla_met', true)->values();
+                } else {
+                    $feedbacks = $feedbacks->where('sla_met', false)->values();
+                }
             }
 
-            $grouped = $feedbacks->groupBy(fn($fb) => ($fb->department_id ?? 'none') . '|' . ($fb->service_id ?? 'none'));
-
+            $grouped = $feedbacks->groupBy(function ($fb) {
+                $dept = $fb->department_id ?? 'none';
+                $service = $fb->service_id ?? 'none';
+                return $dept . '|' . $service;
+            });
             $table_data = $grouped->values()->map(function ($group, $index) {
                 $first            = $group->first();
                 $resolved         = $group->filter(fn($fb) => $fb->resolution_time !== null);
@@ -229,7 +234,7 @@ class AnnexureController extends Controller
         }
     }
 
-    public function queries_resolution_tracker(Request $request)
+    public function individual_queries_tracker(Request $request)
     {
         try {
             $request->validate([
