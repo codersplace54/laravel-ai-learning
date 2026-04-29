@@ -21,7 +21,7 @@ class PaymentStatusCron extends Command
         Log::channel('payment_cron')->info('Payment status cron started');
         $this->info('Payment status cron started');
 
-        $orders = PaymentOrder::whereIn('payment_status', ['initiated', 'pending','fail'])
+        $orders = PaymentOrder::whereIn('payment_status', ['pending', 'failed'])
             ->where('payment_amount', '>', 0)
             ->where('created_at', '>=', Carbon::now()->subDays(3))
             ->orderBy('id', 'desc')
@@ -126,7 +126,7 @@ class PaymentStatusCron extends Command
                         : now();
 
                     $order->update([
-                        'payment_status'   => 'success',
+                        'payment_status'   => 'paid',
                         'GRN_number'       => $grn,
                         'payment_datetime' => $payment_datetime,
                         'updated_by_cron'  => true,

@@ -164,7 +164,7 @@ class PaymentController extends Controller
                 'payment_amount'         => (string) $total_amount,
                 'payment_created_on'     => now(),
                 'payment_updated_on'     => now(),
-                'payment_status'         => 'initiated',
+                'payment_status'         => 'pending',
                 'transaction_id'         => null,
                 'establishment_fee_paid' => $establishment_fee,
                 'operational_fee_paid'   => $operational_fee,
@@ -335,7 +335,7 @@ class PaymentController extends Controller
             }
 
             $payment = PaymentOrder::where('order_id', $order_id)
-                ->where('payment_status', 'initiated')
+                ->where('payment_status', 'pending')
                 ->first();
 
             if (!$payment) {
@@ -347,8 +347,15 @@ class PaymentController extends Controller
                 );
             }
 
+            $raw_status = strtolower($request->input('status'));
+            $normalized_status = match($raw_status) {
+                'success'          => 'paid',
+                'fail', 'failure'  => 'failed',
+                default            => $raw_status,
+            };
+
             $payment->update([
-                'payment_status'    => strtolower($request->input('status')),
+                'payment_status'    => $normalized_status,
                 'payment_amount'    => $total,
                 'gateway'           => 'egras',
                 'gateway_order_id'  => $order_id,
@@ -455,7 +462,7 @@ class PaymentController extends Controller
 
         $already_paid = UserServiceApplication::where('user_id', $application->user_id)
             ->where('id', '!=', $application->id)
-            ->where('payment_status', 'paid')
+            ->whereIn('payment_status', ['paid'])
             ->exists();
 
         if ($already_paid) return null;
@@ -488,7 +495,7 @@ class PaymentController extends Controller
         try {
 
             $request->validate([
-                'payment_status' => 'required|string|in:pending,paid,success',
+                'payment_status' => 'required|string|in:pending,paid,failed,success',
             ]);
 
             if (!Auth::check()) {
@@ -497,13 +504,16 @@ class PaymentController extends Controller
 
             $user_id = Auth::id();
             
-            $payment_statuses = [$request->payment_status];
+            $raw_payment_status = $request->payment_status;
+            $normalized_payment_status = match($raw_payment_status) {
+                'success'          => 'paid',
+                'fail', 'failure'  => 'failed',
+                default            => $raw_payment_status,
+            };
 
-        if ($request->payment_status === 'pending') {
-            $payment_statuses = ['pending', 'initiated'];
-        }
+            
             $service_user_applications = UserServiceApplication::where('user_id', $user_id)
-                ->whereIn('payment_status', $payment_statuses)
+                ->where('payment_status', $normalized_payment_status)
                 ->where(function ($query) {
                     $query->where(function ($q) {
                         $q->whereNotNull('extra_payment')
@@ -603,7 +613,7 @@ class PaymentController extends Controller
     public function check_all_pending_payments(Request $request)
     {
         try {
-            $orders = PaymentOrder::where('payment_status', 'initiated')
+            $orders = PaymentOrder::where('payment_status', 'pending')
                 ->where('payment_amount', '>', 0)
                 ->orderBy('id', 'desc')
                 ->limit(200)
@@ -668,7 +678,7 @@ class PaymentController extends Controller
             }
 
             $payment = PaymentOrder::where('order_id', $order_id)
-                ->where('payment_status', 'initiated')
+                ->where('payment_status', 'pending')
                 ->first();
 
             if (!$payment) {

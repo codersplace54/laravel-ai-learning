@@ -12,7 +12,7 @@ trait PaymentMapTrait
 
         $payments = DB::table('payment_orders')
             ->select('application_id', 'order_id', 'payment_amount', 'payment_status', 'gateway', 'transaction_id', 'GRN_number', 'payment_datetime')
-            ->whereNot('payment_status', "initiated")
+            ->whereNot('payment_status', 'pending')
             ->where(function ($q) use ($application_ids) {
                 foreach ($application_ids as $id) {
                     $q->orWhereJsonContains('application_id', $id);

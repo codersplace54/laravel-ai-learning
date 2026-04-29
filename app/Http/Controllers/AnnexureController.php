@@ -272,6 +272,7 @@ class AnnexureController extends Controller
                 $is_delayed = !$fb->resolved_at && $fb->created_at->diffInDays(now()) > (self::SLA_DAYS + 2);
 
                 return [
+                    'id'                  => $fb->id,
                     'ticket_id'           => 'QT-' . $fb->created_at->format('Y') . '-' . str_pad($fb->id, 3, '0', STR_PAD_LEFT),
                     'service'             => $fb->service->service_title_or_description ?? null,
                     'department'          => $fb->department->name ?? null,
