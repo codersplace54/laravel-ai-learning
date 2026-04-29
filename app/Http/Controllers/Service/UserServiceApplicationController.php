@@ -353,7 +353,7 @@ class UserServiceApplicationController extends Controller
                             ? $user_service_application->current_step_number
                             : ($approval_flow->step_number ?? 0),
                         'max_processing_date'   => $has_approval_flow ? $max_processing_date : null,
-                        'paid_amount'           => $paid_amount,
+                        'paid_amount'           => $paid_amount ?? $user_service_application->paid_amount,
                         'applied_fee'           => $request->land_allotment_estimated_amount ?? null,
                     ]);
 
@@ -433,42 +433,65 @@ class UserServiceApplicationController extends Controller
 
                     $request->merge(['application_data' => $application_data]);
 
+                    // Carry forward paid amount from any previous paid application for same user+service
+                    $previous_paid_application = UserServiceApplication::where('user_id', $user->id)
+                        ->where('service_id', $request->service_id)
+                        ->where('payment_status', 'paid')
+                        ->whereNotNull('paid_amount')
+                        ->where('paid_amount', '>', 0)
+                        ->latest('id')
+                        ->first();
+
+                    $carried_paid_amount = $previous_paid_application ? (float) $previous_paid_application->paid_amount : 0;
+                    $previous_application_id = $previous_paid_application?->id;
+
+                    if ($carried_paid_amount > 0) {
+                        $effective_fee = max($total_fee - $carried_paid_amount, 0);
+                        if ($effective_fee == 0) {
+                            $status = 're_submitted';
+                            $payment_status = 'paid';
+                            $paid_amount = $carried_paid_amount;
+                            $payment_time = now();
+                        }
+                    }
+
                     $user_service_application = UserServiceApplication::create([
-                        'user_id'               => $user->id,
-                        'service_id'            => $request->service_id,
-                        'renewal_cycle_id'      => $request->renewal_cycle_id,
-                        'renewal'               => $request->renewal,
-                        'renewalYear'           => $request->renewalYear,
-                        'application_date'      => $request->application_date ?? now(),
-                        'status'                => $status,
-                        'application_data'      => json_encode($application_data ?: null),
-                        // 'applied_fee'           => $request->applied_fee,
-                        'approved_fee'          => $request->approved_fee,
-                        'payment_status'        => $payment_status,
-                        'remarks'               => $request->remarks,
-                        'NOC_application_date'  => $request->NOC_application_date,
-                        'NOC_expiry_date'       => $request->NOC_expiry_date,
-                        'PreviousNOCexpiryDate' => $request->PreviousNOCexpiryDate,
-                        'payment_transId'       => $request->payment_transId,
-                        'GRN_number'            => $request->GRN_number,
-                        'payment_time'          => $payment_time,
-                        'extra_payment'         => $request->extra_payment,
-                        'comments'              => $request->comments,
-                        'NOC_certificate'       => $noc_certificate,
+                        'user_id'                 => $user->id,
+                        'service_id'              => $request->service_id,
+                        'renewal_cycle_id'        => $request->renewal_cycle_id,
+                        'renewal'                 => $request->renewal,
+                        'renewalYear'             => $request->renewalYear,
+                        'application_date'        => $request->application_date ?? now(),
+                        'status'                  => $status,
+                        'application_data'        => json_encode($application_data ?: null),
+                        'approved_fee'            => $request->approved_fee,
+                        'payment_status'          => $payment_status,
+                        'remarks'                 => $request->remarks,
+                        'NOC_application_date'    => $request->NOC_application_date,
+                        'NOC_expiry_date'         => $request->NOC_expiry_date,
+                        'PreviousNOCexpiryDate'   => $request->PreviousNOCexpiryDate,
+                        'payment_transId'         => $request->payment_transId,
+                        'GRN_number'              => $request->GRN_number,
+                        'payment_time'            => $payment_time,
+                        'extra_payment'           => $request->extra_payment,
+                        'comments'                => $request->comments,
+                        'NOC_certificate'         => $noc_certificate,
                         'NOC_rejection_certificate' => $noc_rejection_certificate,
-                        'NOC_generationDate'    => $request->NOC_generationDate,
-                        'NOC_penalty_amount'    => $request->NOC_penalty_amount,
-                        'NOC_letter_number'     => $request->NOC_letter_number,
-                        'NOC_letter_date'       => $request->NOC_letter_date,
+                        'NOC_generationDate'      => $request->NOC_generationDate,
+                        'NOC_penalty_amount'      => $request->NOC_penalty_amount,
+                        'NOC_letter_number'       => $request->NOC_letter_number,
+                        'NOC_letter_date'         => $request->NOC_letter_date,
                         'NSW_Application_Save_ID' => $request->NSW_Application_Save_ID,
-                        'NSW_license_status'    => $request->NSW_license_status,
-                        'NSW_Push_Document_ID'  => $request->NSW_Push_Document_ID,
-                        'final_fee'             => $final_fee,
-                        'total_fee'             => $total_fee,
-                        'current_step_number'   => $approval_flow->step_number ?? 0,
-                        'max_processing_date'   => $has_approval_flow ? $max_processing_date : null,
-                        'paid_amount'           => $paid_amount,
-                        'applied_fee'           => $request->land_allotment_estimated_amount ?? null,
+                        'NSW_license_status'      => $request->NSW_license_status,
+                        'NSW_Push_Document_ID'    => $request->NSW_Push_Document_ID,
+                        'final_fee'               => $final_fee,
+                        'total_fee'               => $total_fee,
+                        'effective_fee'           => $carried_paid_amount > 0 ? max($total_fee - $carried_paid_amount, 0) : 0,
+                        'paid_amount'             => $carried_paid_amount > 0 ? $carried_paid_amount : $paid_amount,
+                        'previous_application_id' => $previous_application_id,
+                        'current_step_number'     => $approval_flow->step_number ?? 0,
+                        'max_processing_date'     => $has_approval_flow ? $max_processing_date : null,
+                        'applied_fee'             => $request->land_allotment_estimated_amount ?? null,
                     ]);
 
                     $this->store_labour_deposits($request->service_id, $application_data, $user_service_application->id);
@@ -765,6 +788,9 @@ class UserServiceApplicationController extends Controller
                 $noc_rejection_certificate = $file->storeAs("uploads/{$user->id}/noc_rejection_certificates", $filename, 'public');
             }
 
+            $original_application_date = $user_service_application->application_date;
+            $original_status = $user_service_application->status;
+
             $user_service_application->fill($request->except(['id', 'NOC_certificate', 'NOC_rejection_certificate']));
 
             $existing_data = is_array($user_service_application->application_data)
@@ -873,9 +899,9 @@ class UserServiceApplicationController extends Controller
                 'renewal'               => $request->renewal,
                 'renewalYear'           => $request->renewalYear,
                 // 'applicationId'         => $request->applicationId,
-                'application_date'      => in_array($user_service_application->status, ['draft', 'saved'])
+                'application_date'      => in_array($original_status, ['draft', 'saved'])
                     ? ($request->application_date ?? now())
-                    : $user_service_application->application_date,
+                    : $original_application_date,
                 'status'                => $status,
                 'application_data'      => $encoded_application_data,
                 'applied_fee'           => $request->applied_fee,
@@ -977,6 +1003,7 @@ class UserServiceApplicationController extends Controller
                 'status'  => 0,
                 'message' => 'Validation failed.',
                 'errors'  => $e->errors(),
+                'line' => $e->getLine()
             ], 422);
         } catch (\Exception $e) {
 
@@ -1331,6 +1358,7 @@ class UserServiceApplicationController extends Controller
             ], 500);
         }
     }
+
     public function admin_delete_user_service_application(Request $request)
     {
         try {
@@ -1362,6 +1390,17 @@ class UserServiceApplicationController extends Controller
                     'message' => 'Application not found.'
                 ], 404);
             }
+
+            ApplicationWorkflowAssignment::where('application_id', $application->id)->delete();
+            ApplicationWorkflowHistory::where('application_id', $application->id)->delete();
+
+            PaymentOrder::whereJsonContains('application_id', $application->id)->each(function ($order) use ($application) {
+                $ids = array_values(array_filter(
+                    json_decode($order->application_id, true) ?? [],
+                    fn($id) => $id !== $application->id
+                ));
+                $ids ? $order->update(['application_id' => json_encode($ids)]) : $order->delete();
+            });
 
             $application->delete();
 

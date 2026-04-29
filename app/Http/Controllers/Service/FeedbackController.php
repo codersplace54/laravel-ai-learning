@@ -62,6 +62,10 @@ class FeedbackController extends Controller
                     'suggestions' => $request->suggestions,
                 ]);
 
+                $user_feedback->update([
+                    'ticket_id' => 'QT-' . $user_feedback->created_at->format('Y') . '-' . str_pad($user_feedback->id, 3, '0', STR_PAD_LEFT)
+                ]);
+
                 DB::commit();
 
                 return response()->json([
@@ -161,6 +165,51 @@ class FeedbackController extends Controller
                 'total' => $feedbacks->total(),
             ],
         ], 200);
+    }
+
+    public function service_feedback_add_remark(Request $request)
+    {
+        
+        try {
+            $request->validate([
+                'feedback_id' => 'required|exists:user_feedbacks,id',
+                'remark'      => 'required|string',
+            ]);
+
+            $user = auth()->user();
+            $allowed = ['admin', 'department', 'support'];
+
+            if (!in_array($user->user_type, $allowed)) {
+                return response()->json(['status' => 0, 'message' => 'Unauthorized.'], 403);
+            }
+
+            $feedback = UserFeedback::where('id',$request->feedback_id)->first();
+
+            $feedback->update([
+                'remark'      => $request->remark,
+                'resolved_at' => $feedback->resolved_at ?? now(),
+            ]);
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Remark added successfully.',
+                'data'    => $feedback,
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        }catch (\Exception $e) {
+            return response()->json([
+                'status' => 0, 
+                'message' => 'Failed to add remark.', 
+                'error' => $e->getMessage()], 
+            500);
+        }
     }
 
     public function service_feedback_export(Request $request)
