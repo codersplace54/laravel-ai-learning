@@ -19,6 +19,8 @@ class UserFeedback extends Model
         'resolved_at',
         'remark',
         'escalated',
+        'status',
+        'resolved_by',
         'created_at',
         'updated_at',
     ];

@@ -7,8 +7,11 @@ use App\Models\UserIncentiveApplication;
 use App\Models\TripuraMasterData;
 use App\Models\UserFeedback;
 use App\Models\Department;
+use App\Models\InvestmentApplication;
 use App\Models\ServiceMaster;
+use App\Models\KyaMaster;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class AnnexureController extends Controller
 {
@@ -249,8 +252,13 @@ class AnnexureController extends Controller
 
             $per_page = $request->per_page ?? 15;
 
+            $auth_user = Auth::user();
+
             $query = UserFeedback::query()
                 ->with(['department', 'service'])
+                ->when($auth_user->user_type === 'department', function ($q) use ($auth_user) {
+                    $q->where('department_id', $auth_user->department_user?->department_id);
+                })
                 ->when($request->filled('department_id'),     fn($q) => $q->where('department_id', $request->department_id))
                 ->when($request->filled('service_id'),        fn($q) => $q->where('service_id', $request->service_id))
                 ->when($request->filled('from_date'),         fn($q) => $q->whereDate('created_at', '>=', $request->from_date))
@@ -278,12 +286,13 @@ class AnnexureController extends Controller
                     'department'          => $fb->department->name ?? null,
                     'submitted_on'        => $fb->created_at->format('d-M-Y'),
                     'final_resolution_date' => $fb->resolved_at ? $fb->resolved_at->format('d-M-Y') : null,
-                    'actual_resolution_time' => $resolution_time,
-                    'status'              => $fb->resolved_at ? 'Resolved' : 'Pending',
+                    'actual_resolution_time' => floor($resolution_time),
+                    'status'              => $fb->status,
                     'escalated'           => $fb->escalated ? 'Yes' : 'No',
                     'is_delayed'          => $is_delayed,
                     'sla_met'             => $sla_met === null ? null : ($sla_met ? 'Met' : 'Unmet'),
                     'resolution_summary'  => $fb->suggestions,
+                    'remark'              => $fb->remark,
                 ];
             });
 
@@ -337,6 +346,76 @@ class AnnexureController extends Controller
                 'status'  => 1,
                 'message' => 'Filter options fetched successfully.',
                 'data'    => compact('departments', 'services', 'sla_statuses', 'escalation_statuses'),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function kya_list(Request $request)
+    {
+        try {
+            $request->validate([
+                'sector'          => 'nullable|string|max:255',
+                'risk_category'   => 'nullable|string|max:100',
+                'stage_of_business' => 'nullable|string|max:100',
+                'approval_type'   => 'nullable|in:industry,utility',
+                'search'          => 'nullable|string|max:255',
+                'per_page'        => 'nullable|integer|min:1|max:100',
+            ]);
+
+            $per_page = $request->per_page ?? 15;
+
+            $query = KyaMaster::query()
+                ->when($request->filled('sector'),            fn($q) => $q->where('sector', $request->sector))
+                ->when($request->filled('risk_category'),     fn($q) => $q->where('risk_category', $request->risk_category))
+                ->when($request->filled('stage_of_business'), fn($q) => $q->where('stage_of_business', $request->stage_of_business))
+                ->when($request->filled('approval_type'),     fn($q) => $q->where('approval_type', $request->approval_type))
+                ->when($request->filled('search'), function ($q) use ($request) {
+                    $s = $request->search;
+                    $q->where(function ($qq) use ($s) {
+                        $qq->where('approval_name', 'like', "%{$s}%")
+                           ->orWhere('department', 'like', "%{$s}%")
+                           ->orWhere('legal_provision', 'like', "%{$s}%");
+                    });
+                })
+                ->orderBy('serial_no');
+
+            $data = $query->paginate($per_page);
+
+            $items = collect($data->items())->map(function ($item) {
+                $sla = $item->sla_days;
+                $item->sla_color = $sla <= 7 ? 'green' : ($sla <= 14 ? 'yellow' : 'red');
+                return $item;
+            });
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'KYA list fetched successfully.',
+                'data'    => $items,
+                'pagination' => [
+                    'current_page' => $data->currentPage(),
+                    'last_page'    => $data->lastPage(),
+                    'per_page'     => $data->perPage(),
+                    'total'        => $data->total(),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function kya_filters()
+    {
+        try {
+            $sectors   = KyaMaster::distinct()->whereNotNull('sector')->orderBy('sector')->pluck('sector');
+            $risks     = KyaMaster::distinct()->whereNotNull('risk_category')->orderBy('risk_category')->pluck('risk_category');
+            $stages    = KyaMaster::distinct()->whereNotNull('stage_of_business')->orderBy('stage_of_business')->pluck('stage_of_business');
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'KYA filter options fetched successfully.',
+                'data'    => compact('sectors', 'risks', 'stages'),
             ]);
         } catch (\Exception $e) {
             return response()->json(['status' => 0, 'message' => 'Something went wrong.', 'error' => $e->getMessage()], 500);
