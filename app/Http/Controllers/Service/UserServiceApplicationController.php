@@ -840,8 +840,10 @@ class UserServiceApplicationController extends Controller
                 ->latest('id')
                 ->first();
 
+            $service_data = ServiceMaster::where('id', $request->service_id ?? $user_service_application->service_id)
+                ->first(['target_days']);
             $application_date = Carbon::parse($request->application_date ?? now());
-            $target_days = $service->target_days ?? 0;
+            $target_days = $service_data->target_days ?? 0;
             $max_processing_date = $this->add_working_days($application_date, $target_days);
 
             if ($user_service_application->extra_payment != null && $user_service_application->payment_status == "pending") {
@@ -930,7 +932,7 @@ class UserServiceApplicationController extends Controller
                 'effective_fee'         => $effective_fee,
                 'current_step_number'   => $is_resubmission
                     ? $user_service_application->current_step_number
-                    : $approval_flow->step_number,
+                    : ($approval_flow->step_number ?? 0),
                 'max_processing_date'   => $max_processing_date,
                 'paid_amount'           => $paid_amount,
             ]);
@@ -983,13 +985,13 @@ class UserServiceApplicationController extends Controller
                     'final_fee' => $final_fee,
                     'current_step_number' => $is_resubmission
                         ? $user_service_application->current_step_number
-                        : $approval_flow->step_number,
+                        : ($approval_flow->step_number ?? 0),
                     'assigned_department_id' => $is_resubmission
-                        ? $current_step->department_id
-                        : $approval_flow->department_id,
+                        ? ($current_step->department_id ?? null)
+                        : ($approval_flow->department_id ?? null),
                     'assigned_hierarchy_level' => $is_resubmission
-                        ? $current_step->hierarchy_level
-                        : $approval_flow->hierarchy_level,
+                        ? ($current_step->hierarchy_level ?? null)
+                        : ($approval_flow->hierarchy_level ?? null),
                     'max_processing_date' => $max_processing_date->format('Y-m-d'),
                     'payment_status' => $user_service_application->payment_status,
                 ]
