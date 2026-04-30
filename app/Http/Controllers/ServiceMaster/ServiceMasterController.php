@@ -899,7 +899,13 @@ class ServiceMasterController extends Controller
 
             $post_params['user_id'] = $user->id;
             $post_params['bin'] = $user->bin ?? null;
-            $post_params['service_id'] = $service->id;
+
+            // Only add service_id as fallback if no param with that name is defined in params
+            $param_name_lower = $params->pluck('param_name')->map(fn($n) => strtolower($n))->toArray();
+            if (!in_array('service_id', $param_name_lower)) {
+                $post_params['service_id'] = $service->id;
+            }
+
             $phone = $user->mobile_no ?? null;
 
             foreach ($params as $param) {
