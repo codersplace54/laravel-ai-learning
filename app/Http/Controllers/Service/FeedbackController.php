@@ -28,6 +28,8 @@ class FeedbackController extends Controller
                 'suggestions' => 'nullable|string',
             ]);
 
+            $statuses = ['pending', 'resolved'];
+
             $application = UserServiceApplication::where('id', $request->application_id)->first();
             $user_id = $application->user_id;
             $service_id = $application->service_id;
@@ -43,7 +45,7 @@ class FeedbackController extends Controller
                     'satisfaction' => $request->satisfaction,
                     'feedback' => $request->feedback,
                     'suggestions' => $request->suggestions,
-                ]);
+                ] + ($request->filled('status') && in_array($request->status, $statuses) ? ['status' => $request->status] : []));
 
                 DB::commit();
 
@@ -60,6 +62,7 @@ class FeedbackController extends Controller
                     'satisfaction' => $request->satisfaction,
                     'feedback' => $request->feedback,
                     'suggestions' => $request->suggestions,
+                    'status' => 'pending',
                 ]);
 
                 $user_feedback->update([
@@ -108,7 +111,8 @@ class FeedbackController extends Controller
         );
 
         if ($user->user_type === 'department') {
-            $query->where('department_id', $user->id);
+            $dept_id = $user->department_user?->department_id;
+            $query->where('department_id', $dept_id);
         }
 
         if ($user->user_type === 'individual') {
@@ -131,6 +135,10 @@ class FeedbackController extends Controller
             $query->where('created_at', '<=', $request->to_date . ' 23:59:59');
         }
 
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -150,6 +158,7 @@ class FeedbackController extends Controller
                 'feedback'     => $feedback->feedback,
                 'suggestions'  => $feedback->suggestions,
                 'submitted_on' => $feedback->created_at,
+                'status'       => $feedback->status,
                 'already_rated'=> !empty($feedback->satisfaction),
             ];
         });
@@ -174,6 +183,7 @@ class FeedbackController extends Controller
             $request->validate([
                 'feedback_id' => 'required|exists:user_feedbacks,id',
                 'remark'      => 'required|string',
+                'status'      => 'nullable|in:resolved,pending',
             ]);
 
             $user = auth()->user();
@@ -185,10 +195,17 @@ class FeedbackController extends Controller
 
             $feedback = UserFeedback::where('id',$request->feedback_id)->first();
 
-            $feedback->update([
+            $update_data = [
                 'remark'      => $request->remark,
                 'resolved_at' => $feedback->resolved_at ?? now(),
-            ]);
+            ];
+
+            if ($request->filled('status')) {
+                $update_data['status'] = $request->status;
+                $update_data['resolved_by'] = auth()->id();
+            }
+
+            $feedback->update($update_data);
 
             return response()->json([
                 'status'  => 1,

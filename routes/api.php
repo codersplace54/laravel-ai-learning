@@ -487,6 +487,9 @@ Route::prefix('annexure')->group(function () {
 
     Route::post('service-level-queries', [AnnexureController::class, 'service_level_queries']);
     Route::post('queries-dashboard-filters', [AnnexureController::class, 'queries_dashboard_filters']);
+
+    Route::post('kya-list', [AnnexureController::class, 'kya_list']);
+    Route::post('kya-filters', [AnnexureController::class, 'kya_filters']);
 });
 
 Route::post('public-holiday-disabled-dates', [HolidayController::class, 'holiday_disabled_dates']);
