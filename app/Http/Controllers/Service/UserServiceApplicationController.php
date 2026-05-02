@@ -316,9 +316,9 @@ class UserServiceApplicationController extends Controller
                     }
 
                     $user_service_application->update([
-                        'renewal_cycle_id'      => $request->renewal_cycle_id,
-                        'renewal'               => $request->renewal,
-                        'renewalYear'           => $request->renewalYear,
+                        'renewal_cycle_id'      => $request->renewal_cycle_id ?? $user_service_application->renewal_cycle_id,
+                        'renewal'               => $request->renewal ?? $user_service_application->renewal,
+                        'renewalYear'           => $request->renewalYear ?? $user_service_application->renewalYear,
                         'applicationId'         => $application_number ?? $user_service_application->applicationId,
                         'application_date'      => in_array($user_service_application->status, ['draft', 'saved'])
                             ? ($request->application_date ?? now())
@@ -897,9 +897,9 @@ class UserServiceApplicationController extends Controller
             $user_service_application->update([
                 'user_id'               => $user->id,
                 'service_id'            => $request->service_id,
-                'renewal_cycle_id'      => $request->renewal_cycle_id,
-                'renewal'               => $request->renewal,
-                'renewalYear'           => $request->renewalYear,
+                'renewal_cycle_id'      => $request->renewal_cycle_id ?? $user_service_application->renewal_cycle_id,
+                'renewal'               => $request->renewal ?? $user_service_application->renewal,
+                'renewalYear'           => $request->renewalYear ?? $user_service_application->renewalYear,
                 // 'applicationId'         => $request->applicationId,
                 'application_date'      => in_array($original_status, ['draft', 'saved'])
                     ? ($request->application_date ?? now())
@@ -1024,13 +1024,19 @@ class UserServiceApplicationController extends Controller
     {
 
         $rules = ServiceFeeRule::where('service_id', $service_id)->get();
+
+        if ($service_id == 37) {
+            $rules = $rules->filter(function ($rule) {
+                return $rule->condition_operator === 'between';
+            });
+        }
+
         $final_fee = 0;
         $minimum_fee = 0;
 
         foreach ($rules as $rule) {
 
             if ($rule->fee_type === 'hardcoded') {
-
                 if (!empty($rule->fixed_calculated_fee)) {
                     $final_fee += (float) $rule->fixed_calculated_fee;
                 }
