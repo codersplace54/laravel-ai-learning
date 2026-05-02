@@ -1140,6 +1140,40 @@ class UserServiceApplicationController extends Controller
             if ($existing_application) {
                 $previous_paid = $existing_application->paid_amount ?? 0;
                 $db_extra_payment   = $existing_application->extra_payment ?? 0;
+
+                //  to check application with null data is resubmiting without full payment  -- start
+                $application_data_db = is_array($existing_application->application_data)
+                    ? $existing_application->application_data
+                    : json_decode($existing_application->application_data ?? 'null', true);
+
+                $paid_amount = (float) $existing_application->paid_amount;
+                $final_fee_db = (float) $existing_application->final_fee;
+                $total_fee_db = (float) $existing_application->final_fee;
+
+                $is_corrupted_paid_case =
+                    $existing_application->status === 'send_back' &&
+                    $existing_application->payment_status === 'paid' &&
+                    $final_fee_db > 0 &&
+                    empty($application_data_db) &&
+                    $paid_amount <= 0;
+
+                if ($is_corrupted_paid_case) {
+                    $existing_application->paid_amount = $final_fee_db;
+                    $existing_application->total_fee = $final_fee_db;
+
+                    if (empty($existing_application->current_step_number)) {
+                        $last_step = ApplicationWorkflowAssignment::where('application_id', $existing_application->id)
+                            ->latest('id')
+                            ->first();
+
+                        if ($last_step) {
+                            $existing_application->current_step_number = $last_step->step_number;
+                        }
+                    }
+                    $previous_paid = (float) $final_fee_db;
+                    $existing_application->save();
+                }
+                // to check application with null data is resubmiting without full payment  -- end
             }
         }
 
