@@ -1042,6 +1042,13 @@ class UserServiceApplicationController extends Controller
     {
 
         $rules = ServiceFeeRule::where('service_id', $service_id)->get();
+
+        if ($service_id == 37) {
+            $rules = $rules->filter(function ($rule) {
+                return $rule->condition_operator === 'between';
+            });
+        }
+
         $final_fee = 0;
         $minimum_fee = 0;
 

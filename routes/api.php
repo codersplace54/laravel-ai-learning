@@ -53,6 +53,7 @@ use App\Http\Controllers\Service\ClearanceController;
 use App\Http\Controllers\TestingFacilityCapabilityController;
 use App\Http\Controllers\PublicNotificationController;
 use App\Http\Controllers\InformationWizardController;
+use App\Http\Controllers\Service\ApplicationAssignmentController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -230,6 +231,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('annexure/individual-queries-tracker', [AnnexureController::class, 'individual_queries_tracker']);
         Route::post('service-feedback-add-remark', [FeedbackController::class, 'service_feedback_add_remark']);
+        
+        Route::post('get-application-assignments', [ApplicationAssignmentController::class, 'get_application_assignments']);
+        Route::post('create-application-assignment', [ApplicationAssignmentController::class, 'create_application_assignment']);
+        Route::post('update-application-assignment', [ApplicationAssignmentController::class, 'update_application_assignment']);
 
     });
 
@@ -303,6 +308,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('fetch-clearance-details', [ClearanceController::class, 'fetch_clearance_details']);
 
         Route::post('investment-applications-list', [InvestmentApplicationController::class, 'investment_applications_list']);
+
+        Route::post('kya-store', [KyaController::class, 'user_kya_store']);
+        Route::post('kya-view', [KyaController::class, 'user_kya_view']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
@@ -338,6 +346,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/user/{id}/assigned-applications', [ServiceController::class, 'get_department_user_assigned_applications']);
         Route::post('/preview-certificate/{application_id}', [ServiceController::class, 'preview_certificate']);
         Route::post('get-user-approved-applications', [ServiceController::class, 'get_user_approved_applications']);
+        Route::post('get-user-previous-applications', [ServiceController::class, 'get_user_previous_applications']);
 
         Route::post('certificate-variables-list',  [CertificateController::class, 'certificate_variables_list']);
         Route::post('user-certificate-view',  [CertificateController::class, 'user_certificate_view']);
