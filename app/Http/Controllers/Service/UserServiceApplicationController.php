@@ -207,13 +207,21 @@ class UserServiceApplicationController extends Controller
                 }
 
                 $application_id =  $user_service_application->id ?? null;
-                $fee_data = $this->calculate_final_fee($request->service_id, $request->application_data, $application_id);
+
+                if ($request->service_id == 37) {
+                    $fee_data = $this->calculate_labour_fee_breakdown(
+                        $request->service_id,
+                        $request->application_data,
+                        $application_id
+                    );
+                } else {
+
+                    $fee_data = $this->calculate_final_fee($request->service_id, $request->application_data, $application_id);
+                }
                 $final_fee = $fee_data['final_fee'];
                 $blc_fee   = $fee_data['effective_fee'];
-                $previous_paid = $fee_data['previous_paid'];
+                $previous_paid = $fee_data['previous_paid'] ?? (float)$user_service_application->paid_amount;
                 $total_fee =  $final_fee;
-                $effective_fee = 0;
-
                 $status = $request->status ?? 'saved';
                 $payment_status = $request->payment_status ?? 'pending';
                 $paid_amount = null;
@@ -234,7 +242,7 @@ class UserServiceApplicationController extends Controller
                     $payment_status = 'paid';
                     $paid_amount = 0;
                     $payment_time = now();
-                } elseif ((float) $total_fee === (float) $previous_paid) {
+                } elseif ((float) $total_fee <= (float) $previous_paid) {
                     $status = 're_submitted';
                     $payment_status = 'paid';
                     $paid_amount = $user_service_application->paid_amount;
@@ -245,9 +253,7 @@ class UserServiceApplicationController extends Controller
 
                     $total_fee =  $final_fee;
                     $previous_paid = $user_service_application->paid_amount ?? 0;
-                    if (!is_null($previous_paid) && $previous_paid > 0) {
-                        $effective_fee = $total_fee - $previous_paid;
-                    }
+                    $effective_fee = max($total_fee - $previous_paid, 0);
 
                     if (!in_array($user_service_application->status, ['draft', 'submitted', 're_submitted', 'send_back', 'extra_payment', 'saved'])) {
                         return response()->json([
@@ -357,7 +363,9 @@ class UserServiceApplicationController extends Controller
                         'applied_fee'           => $request->land_allotment_estimated_amount ?? null,
                     ]);
 
-                    $this->store_labour_deposits($request->service_id, $application_data, $user_service_application->id);
+                    if ($request->service_id == "37") {
+                        $this->store_labour_deposits($request->service_id, $application_data, $user_service_application->id);
+                    }
 
                     if ($request->status != 'draft' && $has_approval_flow) {
 
@@ -494,7 +502,9 @@ class UserServiceApplicationController extends Controller
                         'applied_fee'             => $request->land_allotment_estimated_amount ?? null,
                     ]);
 
-                    $this->store_labour_deposits($request->service_id, $application_data, $user_service_application->id);
+                    if ($request->service_id == "37") {
+                        $this->store_labour_deposits($request->service_id, $application_data, $user_service_application->id);
+                    }
 
                     if ($user_service_application->status !== "draft") {
                         $application_number = $this->generate_application_number($request->service_id, $user_service_application->id);
@@ -827,7 +837,11 @@ class UserServiceApplicationController extends Controller
 
 
             $application_id =  $user_service_application->id;
-            $fee_data = $this->calculate_final_fee($request->service_id, $request->application_data, $application_id);
+            if ($request->service_id == 37) {
+                $fee_data = $this->calculate_labour_resubmission_breakdown($request->service_id, $request->application_data, $application_id);
+            } else {
+                $fee_data = $this->calculate_final_fee($request->service_id, $request->application_data, $application_id);
+            }
             $final_fee = $fee_data['final_fee'];
             $blc_fee = $fee_data['effective_fee'];
             $previous_paid = $fee_data['previous_paid'];
@@ -857,7 +871,7 @@ class UserServiceApplicationController extends Controller
 
             $total_fee =  $final_fee;
             $previous_paid = $user_service_application->paid_amount ?? 0;
-            $effective_fee = $total_fee - $previous_paid;
+            $effective_fee = max($total_fee - $previous_paid, 0);
             if ($effective_fee < 0) {
                 $effective_fee = 0;
             }
@@ -934,7 +948,7 @@ class UserServiceApplicationController extends Controller
                     ? $user_service_application->current_step_number
                     : ($approval_flow->step_number ?? 0),
                 'max_processing_date'   => $max_processing_date,
-                'paid_amount'           => $paid_amount,
+                'paid_amount'           => $paid_amount ?? $user_service_application->paid_amount,
             ]);
 
             if ($is_resubmission) {
@@ -967,6 +981,10 @@ class UserServiceApplicationController extends Controller
                     'action_taken_at'    => null,
                     'remarks'            => null,
                 ]);
+            }
+
+            if ($user_service_application->service_id == "37") {
+                $this->update_labour_deposits_latest($user_service_application->service_id, $user_service_application->application_data, $user_service_application->id);
             }
 
             $user_service_application->logAs($user->user_name . ' updated application', 'Application Updated');
@@ -1146,6 +1164,40 @@ class UserServiceApplicationController extends Controller
             if ($existing_application) {
                 $previous_paid = $existing_application->paid_amount ?? 0;
                 $db_extra_payment   = $existing_application->extra_payment ?? 0;
+
+                //  to check application with null data is resubmiting without full payment  -- start
+                $application_data_db = is_array($existing_application->application_data)
+                    ? $existing_application->application_data
+                    : json_decode($existing_application->application_data ?? 'null', true);
+
+                $paid_amount = (float) $existing_application->paid_amount;
+                $final_fee_db = (float) $existing_application->final_fee;
+                $total_fee_db = (float) $existing_application->final_fee;
+
+                $is_corrupted_paid_case =
+                    $existing_application->status === 'send_back' &&
+                    $existing_application->payment_status === 'paid' &&
+                    $final_fee_db > 0 &&
+                    empty($application_data_db) &&
+                    $paid_amount <= 0;
+
+                if ($is_corrupted_paid_case) {
+                    $existing_application->paid_amount = $final_fee_db;
+                    $existing_application->total_fee = $final_fee_db;
+
+                    if (empty($existing_application->current_step_number)) {
+                        $last_step = ApplicationWorkflowAssignment::where('application_id', $existing_application->id)
+                            ->latest('id')
+                            ->first();
+
+                        if ($last_step) {
+                            $existing_application->current_step_number = $last_step->step_number;
+                        }
+                    }
+                    $previous_paid = (float) $final_fee_db;
+                    $existing_application->save();
+                }
+                // to check application with null data is resubmiting without full payment  -- end
             }
         }
 
@@ -1162,7 +1214,8 @@ class UserServiceApplicationController extends Controller
         return [
             'final_fee'     => round($final_fee, 2),
             'previous_paid' => round($previous_paid, 2),
-            'effective_fee' => round($effective_fee, 2)
+            'effective_fee' => round($effective_fee, 2),
+            'payable_fee'   => round($effective_fee > 0 ? $effective_fee : 0, 2),
         ];
     }
 
@@ -1192,7 +1245,21 @@ class UserServiceApplicationController extends Controller
 
             $extra_payment = UserServiceApplication::where('id', $application_id)->value('extra_payment');
 
-            $final_fee = $this->calculate_final_fee($service_id, $application_data, $application_id, $extra_payment);
+            if ($service_id == 37) {
+                if ($application_id) {
+                    $data = $this->calculate_labour_resubmission_breakdown($service_id, $application_data, $application_id);
+                } else {
+                    $data = $this->calculate_labour_fee_breakdown($service_id, $application_data, $application_id);
+                }
+
+                return response()->json([
+                    'status' => 1,
+                    'message' => 'Fee calculated successfully.',
+                    'data' => $data
+                ]);
+            } else {
+                $final_fee = $this->calculate_final_fee($service_id, $application_data, $application_id, $extra_payment);
+            }
 
             return response()->json([
                 'status' => 1,
@@ -4358,57 +4425,6 @@ class UserServiceApplicationController extends Controller
         ]);
     }
 
-    // private function calculate_labour_renewal_fee($application, $application_data, $cycle)
-    // {
-
-    //     $old_deposit = LabourDeposit::where('application_id', $application->id)->first();
-
-    //     $old_application_data = is_array($application->application_data)
-    //         ? $application->application_data
-    //         : json_decode($application->application_data ?? '[]', true);
-
-    //     if ($old_deposit) {
-    //         $old_contract_count = (int) ($old_deposit->no_of_contract_labour ?? 0);
-    //         $old_ismw_count     = (int) ($old_deposit->no_of_ismw_labour ?? 0);
-    //     } else {
-    //         $old_contract_count = (int) ($old_application_data[882] ?? 0);
-    //         $old_ismw_count     = (int) ($old_application_data[883] ?? 0);
-    //     }
-    //     $old_data = [
-    //         882 => $old_contract_count,
-    //         883 => $old_ismw_count,
-    //     ];
-
-    //     $old_calculated = $this->calculate_labour_deposit(37, $old_data, [882, 883]);
-
-    //     $old_contract_deposit = (float) ($old_calculated[882]['deposit'] ?? 0);
-    //     $old_ismw_deposit     = (float) ($old_calculated[883]['deposit'] ?? 0);
-
-    //     $calculated = $this->calculate_labour_deposit(37, $application_data, [882, 883]);
-
-    //     $new_contract_deposit = (float) ($calculated[882]['deposit'] ?? 0);
-    //     $new_ismw_deposit     = (float) ($calculated[883]['deposit'] ?? 0);
-
-    //     $contract_fee = (float) ($calculated[882]['fee'] ?? 0);
-    //     $ismw_fee     = (float) ($calculated[883]['fee'] ?? 0);
-
-    //     $contract_deposit_payable = max(0, $new_contract_deposit - $old_contract_deposit);
-    //     $ismw_deposit_payable     = max(0, $new_ismw_deposit - $old_ismw_deposit);
-
-    //     $base_fee = $contract_fee + $ismw_fee;
-
-    //     $late_fee = $this->calculate_late_fee($application, $cycle, $base_fee);
-
-    //     $total_payable = $contract_deposit_payable + $ismw_deposit_payable + $base_fee + $late_fee;
-
-    //     return [
-    //         'base_fee' => round($base_fee, 2),
-    //         'deposit_difference' => round($contract_deposit_payable + $ismw_deposit_payable, 2),
-    //         'late_fee' => round($late_fee, 2),
-    //         'renewal_fee' => round($total_payable, 2),
-    //     ];
-    // }
-
     private function calculate_labour_renewal_fee($application, $application_data, $cycle, $old_deposit = null)
     {
 
@@ -4594,6 +4610,168 @@ class UserServiceApplicationController extends Controller
                 'message' => 'Something went wrong.',
                 'error' => $e->getMessage(),
             ], 500);
+        }
+    }
+
+    private function calculate_labour_fee_breakdown($service_id, $application_data, $application_id = null)
+    {
+        $target_question_ids = array_keys($application_data ?? []);
+
+        $labour_data = $this->calculate_labour_deposit(
+            $service_id,
+            $application_data,
+            $target_question_ids
+        );
+
+        $base_fee = 0;
+        $deposit_fee = 0;
+
+        foreach ($labour_data as $row) {
+            $base_fee += ($row['fee'] ?? 0);
+            $deposit_fee += ($row['deposit'] ?? 0);
+        }
+
+        $previous_paid = 0;
+        if ($application_id) {
+            $existing = UserServiceApplication::find($application_id);
+            $previous_paid = $existing->paid_amount ?? 0;
+        }
+
+        $final_fee = $base_fee + $deposit_fee;
+
+        $effective_fee = 0;
+        if (!empty($previous_paid)) {
+            $effective_fee = max($final_fee - $previous_paid, 0);
+        }
+
+        return [
+            'base_fee'    => round($base_fee, 2),
+            'deposit_fee'   => round($deposit_fee, 2),
+            'final_fee'     => round($final_fee, 2),
+            'previous_paid' => round($previous_paid, 2),
+            'effective_fee' => round($effective_fee, 2),
+            'payable_fee'   => round($effective_fee > 0 ? $effective_fee : 0, 2),
+        ];
+    }
+
+    private function calculate_labour_resubmission_breakdown($service_id, $application_data, $application_id)
+    {
+        $application = UserServiceApplication::find($application_id);
+
+        $application_data_db = is_array($application->application_data)
+            ? $application->application_data
+            : json_decode($application->application_data ?? 'null', true);
+
+        $paid_amount = (float) $application->paid_amount;
+        $final_fee_db = (float) $application->final_fee;
+        $previous_paid = (float) ($application->paid_amount ?? 0);
+
+        $is_corrupted_paid_case =
+            $application->status === 'send_back' &&
+            $application->payment_status === 'paid' &&
+            $final_fee_db > 0 &&empty($application->application_data)&& $paid_amount <= 0;
+
+        if ($is_corrupted_paid_case) {
+            $application->paid_amount = $final_fee_db;
+            $application->total_fee = $final_fee_db;
+
+            if (empty($application->current_step_number)) {
+                $last_step = ApplicationWorkflowAssignment::where('application_id', $application->id)
+                    ->latest('id')
+                    ->first();
+
+                if ($last_step) {
+                    $application->current_step_number = $last_step->step_number;
+                }
+            }
+
+            $previous_paid = (float) $final_fee_db;
+            $application->save();
+        }
+
+        $old_deposit = LabourDeposit::where('application_id', $application->id)->first();
+        $old_data = [
+            882 => (int) ($old_deposit->no_of_contract_labour ?? ($application->application_data[882] ?? 0)),
+            883 => (int) ($old_deposit->no_of_ismw_labour ?? ($application->application_data[883] ?? 0)),
+        ];
+        $old_calc = $this->calculate_labour_deposit($service_id, $old_data, [882, 883]);
+        $old_base_fee = ($old_calc[882]['fee'] ?? 0) + ($old_calc[883]['fee'] ?? 0);
+        $old_deposit_total = ($old_calc[882]['deposit'] ?? 0) + ($old_calc[883]['deposit'] ?? 0);
+
+        $new_calc = $this->calculate_labour_deposit($service_id, $application_data, [882, 883]);
+        $new_base_fee = ($new_calc[882]['fee'] ?? 0) + ($new_calc[883]['fee'] ?? 0);
+        $new_deposit_total = ($new_calc[882]['deposit'] ?? 0) + ($new_calc[883]['deposit'] ?? 0);
+
+        $deposit_difference = max(0, $new_deposit_total - $old_deposit_total);
+        $base_fee = $new_base_fee;
+        $final_fee = $base_fee + $deposit_difference;
+        $effective_fee = max($final_fee - $previous_paid, 0);
+
+        return [
+            'base_fee'      => round($base_fee, 2),
+            'deposit_difference'   => round($deposit_difference, 2),
+            'final_fee'     => round($final_fee, 2),
+            'previous_paid' => round($previous_paid, 2),
+            'effective_fee' => round($effective_fee, 2),
+            'payable_fee'   => round($effective_fee, 2),
+        ];
+    }
+
+    private function update_labour_deposits_latest($service_id, $application_data, $application_id)
+    {
+        if ($service_id != 37) return;
+
+        $application = UserServiceApplication::find($application_id);
+        if (!$application) return;
+
+        if (!is_array($application_data)) {
+            $application_data = json_decode($application_data, true) ?? [];
+        }
+
+        $new_contract = (int) ($application_data['882'] ?? 0);
+        $new_ismw     = (int) ($application_data['883'] ?? 0);
+
+        $calculated = $this->calculate_labour_deposit($service_id, $application_data, ['882', '883']);
+
+        $new_contract_deposit = $calculated[882]['deposit'] ?? 0;
+        $new_contract_fee     = $calculated[882]['fee'] ?? 0;
+
+        $new_ismw_deposit     = $calculated[883]['deposit'] ?? 0;
+        $new_ismw_fee         = $calculated[883]['fee'] ?? 0;
+
+        $deposit = $application->labourDeposit;
+
+        if ($deposit) {
+
+            $old_contract = (int) $deposit->no_of_contract_labour;
+            $old_ismw     = (int) $deposit->no_of_ismw_labour;
+
+            $deposit->update([
+                'old_no_of_contract_labour' => $old_contract,
+                'old_no_of_ismw_labour'     => $old_ismw,
+                'no_of_contract_labour'     => $new_contract,
+                'no_of_ismw_labour'         => $new_ismw,
+                'contract_labour_deposit'   => $new_contract_deposit,
+                'ismw_labour_deposit'       => $new_ismw_deposit,
+                'contract_labour_fee'       => $new_contract_fee,
+                'ismw_labour_fee'           => $new_ismw_fee,
+                'payment_status'            => 'pending',
+            ]);
+        } else {
+
+            $application->labourDeposit()->create([
+                'application_id'            => $application_id,
+
+                'old_no_of_contract_labour' => 0,
+                'old_no_of_ismw_labour'     => 0,
+                'no_of_contract_labour'     => $new_contract,
+                'no_of_ismw_labour'         => $new_ismw,
+                'contract_labour_deposit'   => $new_contract_deposit,
+                'ismw_labour_deposit'       => $new_ismw_deposit,
+                'contract_labour_fee'       => $new_contract_fee,
+                'ismw_labour_fee'           => $new_ismw_fee,
+                'payment_status'            => 'pending',
+            ]);
         }
     }
 }
