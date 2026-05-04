@@ -1741,4 +1741,91 @@ class ServiceController extends Controller
             ], 500);
         }
     }
+
+    public function get_user_previous_applications(Request $request)
+    {
+
+        try {
+
+            $request->validate([
+                'user_id' => 'required|integer|exists:users,id',
+            ]);
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $user = User::where('id', $user->id)
+                ->where('user_type', 'department')
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or non-departmental user.'
+                ], 404);
+            }
+
+            $dept_user_ids = DepartmentUser::where('user_id', $user->id)->pluck('id');
+
+            $applications_data = UserServiceApplication::with(['service', 'user'])
+                ->where('user_id', $request->user_id)
+                ->whereHas('workflow', function ($q) use ($user) {
+                    $q->where('action_taken_by', $user->id)
+                        ->whereNotNull('action_taken_at');
+                })
+                ->orderByDesc('id')
+                ->get();
+
+            $applicant = User::find($request->user_id);
+
+            $applications = $applications_data->map(function ($application) use ($user) {
+
+                $workflow = $application->workflow
+                    ->where('action_taken_by', $user->id)
+                    ->sortByDesc('id')
+                    ->first();
+
+                return [
+                    'application_id'     => $application->id,
+                    'application_number' => $application->applicationId,
+                    'service_name'       => $application->service->service_title_or_description ?? null,
+                    'applicant_name'     => optional($application->user)->authorized_person_name,
+                    'enterprise_name'    => optional($application->user)->name_of_enterprise,
+                    'mobile_no'          => optional($application->user)->mobile_no,
+                    'application_status' => $application->status,
+                    'submission_date'    => $application->application_date,
+                    'approved_step'      => $workflow->step_number ?? null,
+                    'step_type'          => $workflow->step_type ?? null,
+                    'status'             => $application->status,
+                    'approved_date'      => $workflow->updated_at ?? null,
+                    'remarks'            => $workflow->remarks ?? null,
+                ];
+            });
+
+            return response()->json([
+                'status'  => 1,
+                'message' => "User's previous applications fetched successfully.",
+                'user'    => [
+                    'user_id'         => $applicant?->id,
+                    'name'            => $applicant?->authorized_person_name,
+                    'enterprise_name' => $applicant?->name_of_enterprise,
+                    'mobile_no'       => $applicant?->mobile_no,
+                    'email'           => $applicant?->email_id,
+                    'pan'             => $applicant?->pan,
+                    'address'         => $applicant?->registered_enterprise_address,
+                    'city'            => $applicant?->registered_enterprise_city,
+                ],
+                'data'    => $applications
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong while fetching applications.',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
 }

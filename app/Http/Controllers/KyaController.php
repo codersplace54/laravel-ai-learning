@@ -4,9 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\KyaMaster;
+use App\Models\UserKya;
 use Illuminate\Http\Request;
 use Exception;
-
+use Illuminate\Support\Facades\Auth;
 class KyaController extends Controller
 {
     /**
@@ -273,6 +274,61 @@ class KyaController extends Controller
                 'message' => 'Failed to retrieve approval details.',
                 'error'   => $e->getMessage(),
             ], 500);
+        }
+    }
+
+    public function user_kya_store(Request $request)
+    {
+        try {
+            $request->validate([
+                'data'    => 'required',
+            ]);
+
+            $user_id = Auth::id();
+
+            $existing = UserKya::where('user_id', $user_id)->first();
+
+            if ($existing) {
+                $existing->update(
+                    [
+                        'data' => json_encode($request->data)
+                    ]);
+            } else {
+                UserKya::create([
+                    'user_id' => $user_id,
+                    'data'    => json_encode($request->data)
+                ]);
+            }
+
+            return response()->json(['status' => true, 'message' => 'KYA data saved.']);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => false, 'errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            return response()->json(['status' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function user_kya_view(Request $request)
+    {
+        try {
+            $user_id = Auth::id();
+
+            $kya = UserKya::where('user_id', $user_id)->first();
+
+            if (!$kya) {
+                return response()->json(['status' => false, 'message' => 'No KYA data found.'], 404);
+            }
+
+            return response()->json([
+                'status' => true,
+                'data'   => json_decode($kya->data,true),
+            ]);
+            
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => false, 'errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            return response()->json(['status' => false, 'error' => $e->getMessage()], 500);
         }
     }
 }
