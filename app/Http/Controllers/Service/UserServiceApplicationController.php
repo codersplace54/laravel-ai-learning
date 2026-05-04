@@ -869,8 +869,8 @@ class UserServiceApplicationController extends Controller
                 }
             }
 
-            $total_fee =  $final_fee;
-            $previous_paid = $user_service_application->paid_amount ?? 0;
+            $total_fee =  (float) $final_fee;
+            $previous_paid = (float) $user_service_application->paid_amount ?? 0;
             $effective_fee = max($total_fee - $previous_paid, 0);
             if ($effective_fee < 0) {
                 $effective_fee = 0;
@@ -924,8 +924,8 @@ class UserServiceApplicationController extends Controller
                 'approved_fee'          => $request->approved_fee,
                 'payment_status'        => $payment_status,
                 'remarks'               => $request->remarks,
-                'NOC_application_date'  => $request->NOC_application_date,
-                'NOC_expiry_date'       => $request->NOC_expiry_date,
+                'NOC_application_date'  => $request->NOC_application_date ?? $user_service_application->NOC_expiry_date,
+                'NOC_expiry_date'       => $request->NOC_expiry_date ?? $user_service_application->NOC_expiry_date,
                 'PreviousNOCexpiryDate' => $request->PreviousNOCexpiryDate,
                 'payment_transId'       => $request->payment_transId ?? $user_service_application->GRN_number,
                 'GRN_number'            => $request->GRN_number ?? $user_service_application->GRN_number,
@@ -1151,9 +1151,15 @@ class UserServiceApplicationController extends Controller
         $previous_paid = 0;
         $db_extra_payment = 0;
         $effective_fee = 0;
+        $late_fee = 0;
 
         if ($application_id) {
             $existing_application = UserServiceApplication::find($application_id);
+
+            $cycle = RenewalCycle::where('id', $existing_application->renewal_cycle_id)
+                ->where('service_id', $existing_application->service_id)
+                ->first();
+
             if ($existing_application) {
                 $previous_paid = $existing_application->paid_amount ?? 0;
                 $db_extra_payment   = $existing_application->extra_payment ?? 0;
@@ -1191,6 +1197,8 @@ class UserServiceApplicationController extends Controller
                     $existing_application->save();
                 }
                 // to check application with null data is resubmiting without full payment  -- end
+                $late_fee = $this->calculate_late_fee($existing_application, $cycle, $final_fee);
+                $late_fee  = 300;
             }
         }
 
@@ -1198,14 +1206,17 @@ class UserServiceApplicationController extends Controller
             ? (float)$request_extra_payment
             : (float)$db_extra_payment;
 
-        $final_fee += $extra_payment;
+        $total_fee = $final_fee + $extra_payment + $late_fee;
+
+
 
         if (!empty($previous_paid)) {
-            $effective_fee = max($final_fee - $previous_paid, 0);
+            $effective_fee = max($total_fee - $previous_paid, 0);
         }
 
         return [
-            'final_fee'     => round($final_fee, 2),
+            'late_fee'      => round($late_fee, 2),
+            'final_fee'     => round($total_fee, 2),
             'previous_paid' => round($previous_paid, 2),
             'effective_fee' => round($effective_fee, 2),
             'payable_fee'   => round($effective_fee > 0 ? $effective_fee : 0, 2),
@@ -2685,7 +2696,7 @@ class UserServiceApplicationController extends Controller
             $total_fee     = $application->total_fee ?? 0;
 
             $current_payment = !empty($effective_fee) ? $effective_fee : $total_fee;
-            $previous_paid = $application->paid_amount ?? 0;
+            $previous_paid = (float) $application->paid_amount ?? 0;
             $final_paid_amount = $previous_paid + $current_payment;
             $is_extra_payment = $application->status === 'extra_payment';
 
@@ -2776,11 +2787,18 @@ class UserServiceApplicationController extends Controller
 
         if (!empty($service->noc_validity) && !empty($application->NOC_expiry_date)) {
             $expiry_date = Carbon::parse($application->NOC_expiry_date);
+        } elseif (!empty($application->previous_application_id)) {
+            $previous_app = UserServiceApplication::find($application->previous_application_id);
+
+            if ($previous_app && !empty($previous_app->NOC_expiry_date)) {
+                $expiry_date = Carbon::parse($previous_app->NOC_expiry_date);
+            }
         } elseif (!empty($service->fixed_expiry_date)) {
             $expiry_date = Carbon::parse($service->fixed_expiry_date);
         } else {
             $expiry_date = null;
         }
+
         $today = Carbon::today();
         $renewal_data = [];
         $renewal_cycles = $service->renewalCycles;
@@ -3994,7 +4012,9 @@ class UserServiceApplicationController extends Controller
 
             $history = $app->workflow()->orderBy('id', 'desc')->get();
 
-            $latest_workflow = $history->first();
+            $latest_workflow = $app->latestWorkflow()
+                ->latest('created_at')
+                ->first();
 
             $last_approved = $history->where('status', 'approved')->first();
 
@@ -4655,6 +4675,10 @@ class UserServiceApplicationController extends Controller
             ? $application->application_data
             : json_decode($application->application_data ?? 'null', true);
 
+        $cycle = RenewalCycle::where('id', $application->renewal_cycle_id)
+            ->where('service_id', $application->service_id)
+            ->first();
+
         $paid_amount = (float) $application->paid_amount;
         $final_fee_db = (float) $application->final_fee;
         $previous_paid = (float) ($application->paid_amount ?? 0);
@@ -4662,7 +4686,7 @@ class UserServiceApplicationController extends Controller
         $is_corrupted_paid_case =
             $application->status === 'send_back' &&
             $application->payment_status === 'paid' &&
-            $final_fee_db > 0 &&empty($application->application_data)&& $paid_amount <= 0;
+            $final_fee_db > 0 && empty($application->application_data) && $paid_amount <= 0;
 
         if ($is_corrupted_paid_case) {
             $application->paid_amount = $final_fee_db;
@@ -4697,16 +4721,18 @@ class UserServiceApplicationController extends Controller
 
         $deposit_difference = max(0, $new_deposit_total - $old_deposit_total);
         $base_fee = $new_base_fee;
-        $final_fee = $base_fee + $deposit_difference;
+        $late_fee = $this->calculate_late_fee($application, $cycle, $base_fee);
+        $final_fee = $base_fee + $deposit_difference + $late_fee;
         $effective_fee = max($final_fee - $previous_paid, 0);
 
         return [
             'base_fee'      => round($base_fee, 2),
             'deposit_difference'   => round($deposit_difference, 2),
+            'late_fee'      => round($late_fee, 2),
             'final_fee'     => round($final_fee, 2),
             'previous_paid' => round($previous_paid, 2),
             'effective_fee' => round($effective_fee, 2),
-            'payable_fee'   => round($effective_fee, 2),
+            'payable_fee'   => round($effective_fee > 0 ? $effective_fee : 0, 2),
         ];
     }
 
