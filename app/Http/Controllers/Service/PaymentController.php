@@ -93,6 +93,14 @@ class PaymentController extends Controller
                         ['scheme' => '0230-00-106-37-02',     'amount' => $contract_fee],
                         ['scheme' => '0230-00-101-37-06',         'amount' => $ismw_fee],
                     ];
+
+                    if ($application->extra_payment !== null && $application->payment_status === 'pending') {
+                        $items[] = [
+                            'scheme' => '0230-00-106-37-02-00',
+                            'amount' => (float) $application->extra_payment
+                        ];
+                    }
+
                     foreach ($items as $item) {
                         if ($item['amount'] > 0) {
                             $scheme_names[] = $item['scheme'];
@@ -348,7 +356,7 @@ class PaymentController extends Controller
             }
 
             $raw_status = strtolower($request->input('status'));
-            $normalized_status = match($raw_status) {
+            $normalized_status = match ($raw_status) {
                 'success'          => 'paid',
                 'fail', 'failure'  => 'failed',
                 default            => $raw_status,
@@ -503,15 +511,15 @@ class PaymentController extends Controller
             }
 
             $user_id = Auth::id();
-            
+
             $raw_payment_status = $request->payment_status;
-            $normalized_payment_status = match($raw_payment_status) {
+            $normalized_payment_status = match ($raw_payment_status) {
                 'success'          => 'paid',
                 'fail', 'failure'  => 'failed',
                 default            => $raw_payment_status,
             };
 
-            
+
             $service_user_applications = UserServiceApplication::where('user_id', $user_id)
                 ->where('payment_status', $normalized_payment_status)
                 ->where(function ($query) {
@@ -521,7 +529,7 @@ class PaymentController extends Controller
                     })
                         ->orWhere(function ($q) {
                             $q->whereNull('extra_payment')
-                            ->orWhere('extra_payment', 0)
+                                ->orWhere('extra_payment', 0)
                                 ->where(function ($subq) {
                                     $subq->where('effective_fee', '>', 0)
                                         ->orWhere('total_fee', '>', 0);
