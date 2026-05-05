@@ -96,7 +96,7 @@ class PaymentController extends Controller
 
                     if ($application->extra_payment !== null && $application->payment_status === 'pending') {
                         $items[] = [
-                            'scheme' => '0230-00-106-37-02-00',
+                            'scheme' => '0230-00-106-37-02',
                             'amount' => (float) $application->extra_payment
                         ];
                     }
