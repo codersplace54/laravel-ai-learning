@@ -1458,6 +1458,34 @@ class UserController extends Controller
         }
     }
 
+    public function get_user_details(Request $request)
+    {
+        try {
+            $user_id = Auth::id();
+            $user = User::with(['district', 'subdivision', 'ulb'])
+                ->where('id', $user_id)
+                ->first();
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'pan'               => $user->pan,
+                    'district_code'     => $user->district->district_code ?? null,
+                    'district'          => $user->district->district_name ?? null,
+                    'subdivision_code'  => $user->subdivision->sub_lgd_code ?? null,
+                    'subdivision_name'  => $user->subdivision->sub_division ?? null,
+                    'ulb_code'          => $user->ulb->ulb_lgd_code ?? null,
+                    'ulb_name'          => $user->ulb->ulb_name ?? null,
+                    'is_pan_verified'   => (bool) $user->is_pan_verified,
+                ],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => false, 'errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            return response()->json(['status' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
     public function pan_lookup(Request $request)
     {
         $data = $request->validate([

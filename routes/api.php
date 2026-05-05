@@ -311,6 +311,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('kya-store', [KyaController::class, 'user_kya_store']);
         Route::post('kya-view', [KyaController::class, 'user_kya_view']);
+        Route::post('get-user-details', [UserController::class, 'get_user_details']);
     });
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
