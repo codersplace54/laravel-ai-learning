@@ -1767,23 +1767,21 @@ class ServiceController extends Controller
                 ], 404);
             }
 
-            $dept_user_ids = DepartmentUser::where('user_id', $user->id)->pluck('id');
+            $dept_ids = DepartmentUser::where('user_id', $user->id)->pluck('department_id');
 
             $applications_data = UserServiceApplication::with(['service', 'user'])
                 ->where('user_id', $request->user_id)
-                ->whereHas('workflow', function ($q) use ($user) {
-                    $q->where('action_taken_by', $user->id)
-                        ->whereNotNull('action_taken_at');
+                ->whereHas('service', function ($q) use ($dept_ids) {
+                    $q->whereIn('department_id', $dept_ids);
                 })
                 ->orderByDesc('id')
                 ->get();
 
             $applicant = User::find($request->user_id);
 
-            $applications = $applications_data->map(function ($application) use ($user) {
+            $applications = $applications_data->map(function ($application) {
 
                 $workflow = $application->workflow
-                    ->where('action_taken_by', $user->id)
                     ->sortByDesc('id')
                     ->first();
 

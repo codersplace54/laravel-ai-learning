@@ -2799,6 +2799,8 @@ class UserServiceApplicationController extends Controller
 
             if ($previous_app && !empty($previous_app->NOC_expiry_date)) {
                 $expiry_date = Carbon::parse($previous_app->NOC_expiry_date);
+            } else {
+                $expiry_date = null;
             }
         } elseif (!empty($service->fixed_expiry_date)) {
             $expiry_date = Carbon::parse($service->fixed_expiry_date);
