@@ -1205,7 +1205,6 @@ class UserServiceApplicationController extends Controller
                 }
                 // to check application with null data is resubmiting without full payment  -- end
                 $late_fee = $this->calculate_late_fee($existing_application, $cycle, $final_fee);
-                $late_fee  = 300;
             }
         }
 
@@ -1215,11 +1214,7 @@ class UserServiceApplicationController extends Controller
 
         $total_fee = $final_fee + $extra_payment + $late_fee;
 
-
-
-        if (!empty($previous_paid)) {
-            $effective_fee = max($total_fee - $previous_paid, 0);
-        }
+        $effective_fee = max($total_fee - $previous_paid, 0);
 
         return [
             'late_fee'      => round($late_fee, 2),
@@ -4007,7 +4002,7 @@ class UserServiceApplicationController extends Controller
                 'application_id' => 'nullable|string|exists:user_service_applications,id',
             ]);
 
-            $app = UserServiceApplication::with(['service.department','workflow.actionTaker','workflow.department'])
+            $app = UserServiceApplication::with(['service.department', 'workflow.actionTaker', 'workflow.department'])
                 ->when($request->applicationId, function ($query) use ($request) {
                     return $query->where('applicationId', $request->applicationId);
                 })
