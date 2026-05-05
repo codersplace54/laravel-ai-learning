@@ -441,28 +441,6 @@ class UserServiceApplicationController extends Controller
 
                     $request->merge(['application_data' => $application_data]);
 
-                    // Carry forward paid amount from any previous paid application for same user+service
-                    $previous_paid_application = UserServiceApplication::where('user_id', $user->id)
-                        ->where('service_id', $request->service_id)
-                        ->where('payment_status', 'paid')
-                        ->whereNotNull('paid_amount')
-                        ->where('paid_amount', '>', 0)
-                        ->latest('id')
-                        ->first();
-
-                    $carried_paid_amount = $previous_paid_application ? (float) $previous_paid_application->paid_amount : 0;
-                    $previous_application_id = $previous_paid_application?->id;
-
-                    if ($carried_paid_amount > 0) {
-                        $effective_fee = max($total_fee - $carried_paid_amount, 0);
-                        if ($effective_fee == 0) {
-                            $status = 're_submitted';
-                            $payment_status = 'paid';
-                            $paid_amount = $carried_paid_amount;
-                            $payment_time = now();
-                        }
-                    }
-
                     $user_service_application = UserServiceApplication::create([
                         'user_id'                 => $user->id,
                         'service_id'              => $request->service_id,
@@ -494,9 +472,6 @@ class UserServiceApplicationController extends Controller
                         'NSW_Push_Document_ID'    => $request->NSW_Push_Document_ID,
                         'final_fee'               => $final_fee,
                         'total_fee'               => $total_fee,
-                        'effective_fee'           => $carried_paid_amount > 0 ? max($total_fee - $carried_paid_amount, 0) : 0,
-                        'paid_amount'             => $carried_paid_amount > 0 ? $carried_paid_amount : $paid_amount,
-                        'previous_application_id' => $previous_application_id,
                         'current_step_number'     => $approval_flow->step_number ?? 0,
                         'max_processing_date'     => $has_approval_flow ? $max_processing_date : null,
                         'applied_fee'             => $request->land_allotment_estimated_amount ?? null,
@@ -1214,8 +1189,14 @@ class UserServiceApplicationController extends Controller
 
         $total_fee = $final_fee + $extra_payment + $late_fee;
 
+<<<<<<< Updated upstream
         $effective_fee = max($total_fee - $previous_paid, 0);
 
+=======
+        if (!empty($previous_paid)) {
+            $effective_fee = max($total_fee - $previous_paid, 0);
+        }
+>>>>>>> Stashed changes
         return [
             'late_fee'      => round($late_fee, 2),
             'final_fee'     => round($total_fee, 2),
