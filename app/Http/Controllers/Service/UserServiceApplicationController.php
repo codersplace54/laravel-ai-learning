@@ -1189,14 +1189,7 @@ class UserServiceApplicationController extends Controller
 
         $total_fee = $final_fee + $extra_payment + $late_fee;
 
-<<<<<<< Updated upstream
         $effective_fee = max($total_fee - $previous_paid, 0);
-
-=======
-        if (!empty($previous_paid)) {
-            $effective_fee = max($total_fee - $previous_paid, 0);
-        }
->>>>>>> Stashed changes
         return [
             'late_fee'      => round($late_fee, 2),
             'final_fee'     => round($total_fee, 2),
