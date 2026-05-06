@@ -56,7 +56,7 @@ class UserServiceApplicationController extends Controller
                     'service_id'            => 'required|integer|exists:service_masters,id',
                     'renewal_cycle_id'      => 'nullable|integer|exists:renewal_cycles,id',
                     'previous_application_id' => 'nullable|integer',
-                    'renewal'               => 'nullable|in:yes,no',
+                    'renewal'               => 'required|in:yes,no',
                     'renewalYear'           => 'nullable|integer|min:1|max:10',
                     'applicationId'         => 'nullable|string|max:255',
                     'application_date'      => 'nullable|date',
@@ -1646,7 +1646,7 @@ class UserServiceApplicationController extends Controller
                 : [$request->application_id];
 
             $application = UserServiceApplication::where('service_id', $request->service_id)
-                ->with(['my_feedback', 'appeal'])
+                ->with(['my_feedback', 'appeal','renewal_cycle:id,renewal_title'])
                 ->whereIn('id', $application_ids)
                 ->first();
 
@@ -4706,7 +4706,11 @@ class UserServiceApplicationController extends Controller
         $new_base_fee = ($new_calc[882]['fee'] ?? 0) + ($new_calc[883]['fee'] ?? 0);
         $new_deposit_total = ($new_calc[882]['deposit'] ?? 0) + ($new_calc[883]['deposit'] ?? 0);
 
-        $deposit_difference = max(0, $new_deposit_total - $old_deposit_total);
+        if (!empty($application->previous_application_id)) {
+            $deposit_difference = max(0, $new_deposit_total - $old_deposit_total);
+        }else{
+             $deposit_difference = $new_deposit_total;
+        }
         $base_fee = $new_base_fee;
         $late_fee = $this->calculate_late_fee($application, $cycle, $base_fee);
         $final_fee = $base_fee + $deposit_difference + $late_fee;
@@ -4714,7 +4718,7 @@ class UserServiceApplicationController extends Controller
 
         return [
             'base_fee'      => round($base_fee, 2),
-            'deposit_difference'   => round($deposit_difference, 2),
+            'deposit_fee'   => round($deposit_difference, 2),
             'late_fee'      => round($late_fee, 2),
             'final_fee'     => round($final_fee, 2),
             'previous_paid' => round($previous_paid, 2),
