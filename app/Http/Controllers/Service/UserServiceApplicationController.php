@@ -870,6 +870,12 @@ class UserServiceApplicationController extends Controller
                 $payment_time = $user_service_application->payment_time;
             }
 
+            if ((float) $total_fee <= (float) $previous_paid) {
+                $status = 're_submitted';
+                $payment_status = 'paid';
+                $paid_amount = $user_service_application->paid_amount;
+            }
+
             $is_resubmission = $user_service_application->status === 'send_back';
 
             if ($is_resubmission && $user_service_application->max_processing_date) {
