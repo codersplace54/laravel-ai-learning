@@ -4636,10 +4636,7 @@ class UserServiceApplicationController extends Controller
 
         $final_fee = $base_fee + $deposit_fee;
 
-        $effective_fee = 0;
-        if (!empty($previous_paid)) {
-            $effective_fee = max($final_fee - $previous_paid, 0);
-        }
+        $effective_fee = max($final_fee - $previous_paid, 0);
 
         return [
             'base_fee'    => round($base_fee, 2),
