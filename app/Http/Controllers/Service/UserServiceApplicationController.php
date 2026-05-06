@@ -1128,7 +1128,7 @@ class UserServiceApplicationController extends Controller
         }
 
         if ($minimum_fee > 0 && $final_fee < $minimum_fee) {
-            return round($minimum_fee, 2);
+             $final_fee = $minimum_fee;
         }
 
         $extra_payment = $application_data['extra_payment'] ?? 0;
@@ -1246,7 +1246,7 @@ class UserServiceApplicationController extends Controller
             } else {
                 $final_fee = $this->calculate_final_fee($service_id, $application_data, $application_id, $extra_payment);
             }
-
+dd($final_fee);
             return response()->json([
                 'status' => 1,
                 'message' => 'Fee calculated successfully.',
