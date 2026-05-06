@@ -1246,7 +1246,7 @@ class UserServiceApplicationController extends Controller
             } else {
                 $final_fee = $this->calculate_final_fee($service_id, $application_data, $application_id, $extra_payment);
             }
-dd($final_fee);
+
             return response()->json([
                 'status' => 1,
                 'message' => 'Fee calculated successfully.',
