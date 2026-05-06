@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Service;
 
 use App\Http\Controllers\Controller;
 use App\Models\ApplicationWorkflowAssignment;
+use App\Models\DepartmentUser;
 use App\Models\UserServiceApplication;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,18 +20,43 @@ class ApplicationAssignmentController extends Controller
             }
 
             $request->validate([
-                'application_id' => 'required|exists:user_service_applications,id'
+                'application_id' => 'required_without:application_number|exists:user_service_applications,id',
+                'application_number' => 'required_without:application_id|exists:user_service_applications,applicationId'
             ]);
 
-            $assignments = ApplicationWorkflowAssignment::where('application_id', $request->application_id)
+            $application = UserServiceApplication::with([
+                'user:id,name_of_enterprise,authorized_person_name,mobile_no,user_name',
+                'service:id,service_title_or_description'
+            ])
+                ->when($request->application_id, fn($q) => $q->where('id', $request->application_id))
+                ->when($request->application_number, fn($q) => $q->where('applicationId', $request->application_number))
+                ->first();
+
+            $assignments = ApplicationWorkflowAssignment::where('application_id', $application->id)
                 ->with(['department:id,name', 'actionTaker:id,authorized_person_name,email_id'])
                 ->orderBy('step_number')
                 ->get();
 
+            $data = [
+                'assignments' => $assignments,
+                'application' => [
+                    'id'                  => $application->id,
+                    'applicationId'       => $application->applicationId,
+                    'service'             => $application->service?->service_title_or_description,
+                    'current_step_number' => $application->current_step_number,
+                ],
+                'user'    => [
+                    'name_of_enterprise' => $application->user->name_of_enterprise,
+                    'authorized_person_name' => $application->user->authorized_person_name,
+                    'mobile_no' => $application->user->mobile_no,
+                    'user_name' => $application->user->user_name,
+                ]
+            ];
             return response()->json([
                 'status'  => 1,
                 'message' => 'Application assignments fetched successfully',
-                'data'    => $assignments
+                'data'    => $data,
+
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
@@ -54,31 +80,54 @@ class ApplicationAssignmentController extends Controller
                 'department_id'   => 'required|exists:departments,id',
                 'hierarchy_level' => 'required|in:block,subdivision1,subdivision2,subdivision3,district1,district2,district3,state1,state2,state3',
                 'status'          => 'required|in:pending,approved,rejected,send_back,extra_payment,re_submitted,saved,in_progress',
+                'action_taken_by' => 'nullable|exists:users,id',
             ]);
 
+            $application = UserServiceApplication::where('id',$request->application_id)->first();
+
+            if (!$application) {
+                return response()->json(['status' => 0, 'message' => 'Application not found'], 404);
+            }
+    
             $assignment = ApplicationWorkflowAssignment::create([
-                'application_id'  => $request->application_id,
+                'application_id'  => $application->id,
+                'service_id'      => $application->service_id,
                 'step_number'     => $request->step_number,
                 'step_type'       => $request->step_type,
                 'department_id'   => $request->department_id,
                 'hierarchy_level' => $request->hierarchy_level,
                 'status'          => $request->status,
                 'remarks'         => $request->remarks,
-                'action_taken_by' => $request->action_taken_by ?? null,
-                'action_taken_at' => $request->action_taken_by ? now() : null,
+                'action_taken_by' => $request->action_taken_by ?? Auth::id(),
+                'action_taken_at' => now(),
             ]);
 
-            UserServiceApplication::where('id', $request->application_id)->update([
-                'current_step_number' => $request->step_number,
-                //status also can be updated, check if latest assignment is being updated
-            ]);
+            $status_map = [
+                'pending' => 'under_review',
+                'approved' => 'approved',
+                'rejected' => 'rejected',
+                'send_back' => 'send_back',
+                'extra_payment' => 'extra_payment',
+                're_submitted' => 're_submitted',
+                'saved' => 'saved',
+                'in_progress' => 'under_review'
+            ];
+
+            $application_status = $status_map[$request->status];
+
+            if ($application->current_step_number < $request->step_number) {
+                $application->update([
+                        'current_step_number' => $request->step_number,
+                        'status' => $application_status,
+                    ]);
+            }
 
             return response()->json([
                 'status'  => 1,
                 'message' => 'Assignment created successfully',
                 'data'    => $assignment
             ]);
-            
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -99,29 +148,49 @@ class ApplicationAssignmentController extends Controller
                 'step_number'     => 'nullable|integer',
                 'step_type'       => 'nullable|string',
                 'department_id'   => 'nullable|exists:departments,id',
-                'hierarchy_level' => 'nullable|string',
+                'hierarchy_level' => 'nullable|in:block,subdivision1,subdivision2,subdivision3,district1,district2,district3,state1,state2,state3',
                 'status'          => 'nullable|in:pending,approved,rejected,send_back,extra_payment,re_submitted',
                 'remarks'         => 'nullable|string',
                 'action_taken_by' => 'nullable|exists:users,id',
             ]);
 
-            $assignment = ApplicationWorkflowAssignment::findOrFail($request->assignment_id);
+            $assignment = ApplicationWorkflowAssignment::where('id',$request->assignment_id)->first();
 
-            $assignment->update(array_filter([
-                'step_number'     => $request->step_number,
-                'step_type'       => $request->step_type,
-                'department_id'   => $request->department_id,
-                'hierarchy_level' => $request->hierarchy_level,
-                'status'          => $request->status,
-                'remarks'         => $request->remarks,
-                'action_taken_by' => $request->action_taken_by,
-                'action_taken_at' => $request->action_taken_by ? now() : null,
-            ], fn($v) => !is_null($v)));
+            $application = UserServiceApplication::find($assignment->application_id);
 
-            if ($request->filled('step_number')) {
-                UserServiceApplication::where('id', $assignment->application_id)->update([
-                    'current_step_number' => $request->step_number,
-                ]);
+            if (!$application) {
+                return response()->json(['status' => 0, 'message' => 'Application not found'], 404);
+            }
+
+            $assignment->update([
+                'step_number'     => $request->step_number ?? $assignment->step_number,
+                'step_type'       => $request->step_type ?? $assignment->step_type,
+                'department_id'   => $request->department_id ?? $assignment->department_id,
+                'hierarchy_level' => $request->hierarchy_level ?? $assignment->hierarchy_level,
+                'status'          => $request->status ?? $assignment->status,
+                'remarks'         => $request->remarks ?? $assignment->remarks,
+                'action_taken_by' => $request->action_taken_by ?? Auth::id(),
+                'action_taken_at' => now(),
+            ]);
+
+            $status_map = [
+                'pending' => 'under_review',
+                'approved' => 'approved',
+                'rejected' => 'rejected',
+                'send_back' => 'send_back',
+                'extra_payment' => 'extra_payment',
+                're_submitted' => 're_submitted',
+                'saved' => 'saved',
+                'in_progress' => 'under_review'
+            ];
+
+            $application_status = $status_map[$request->status];
+
+            if ($application->current_step_number < $request->step_number) {
+                $application->update([
+                        'current_step_number' => $request->step_number,
+                        'status' => $application_status,
+                    ]);
             }
 
             return response()->json([
@@ -133,6 +202,40 @@ class ApplicationAssignmentController extends Controller
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             return response()->json(['status' => 0, 'message' => 'Failed to update assignment', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function get_department_user_for_assignment(Request $request)
+    {
+        $request->validate([
+            'department_id'   => 'required|exists:departments,id',
+            'hierarchy_level' => 'required|in:block,subdivision1,subdivision2,subdivision3,district1,district2,district3,state1,state2,state3',
+        ]);
+
+        try {
+            $department_users = DepartmentUser::where('department_id',$request->department_id)
+            ->where('hierarchy_level', $request->hierarchy_level)
+            ->with('user:id,authorized_person_name')
+            ->get()->map(function ($dpt_user) {
+            return [
+                'id'      => $dpt_user->id,
+                'user_id' => $dpt_user->user_id,
+                'authorized_person_name'   => $dpt_user->user->authorized_person_name ?? null,
+            ];
+        });
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Department users fetched successfully',
+                'data'    => $department_users
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0, 
+                'message' => 'Failed to fetch department users', 'error' => $e->getMessage()
+            ], 500);
+
         }
     }
 }
