@@ -56,7 +56,7 @@ class UserServiceApplicationController extends Controller
                     'service_id'            => 'required|integer|exists:service_masters,id',
                     'renewal_cycle_id'      => 'nullable|integer|exists:renewal_cycles,id',
                     'previous_application_id' => 'nullable|integer',
-                    'renewal'               => 'required|in:yes,no',
+                    'renewal'               => 'nullable|in:yes,no',
                     'renewalYear'           => 'nullable|integer|min:1|max:10',
                     'applicationId'         => 'nullable|string|max:255',
                     'application_date'      => 'nullable|date',
