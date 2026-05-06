@@ -235,6 +235,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-application-assignments', [ApplicationAssignmentController::class, 'get_application_assignments']);
         Route::post('create-application-assignment', [ApplicationAssignmentController::class, 'create_application_assignment']);
         Route::post('update-application-assignment', [ApplicationAssignmentController::class, 'update_application_assignment']);
+        Route::post('get-department-user-for-assignment', [ApplicationAssignmentController::class, 'get_department_user_for_assignment']);
 
     });
 
