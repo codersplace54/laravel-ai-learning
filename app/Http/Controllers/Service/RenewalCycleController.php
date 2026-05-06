@@ -277,7 +277,7 @@ class RenewalCycleController extends Controller
 
             return response()->json([
                 'status' => 1,
-                'message' => 'Service approval flow fetched successfully.',
+                'message' => 'Renewal Cycle fetched successfully.',
                 'data' => $renewal_cycle,
             ]);
         } catch (\Exception $e) {
