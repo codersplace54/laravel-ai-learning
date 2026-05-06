@@ -380,8 +380,19 @@ class ServiceQuestionnaireController extends Controller
 
             // For land allotment service
             $industrial_estates = null;
-            if($request->service_id == 64){
+            if ($request->service_id == 64) {
                 $industrial_estates = IndustrialEstate::get();
+            }
+
+            $renewal_exist = false;
+
+            $required_question_ids = $service_questionnaires
+                ->where('is_required', 'yes')
+                ->pluck('id')
+                ->toArray();
+
+            if (!empty($required_question_ids)) {
+                $renewal_exist = RenewalFeeRule::whereIn('question_id', $required_question_ids)->exists();
             }
 
             return response()->json([
@@ -389,7 +400,8 @@ class ServiceQuestionnaireController extends Controller
                 'message' => 'Service questionnaires fetched successfully.',
                 'data' => $service_questionnaires,
                 'service_name' => $service_name,
-                'industrial_estates' => $industrial_estates
+                'industrial_estates' => $industrial_estates,
+                'renewal_exist' => $renewal_exist
             ]);
         } catch (\Exception $e) {
 
