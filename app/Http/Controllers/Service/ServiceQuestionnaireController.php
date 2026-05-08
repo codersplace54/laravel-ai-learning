@@ -348,7 +348,7 @@ class ServiceQuestionnaireController extends Controller
             ]);
 
             $service_name = ServiceMaster::where('id', $request->service_id)->value('service_title_or_description');
-            $service_questionnaires = ServiceQuestionnaire::where('service_id', $request->service_id)->get();
+            $service_questionnaires = ServiceQuestionnaire::where('service_id', $request->service_id)->orderBy('display_order', 'asc')->get();
 
             if ($service_questionnaires->isEmpty()) {
                 return response()->json([
