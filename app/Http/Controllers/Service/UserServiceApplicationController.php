@@ -1128,7 +1128,7 @@ class UserServiceApplicationController extends Controller
         }
 
         if ($minimum_fee > 0 && $final_fee < $minimum_fee) {
-             $final_fee = $minimum_fee;
+            $final_fee = $minimum_fee;
         }
 
         $extra_payment = $application_data['extra_payment'] ?? 0;
@@ -1646,7 +1646,7 @@ class UserServiceApplicationController extends Controller
                 : [$request->application_id];
 
             $application = UserServiceApplication::where('service_id', $request->service_id)
-                ->with(['my_feedback', 'appeal','renewal_cycle:id,renewal_title'])
+                ->with(['my_feedback', 'appeal', 'renewal_cycle:id,renewal_title'])
                 ->whereIn('id', $application_ids)
                 ->first();
 
@@ -4259,10 +4259,22 @@ class UserServiceApplicationController extends Controller
         return $result;
     }
 
-    private function calculate_labour_deposit_renewal($service_id, $application_data, $target_question_ids = [])
+    private function calculate_labour_deposit_renewal($service_id, $application_data, $renewal_cycle_id, $target_question_ids = [])
     {
-        $rules = RenewalFeeRule::where('service_id', $service_id)
-            ->whereIn('question_id', $target_question_ids)
+        $rules_query = RenewalFeeRule::where('service_id', $service_id)
+            ->whereIn('question_id', $target_question_ids);
+
+        if (!empty($renewal_cycle_id)) {
+
+            $rules_query->where('renewal_cycle_id', $renewal_cycle_id);
+        } else {
+            $rules_query->where(function ($q) {
+                $q->whereNull('renewal_cycle_id')
+                    ->orWhereNotNull('renewal_cycle_id');
+            });
+        }
+
+        $rules = $rules_query
             ->orderBy('priority')
             ->get();
 
@@ -4355,6 +4367,8 @@ class UserServiceApplicationController extends Controller
             return;
         }
 
+        $renewal_cycle_id = $new_application->renewal_cycle_id;
+
         $old_deposit = LabourDeposit::where('application_id', $old_application->id)->first();
 
         $old_contract_count = (int) ($old_deposit->no_of_contract_labour ?? 0);
@@ -4368,6 +4382,7 @@ class UserServiceApplicationController extends Controller
         $old_calculated = $this->calculate_labour_deposit_renewal(
             37,
             $old_data,
+            $renewal_cycle_id,
             [882, 883]
         );
 
@@ -4377,6 +4392,7 @@ class UserServiceApplicationController extends Controller
         $calculated = $this->calculate_labour_deposit_renewal(
             $new_application->service_id,
             $final_data,
+            $renewal_cycle_id,
             [882, 883]
         );
 
@@ -4435,6 +4451,8 @@ class UserServiceApplicationController extends Controller
             $old_deposit = LabourDeposit::where('application_id', $application->id)->first();
         }
 
+        $renewal_cycle_id = $application->renewal_cycle_id;
+
         $old_contract_count = (int) (
             $old_deposit->no_of_contract_labour
             ?? ($application->application_data[882] ?? 0)
@@ -4450,12 +4468,12 @@ class UserServiceApplicationController extends Controller
             883 => $old_ismw_count,
         ];
 
-        $old_calculated = $this->calculate_labour_deposit_renewal(37, $old_data, [882, 883]);
+        $old_calculated = $this->calculate_labour_deposit_renewal(37, $old_data, $renewal_cycle_id, [882, 883]);
 
         $old_contract_deposit = (float) ($old_calculated[882]['deposit'] ?? 0);
         $old_ismw_deposit     = (float) ($old_calculated[883]['deposit'] ?? 0);
 
-        $calculated = $this->calculate_labour_deposit_renewal(37, $application_data, [882, 883]);
+        $calculated = $this->calculate_labour_deposit_renewal(37, $application_data, $renewal_cycle_id,  [882, 883]);
 
         $new_contract_deposit = (float) ($calculated[882]['deposit'] ?? 0);
         $new_ismw_deposit     = (float) ($calculated[883]['deposit'] ?? 0);
@@ -4708,8 +4726,8 @@ class UserServiceApplicationController extends Controller
 
         if (!empty($application->previous_application_id)) {
             $deposit_difference = max(0, $new_deposit_total - $old_deposit_total);
-        }else{
-             $deposit_difference = $new_deposit_total;
+        } else {
+            $deposit_difference = $new_deposit_total;
         }
         $base_fee = $new_base_fee;
         $late_fee = $this->calculate_late_fee($application, $cycle, $base_fee);
