@@ -1598,8 +1598,10 @@ class UserServiceApplicationController extends Controller
                     'feedback_id' => $service->my_feedback->id ?? null,
                     'is_certificate' => $service->NOC_certificate ? true : false,
 
-                    'appeal_for' => $appeal_for
-                ];
+                    'appeal_for' => $appeal_for,
+                    'renewal' => $service->renewal === 'yes' ? 'YES' : 'NO',
+                    'previous_application_id' => $service->previous_application_id,
+                    ];
             }
 
             return response()->json([
@@ -1811,6 +1813,8 @@ class UserServiceApplicationController extends Controller
                 'feedback_details' => $feedback_details,
                 'appeal_details'   => $appeal_details,
                 'user'              => $user_details,
+                'renewal'           => $application->renewal === 'yes' ? 'YES' : 'NO',
+                'previous_application_id' => $application->previous_application_id,
             ]);
         } catch (\Exception $e) {
             return response()->json([

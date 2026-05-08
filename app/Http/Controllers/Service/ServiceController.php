@@ -560,6 +560,8 @@ class ServiceController extends Controller
                     'ward_name' => $application->user->ward->name_of_gp_vc_or_ward ?? null,
                     'hierarchy_level'     => $application->latestWorkflow->hierarchy_level ?? null,
                     'payment_details'     => $payment_map[$application->id] ?? [],
+                    'renewal' => $application->renewal === 'yes' ? 'YES' : 'NO',
+                    'previous_application_id' => $application->previous_application_id,
                 ];
             });
 
@@ -768,6 +770,8 @@ class ServiceController extends Controller
                 'license_details' => $license_details,
                 'land_allotment_details' => $land_allotment_details,
                 'payment_details' => $payment_details,
+                'renewal' => $application->renewal === 'yes' ? 'YES' : 'NO',
+                'previous_application_id' => $application->previous_application_id,
             ];
 
             return response()->json([
@@ -1336,7 +1340,9 @@ class ServiceController extends Controller
                     'status'           => $assignment->application->status ?? null,
                     'current_step'     => $assignment->application->current_step_number ?? null,
                     'step_type'        => $assignment->step_type ?? null,
-                    'hierarchy_level'  => $hierarchy_level
+                    'hierarchy_level'  => $hierarchy_level,
+                    'renewal' => $assignment->application->renewal === 'yes' ? 'YES' : 'NO',
+                    'previous_application_id' => $assignment->application->previous_application_id,
                 ];
             });
 
@@ -1722,8 +1728,9 @@ class ServiceController extends Controller
                     'step_type'           => $workflow->step_type ?? null,
                     'status'              => $application->status,
                     'approved_date'       => $workflow->updated_at ?? null,
-                    'remarks'             => $workflow->remarks ?? null
-
+                    'remarks'             => $workflow->remarks ?? null,
+                    'renewal' => $application->renewal === 'yes' ? 'YES' : 'NO',
+                    'previous_application_id' => $application->previous_application_id,
                 ];
             });
 
@@ -1799,6 +1806,8 @@ class ServiceController extends Controller
                     'status'             => $application->status,
                     'approved_date'      => $workflow->updated_at ?? null,
                     'remarks'            => $workflow->remarks ?? null,
+                    'renewal' => $application->renewal === 'yes' ? 'YES' : 'NO',
+                    'previous_application_id' => $application->previous_application_id,
                 ];
             });
 
