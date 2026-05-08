@@ -1468,6 +1468,14 @@ class ServiceController extends Controller
 
         $by_law_file = $application_data['278'];
 
+        $storage_url = Storage::disk('public')->url('');
+        $base_url = rtrim(config('app.url'), '/') . '/storage/';
+        if (str_starts_with($by_law_file, $base_url)) {
+            $by_law_file = substr($by_law_file, strlen($base_url));
+        } elseif (str_starts_with($by_law_file, 'http')) {
+            $by_law_file = preg_replace('#^https?://[^/]+/(?:new/)?storage/#', '', $by_law_file);
+        }
+
         if (!Storage::disk('public')->exists($by_law_file)) {
             return null;
         }
@@ -1602,6 +1610,43 @@ class ServiceController extends Controller
         }
 
         return null;
+    }
+
+    public function add_qr_to_by_law(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            if (!$user || $user->user_type !== 'admin') {
+                return response()->json(['status' => 0, 'message' => 'Unauthorized.'], 403);
+            }
+
+            $request->validate([
+                'application_id' => 'required|integer|exists:user_service_applications,id',
+            ]);
+
+            $application = UserServiceApplication::with('user')->findOrFail($request->application_id);
+
+            $result = $this->add_qr_to_by_law_file($application);
+
+            if ($result === null) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'QR not added. Either not a cooperative society application, by-law file missing, or file key (278) not found in application data.',
+                ], 422);
+            }
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'QR code added to by-law file successfully.',
+                'file'    => $result,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function get_user_approved_applications(Request $request)
