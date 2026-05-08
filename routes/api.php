@@ -232,6 +232,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('annexure/individual-queries-tracker', [AnnexureController::class, 'individual_queries_tracker']);
         Route::post('service-feedback-add-remark', [FeedbackController::class, 'service_feedback_add_remark']);
         
+        Route::post('add-qr-to-by-law', [ServiceController::class, 'add_qr_to_by_law']);
+
         Route::post('get-application-assignments', [ApplicationAssignmentController::class, 'get_application_assignments']);
         Route::post('create-application-assignment', [ApplicationAssignmentController::class, 'create_application_assignment']);
         Route::post('update-application-assignment', [ApplicationAssignmentController::class, 'update_application_assignment']);

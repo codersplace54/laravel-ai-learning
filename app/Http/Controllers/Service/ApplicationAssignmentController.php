@@ -20,17 +20,20 @@ class ApplicationAssignmentController extends Controller
             }
 
             $request->validate([
-                'application_id' => 'required_without:application_number|exists:user_service_applications,id',
-                'application_number' => 'required_without:application_id|exists:user_service_applications,applicationId'
+                'application_id' => 'required',
             ]);
-
+            
             $application = UserServiceApplication::with([
                 'user:id,name_of_enterprise,authorized_person_name,mobile_no,user_name',
                 'service:id,service_title_or_description'
             ])
-                ->when($request->application_id, fn($q) => $q->where('id', $request->application_id))
-                ->when($request->application_number, fn($q) => $q->where('applicationId', $request->application_number))
+                ->where('id', $request->application_id)
+                ->orWhere('applicationId', $request->application_id)
                 ->first();
+
+            if(!$application){
+                return response()->json(['status' => 0, 'message' => 'Application not found'], 404);
+            }
 
             $assignments = ApplicationWorkflowAssignment::where('application_id', $application->id)
                 ->with(['department:id,name', 'actionTaker:id,authorized_person_name,email_id'])
