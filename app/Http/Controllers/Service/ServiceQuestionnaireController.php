@@ -172,7 +172,7 @@ class ServiceQuestionnaireController extends Controller
                 'questionnaires.*.section_name' => 'nullable|required_if:questionnaires.*.is_section,yes|string',
                 'questionnaires.*.sample_format' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:3072',
                 'questionnaires.*.display_rule' => 'nullable|array',
-                'questionnaires.*.remove_sample_format' => 'nullable|in:delete',
+                'questionnaires.*.remove_sample_format' => 'nullable|in:yes,no',
             ]);
 
             DB::beginTransaction();
@@ -183,7 +183,7 @@ class ServiceQuestionnaireController extends Controller
                 $service_question = ServiceQuestionnaire::findOrFail($questionnaire['id']);
 
                 $sample_format = $service_question->sample_format;
-                if ($request->remove_sample_format === 'yes') {
+                if (($questionnaire['remove_sample_format'] ?? 'no') === 'yes') {
 
                     if ($sample_format && Storage::disk('public')->exists($sample_format)) {
                         Storage::disk('public')->delete($sample_format);
