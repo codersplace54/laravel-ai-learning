@@ -297,7 +297,7 @@ class DashboardController extends Controller
                     ->where('status', 'pending')
                     ->where('hierarchy_level', $hierarchy_level)
                     ->whereHas('application', function ($q) use ($department_id) {
-                        $q->where('payment_status','paid')
+                        $q->where('payment_status', 'paid')
                             ->where('department_id', $department_id);
                     })
 
@@ -318,8 +318,9 @@ class DashboardController extends Controller
 
                 $total_approved_by_me = ApplicationWorkflowAssignment::where('action_taken_by', $user_id)
                     ->where('status', 'approved')
-                    ->distinct('application_id')
-                    ->count('application_id');
+                    ->select('application_id')
+                    ->distinct()
+                    ->count();
 
                 $total_individual_users = User::whereNull('old_id')
                     ->where('user_type', 'individual')
