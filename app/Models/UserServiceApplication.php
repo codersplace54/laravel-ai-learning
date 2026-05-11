@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Concerns\LogsModelActivity;
+use Illuminate\Support\Facades\Auth;
 use App\Traits\LogsActivity;
 
 class UserServiceApplication extends Model
@@ -79,7 +80,7 @@ class UserServiceApplication extends Model
     public function my_feedback()
     {
         return $this->hasOne(UserFeedback::class, 'service_id', 'service_id')
-            ->where('user_id', auth()->id());
+            ->where('user_id', Auth::id());
     }
 
     public function service()
