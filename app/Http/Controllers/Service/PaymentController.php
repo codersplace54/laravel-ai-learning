@@ -43,7 +43,7 @@ class PaymentController extends Controller
 
             DB::beginTransaction();
 
-            $user = Auth::user();
+            $user = User::find(Auth::id());
             $user_id = $user->id;
 
             $application_ids = array_map('intval', $request->input('application_id'));
@@ -88,7 +88,7 @@ class PaymentController extends Controller
                     $ismw_fee     = (float) ($deposit->ismw_labour_fee ?? 0);
 
 
-                     // will remove this code after testing in prod
+                    // will remove this code after testing in prod
                     // $items = [
                     //     ['scheme' => '8443-00-103-37-01', 'amount' => $contract_deposit],
                     //     ['scheme' => '8443-00-103-37-02',     'amount' => $ismw_deposit],
@@ -102,23 +102,35 @@ class PaymentController extends Controller
                     //         'amount' => (float) $application->extra_payment
                     //     ];
                     // }
+                    // $items = [
+                    //     ['scheme' => '8443-00-103-37-01', 'amount' => $contract_deposit],
+                    //     ['scheme' => '8443-00-103-37-02', 'amount' => $ismw_deposit],
+                    // ];
 
-                    $items = [
-                        ['scheme' => '8443-00-103-37-01', 'amount' => $contract_deposit],
-                        ['scheme' => '8443-00-103-37-02', 'amount' => $ismw_deposit],
-                    ];
+                    $items = [];
 
-                    if (
-                        $application->extra_payment !== null &&
-                        $application->extra_payment > 0 &&
-                        $application->payment_status === 'pending'
-                    ) {
+                    if ($application->extra_payment !== null && $application->extra_payment > 0 && $application->payment_status === 'pending') {
 
                         $items[] = [
                             'scheme' => '0230-00-106-37-02',
                             'amount' => (float) $application->extra_payment
                         ];
                     } else {
+
+                        if ($contract_deposit > 0) {
+
+                            $items[] = [
+                                'scheme' => '8443-00-103-37-01',
+                                'amount' => $contract_deposit
+                            ];
+                        }
+
+                        if ($ismw_deposit > 0) {
+                            $items[] = [
+                                'scheme' => '8443-00-103-37-02',
+                                'amount' => $ismw_deposit
+                            ];
+                        }
                         if ($contract_fee > 0) {
                             $items[] = [
                                 'scheme' => '0230-00-106-37-02',

@@ -1468,7 +1468,7 @@ class ServiceController extends Controller
 
         $by_law_file = $application_data['278'];
 
-        $storage_url = Storage::disk('public')->url('');
+        $storage_url = Storage::url('');
         $base_url = rtrim(config('app.url'), '/') . '/storage/';
         if (str_starts_with($by_law_file, $base_url)) {
             $by_law_file = substr($by_law_file, strlen($base_url));
