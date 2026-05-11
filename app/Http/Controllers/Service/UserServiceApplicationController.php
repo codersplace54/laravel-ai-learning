@@ -4004,13 +4004,13 @@ class UserServiceApplicationController extends Controller
 
             $app->application_data = json_decode($app->application_data, true);
 
-            $history = $app->workflow()->orderBy('id', 'desc')->get();
+            $history = $app->workflow()->orderBy('step_number')->orderBy('id')->get();
 
             $latest_workflow = $app->latestWorkflow()
                 ->latest('created_at')
                 ->first();
 
-            $last_approved = $history->where('status', 'approved')->first();
+            $last_approved = $history->where('status', 'approved')->last();
 
             $executed_steps = $app->workflow()->orderBy('step_number')->get();
 
