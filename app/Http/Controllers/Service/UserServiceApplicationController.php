@@ -2870,13 +2870,13 @@ class UserServiceApplicationController extends Controller
     }
 
 
-    public function calculate_renewal_final_fee($service_id, $application, $application_data, $cycle)
+    public function calculate_renewal_final_fee($service_id, $application, $application_data, $cycle, $renewal_cycle_id)
     {
 
         $rules = RenewalFeeRule::where('service_id', $service_id)->get();
 
         if ($service_id == 37) {
-            return $this->calculate_labour_renewal_fee($application, $application_data, $cycle);
+            return $this->calculate_labour_renewal_fee($application, $application_data, $cycle, $renewal_cycle_id);
         }
 
         $final_fee = 0;
@@ -3133,7 +3133,8 @@ class UserServiceApplicationController extends Controller
             $application->service_id,
             $application,
             $application_data,
-            $cycle
+            $cycle,
+            $request->renewal_cycle_id
         );
 
         return response()->json([
@@ -3183,7 +3184,8 @@ class UserServiceApplicationController extends Controller
                 $old_application->service_id,
                 $old_application,
                 $final_data,
-                $renewal_cycle
+                $renewal_cycle,
+                $request->renewal_cycle_id
             );
 
             $late_fee = $calculated_fee['late_fee'];
@@ -4460,14 +4462,14 @@ class UserServiceApplicationController extends Controller
         ]);
     }
 
-    private function calculate_labour_renewal_fee($application, $application_data, $cycle, $old_deposit = null)
+    private function calculate_labour_renewal_fee($application, $application_data, $cycle, $renewal_cycle_id, $old_deposit = null)
     {
 
         if (!$old_deposit) {
             $old_deposit = LabourDeposit::where('application_id', $application->id)->first();
         }
 
-        $renewal_cycle_id = $application->renewal_cycle_id;
+        $renewal_cycle_id = $application->renewal_cycle_id ?? $renewal_cycle_id;
 
         $old_contract_count = (int) (
             $old_deposit->no_of_contract_labour
