@@ -1815,8 +1815,6 @@ class UserServiceApplicationController extends Controller
                 'feedback_details' => $feedback_details,
                 'appeal_details'   => $appeal_details,
                 'user'              => $user_details,
-                'renewal'           => $application->renewal === 'yes' ? 'YES' : 'NO',
-                'previous_application_id' => $application->previous_application_id,
             ]);
         } catch (\Exception $e) {
             return response()->json([

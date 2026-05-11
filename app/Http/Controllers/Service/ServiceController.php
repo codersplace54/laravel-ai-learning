@@ -1809,7 +1809,7 @@ class ServiceController extends Controller
             }
 
             $user = User::where('id', $user->id)
-                ->where('user_type', 'department')
+                ->whereIn('user_type', ['department', 'admin'])
                 ->first();
 
             if (!$user) {

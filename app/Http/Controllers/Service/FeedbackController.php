@@ -14,6 +14,46 @@ use App\Exports\ServiceFeedbackExport;
 
 class FeedbackController extends Controller
 {
+    public function get_pending_feedback_applications(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $already_reviewed_service_ids = UserFeedback::where('user_id', $user->id)
+                ->pluck('service_id')
+                ->toArray();
+
+            $applications = UserServiceApplication::with('service:id,service_title_or_description')
+                ->where('user_id', $user->id)
+                ->where('status', 'noc_issued')
+                ->where('updated_at', '<=', now()->subDays(10))
+                ->whereNotIn('service_id', $already_reviewed_service_ids)
+                ->get(['id', 'applicationId', 'service_id', 'updated_at'])
+                ->map(fn($app) => [
+                    'application_id'   => $app->id,
+                    'application_number' => $app->applicationId,
+                    'service_id'       => $app->service_id,
+                    'service_name'     => $app->service->service_title_or_description ?? null,
+                    'approved_on'      => $app->updated_at,
+                ]);
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Pending feedback applications fetched successfully.',
+                'data'    => $applications,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Failed to fetch pending feedback applications.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function service_feedback_store(Request $request)
     {
 
@@ -41,12 +81,17 @@ class FeedbackController extends Controller
 
             if ($user_feedback) {
 
-                $user_feedback->update([
+                $data = [
                     'satisfaction' => $request->satisfaction,
-                    'feedback' => $request->feedback,
-                    'suggestions' => $request->suggestions,
-                ] + ($request->filled('status') && in_array($request->status, $statuses) ? ['status' => $request->status] : []));
+                    'feedback'     => $request->feedback,
+                    'suggestions'  => $request->suggestions,
+                ];
 
+                if ($request->filled('status') && in_array($request->status, $statuses)) {
+                    $data['status'] = $request->status;
+                }
+
+                $user_feedback->update($data);
                 DB::commit();
 
                 return response()->json([
@@ -101,7 +146,7 @@ class FeedbackController extends Controller
 
     public function service_feedback_list(Request $request)
     {
-        
+
         $user = auth()->user();
         $perPage = $request->get('per_page', 15);
 
@@ -159,7 +204,7 @@ class FeedbackController extends Controller
                 'suggestions'  => $feedback->suggestions,
                 'submitted_on' => $feedback->created_at,
                 'status'       => $feedback->status,
-                'already_rated'=> !empty($feedback->satisfaction),
+                'already_rated' => !empty($feedback->satisfaction),
             ];
         });
 
@@ -178,7 +223,7 @@ class FeedbackController extends Controller
 
     public function service_feedback_add_remark(Request $request)
     {
-        
+
         try {
             $request->validate([
                 'feedback_id' => 'required|exists:user_feedbacks,id',
@@ -193,7 +238,7 @@ class FeedbackController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Unauthorized.'], 403);
             }
 
-            $feedback = UserFeedback::where('id',$request->feedback_id)->first();
+            $feedback = UserFeedback::where('id', $request->feedback_id)->first();
 
             $update_data = [
                 'remark'      => $request->remark,
@@ -212,7 +257,6 @@ class FeedbackController extends Controller
                 'message' => 'Remark added successfully.',
                 'data'    => $feedback,
             ]);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
 
             return response()->json([
@@ -220,12 +264,15 @@ class FeedbackController extends Controller
                 'message' => 'Validation failed',
                 'errors' => $e->errors(),
             ], 422);
-        }catch (\Exception $e) {
-            return response()->json([
-                'status' => 0, 
-                'message' => 'Failed to add remark.', 
-                'error' => $e->getMessage()], 
-            500);
+        } catch (\Exception $e) {
+            return response()->json(
+                [
+                    'status' => 0,
+                    'message' => 'Failed to add remark.',
+                    'error' => $e->getMessage()
+                ],
+                500
+            );
         }
     }
 

@@ -237,7 +237,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-application-assignments', [ApplicationAssignmentController::class, 'get_application_assignments']);
         Route::post('create-application-assignment', [ApplicationAssignmentController::class, 'create_application_assignment']);
         Route::post('update-application-assignment', [ApplicationAssignmentController::class, 'update_application_assignment']);
+        Route::post('delete-application-assignment', [ApplicationAssignmentController::class, 'delete_application_assignment']);
         Route::post('get-department-user-for-assignment', [ApplicationAssignmentController::class, 'get_department_user_for_assignment']);
+
+        Route::post('update-user-service-application', [ApplicationAssignmentController::class, 'update_user_service_application']);
 
     });
 
@@ -299,6 +302,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('service-feedback-store', [FeedbackController::class, 'service_feedback_store']);
         Route::post('service-feedback-list', [FeedbackController::class, 'service_feedback_list']);
+        Route::post('get-pending-feedback-applications', [FeedbackController::class, 'get_pending_feedback_applications']);
 
         Route::post('user-appeal-store', [AppealController::class, 'user_appeal_store']);
 
