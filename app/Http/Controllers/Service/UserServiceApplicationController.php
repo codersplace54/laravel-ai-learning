@@ -1549,6 +1549,8 @@ class UserServiceApplicationController extends Controller
                 ], 404);
             }
 
+            $response_data = [];
+
             foreach ($service_user_application as $service) {
                 $service->application_data = json_decode($service->application_data, true);
                 $latest_workflow = $service->workflow()->latest('updated_at')->first();
@@ -1601,7 +1603,7 @@ class UserServiceApplicationController extends Controller
                     'appeal_for' => $appeal_for,
                     'renewal' => $service->renewal === 'yes' ? 'YES' : 'NO',
                     'previous_application_id' => $service->previous_application_id,
-                    ];
+                ];
             }
 
             return response()->json([
@@ -2071,6 +2073,8 @@ class UserServiceApplicationController extends Controller
                     'message' => 'No service user applications found for the given user_id.',
                 ], 404);
             }
+
+            $response_data = [];
 
             foreach ($service_user_application as $service) {
                 $service->application_data = json_decode($service->application_data, true);
@@ -2680,11 +2684,19 @@ class UserServiceApplicationController extends Controller
 
             $effective_fee = $application->effective_fee;
             $total_fee     = $application->total_fee ?? 0;
-
-            $current_payment = !empty($effective_fee) ? $effective_fee : $total_fee;
-            $previous_paid = (float) $application->paid_amount ?? 0;
-            $final_paid_amount = $previous_paid + $current_payment;
+            $extra_payment = (float) ($application->extra_payment ?? 0);
             $is_extra_payment = $application->status === 'extra_payment';
+
+            if ($is_extra_payment && $extra_payment > 0) {
+
+                $current_payment = $extra_payment;
+            } else {
+
+                $current_payment = !empty($effective_fee) ? $effective_fee : $total_fee;
+            }
+
+            $previous_paid = (float) ($application->paid_amount ?? 0);
+            $final_paid_amount = $previous_paid + $current_payment;
 
             if ($is_extra_payment) {
                 $status = 're_submitted';
