@@ -241,6 +241,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-department-user-for-assignment', [ApplicationAssignmentController::class, 'get_department_user_for_assignment']);
 
         Route::post('update-user-service-application', [ApplicationAssignmentController::class, 'update_user_service_application']);
+        Route::post('delete-payment-orders', [ApplicationAssignmentController::class, 'delete_payment_orders']);
+        Route::post('get-user-payment-orders', [ApplicationAssignmentController::class, 'get_user_payment_orders']);
 
     });
 

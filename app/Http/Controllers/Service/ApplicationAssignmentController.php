@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ApplicationWorkflowAssignment;
 use App\Models\DepartmentUser;
 use App\Models\UserServiceApplication;
+use App\Models\PaymentOrder;
 use App\Traits\LogsActivity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -56,7 +57,7 @@ class ApplicationAssignmentController extends Controller
                     'status'              => $application->status,
                     'payment_status'      => $application->payment_status,
                     'final_fee'           => $application->final_fee,
-                    'paid_fee'            => $application->paid_fee
+                    'paid_fee'            => $application->paid_amount
                 ],
                 'user'    => [
                     'name_of_enterprise'     => $application->user->name_of_enterprise,
@@ -420,6 +421,83 @@ class ApplicationAssignmentController extends Controller
                 'message' => 'Failed to fetch department users',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    public function get_user_payment_orders(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            if (!$user || $user->user_type !== 'admin') {
+                return response()->json(['status' => 0, 'message' => 'Unauthorized. Admin access only.'], 403);
+            }
+
+            $request->validate([
+                'application_id' => 'required',
+            ]);
+
+            $order = PaymentOrder::whereJsonContains('application_id', $request->application_id)->get();
+
+            if (!$order) {
+                return response()->json(['status' => 0, 'message' => 'Application not found'], 404);
+            }
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Application Payment orders fetched successfully',
+                'data'    => $order,
+
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 0, 'message' => 'Failed to fetch assignments', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function delete_payment_orders(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            if (!$user || $user->user_type !== 'admin') {
+                return response()->json(['status' => 0, 'message' => 'Unauthorized. Admin access only.'], 403);
+            }
+
+            $request->validate([
+                'payment_order_id' => 'required|exists:payment_orders,id',
+            ]);
+
+            $payment_order = PaymentOrder::where('id',$request->payment_order_id)->first();
+
+            $deleted_snapshot = $payment_order->only([
+                'application_id',
+                'order_id',
+                'user_id',
+                'payment_amount',
+                'payment_status',
+                'gateway',
+                'transaction_id',
+                'GRN_number',
+            ]);
+
+            $payment_order->delete();
+
+            $this->logActivity(
+                $user->user_name . ' deleted payment order #' . $request->payment_order_id,
+                null,
+                $user,
+                ['old' => $deleted_snapshot],
+                'Payment Order Deleted'
+            );
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Payment order deleted successfully',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 0, 'message' => 'Failed to delete payment order', 'error' => $e->getMessage()], 500);
         }
     }
 }
