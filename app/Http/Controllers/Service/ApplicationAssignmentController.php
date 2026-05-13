@@ -57,7 +57,8 @@ class ApplicationAssignmentController extends Controller
                     'status'              => $application->status,
                     'payment_status'      => $application->payment_status,
                     'final_fee'           => $application->final_fee,
-                    'paid_fee'            => $application->paid_amount
+                    'paid_fee'            => $application->paid_amount,
+                    'GRN_number'          => $application->GRN_number
                 ],
                 'user'    => [
                     'name_of_enterprise'     => $application->user->name_of_enterprise,
@@ -332,9 +333,10 @@ class ApplicationAssignmentController extends Controller
                 'current_step_number' => 'nullable|integer|min:1',
                 'final_fee'       => 'nullable|numeric|min:0',
                 'paid_amount'     => 'nullable|numeric|min:0',
+                'GRN_number'      => 'nullable|string|max:255',
             ]);
 
-            $application = UserServiceApplication::where('id',$request->application_id)->first();
+            $application = UserServiceApplication::where('id', $request->application_id)->first();
 
             $old_values = [
                 'status'              => $application->status,
@@ -342,6 +344,7 @@ class ApplicationAssignmentController extends Controller
                 'current_step_number' => $application->current_step_number,
                 'final_fee'           => $application->final_fee,
                 'paid_amount'         => $application->paid_amount,
+                'GRN_number'          => $application->GRN_number,
             ];
 
             $new_values = [];
@@ -364,6 +367,10 @@ class ApplicationAssignmentController extends Controller
 
             if ($request->paid_amount !== null) {
                 $new_values['paid_amount'] = $request->paid_amount;
+            }
+
+            if ($request->GRN_number !== null) {
+                $new_values['GRN_number'] = $request->GRN_number;
             }
 
             $application->update($new_values);
@@ -467,7 +474,7 @@ class ApplicationAssignmentController extends Controller
                 'payment_order_id' => 'required|exists:payment_orders,id',
             ]);
 
-            $payment_order = PaymentOrder::where('id',$request->payment_order_id)->first();
+            $payment_order = PaymentOrder::where('id', $request->payment_order_id)->first();
 
             $deleted_snapshot = $payment_order->only([
                 'application_id',
@@ -500,4 +507,5 @@ class ApplicationAssignmentController extends Controller
             return response()->json(['status' => 0, 'message' => 'Failed to delete payment order', 'error' => $e->getMessage()], 500);
         }
     }
+
 }

@@ -231,7 +231,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('annexure/individual-queries-tracker', [AnnexureController::class, 'individual_queries_tracker']);
         Route::post('service-feedback-add-remark', [FeedbackController::class, 'service_feedback_add_remark']);
-        
+
         Route::post('add-qr-to-by-law', [ServiceController::class, 'add_qr_to_by_law']);
 
         Route::post('get-application-assignments', [ApplicationAssignmentController::class, 'get_application_assignments']);
@@ -243,6 +243,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('update-user-service-application', [ApplicationAssignmentController::class, 'update_user_service_application']);
         Route::post('delete-payment-orders', [ApplicationAssignmentController::class, 'delete_payment_orders']);
         Route::post('get-user-payment-orders', [ApplicationAssignmentController::class, 'get_user_payment_orders']);
+        Route::post('create-payment-order', [AdminController::class, 'create_payment_order']);
+        Route::post('update-payment-order', [AdminController::class, 'update_payment_order']);
 
     });
 

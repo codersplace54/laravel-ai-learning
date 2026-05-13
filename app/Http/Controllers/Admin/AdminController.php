@@ -12,6 +12,7 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\DepartmentUsersExport;
 use App\Exports\BussinessUsersExport;
 use App\Traits\LogsActivity;
+use App\Models\PaymentOrder;
 
 class AdminController extends Controller
 {
@@ -386,6 +387,162 @@ class AdminController extends Controller
                 'status' => 0,
                 'message' => 'Failed to update data.',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function create_payment_order(Request $request)
+    {
+        try {
+
+            $user = Auth::user();
+
+            if (!$user || $user->user_type !== 'admin') {
+                return response()->json(['status' => 0, 'message' => 'Unauthorized. Admin access only.'], 403);
+            }
+
+            $request->validate([
+                'order_id'               => 'nullable|string|max:255',
+                'user_id'                => 'required|integer|exists:users,id',
+                'application_id'         => 'required|array',
+                'application_id.*'       => 'integer|exists:user_service_applications,id',
+                'payment_amount'         => 'required|numeric|min:0',
+                'payment_status'         => 'nullable|string|max:100',
+                'gateway'                => 'nullable|string|max:100',
+                'gateway_order_id'       => 'nullable|string|max:255',
+                'transaction_id'         => 'nullable|string|max:255',
+                'gateway_response'       => 'nullable',
+                'hash'                   => 'nullable|string|max:255',
+                'GRN_number'             => 'nullable|string|max:255',
+                'payment_datetime'       => 'nullable|date',
+                'establishment_fee_paid' => 'nullable|numeric|min:0',
+                'operational_fee_paid'   => 'nullable|numeric|min:0',
+            ]);
+
+
+            DB::beginTransaction();
+
+            $payment = PaymentOrder::create([
+                'order_id'               => $request->order_id,
+                'user_id'                => $request->user_id,
+                'application_id'         => json_encode($request->application_id),
+                'payment_amount'         => $request->payment_amount,
+                'payment_status'         => $request->payment_status,
+                'gateway'                => $request->gateway,
+                'gateway_order_id'       => $request->gateway_order_id,
+                'transaction_id'         => $request->transaction_id,
+                'gateway_response'       => $request->gateway_response,
+                'hash'                   => $request->hash,
+                'GRN_number'             => $request->GRN_number,
+                'payment_datetime'       => $request->payment_datetime,
+                'establishment_fee_paid' => $request->establishment_fee_paid,
+                'operational_fee_paid'   => $request->operational_fee_paid,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Payment created successfully.',
+                'data'    => $payment
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'error'   => $e->getMessage()
+            ], 500);
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function update_payment_order(Request $request)
+    {
+
+
+        try {
+
+            $user = Auth::user();
+
+            if (!$user || $user->user_type !== 'admin') {
+                return response()->json(['status' => 0, 'message' => 'Unauthorized. Admin access only.'], 403);
+            }
+
+            $request->validate([
+                'id'                     => 'required|integer|exists:payment_orders,id',
+                'order_id'               => 'nullable|string|max:255',
+                'user_id'                => 'required|integer|exists:users,id',
+                'application_id'         => 'required|array',
+                'application_id.*'       => 'integer|exists:user_service_applications,id',
+                'payment_amount'         => 'required|numeric|min:0',
+                'payment_status'         => 'nullable|string|max:100',
+                'gateway'                => 'nullable|string|max:100',
+                'gateway_order_id'       => 'nullable|string|max:255',
+                'transaction_id'         => 'nullable|string|max:255',
+                'gateway_response'       => 'nullable',
+                'hash'                   => 'nullable|string|max:255',
+                'GRN_number'             => 'nullable|string|max:255',
+                'payment_datetime'       => 'nullable|date',
+                'establishment_fee_paid' => 'nullable|numeric|min:0',
+                'operational_fee_paid'   => 'nullable|numeric|min:0',
+            ]);
+
+            DB::beginTransaction();
+
+            $payment = PaymentOrder::where('id', $request->id)->first();
+
+            $payment->update([
+                'order_id'               => $request->order_id,
+                'user_id'                => $request->user_id,
+                'application_id'         => json_encode($request->application_id),
+                'payment_amount'         => $request->payment_amount,
+                'payment_status'         => $request->payment_status,
+                'gateway'                => $request->gateway,
+                'gateway_order_id'       => $request->gateway_order_id,
+                'transaction_id'         => $request->transaction_id,
+                'gateway_response'       => $request->gateway_response,
+                'hash'                   => $request->hash,
+                'GRN_number'             => $request->GRN_number,
+                'payment_datetime'       => $request->payment_datetime,
+                'establishment_fee_paid' => $request->establishment_fee_paid,
+                'operational_fee_paid'   => $request->operational_fee_paid,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Payment updated successfully.',
+                'data'    => $payment
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Validation failed.',
+                'error'   => $e->getMessage()
+            ], 500);
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong.',
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
