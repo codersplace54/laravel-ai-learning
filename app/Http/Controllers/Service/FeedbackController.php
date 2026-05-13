@@ -11,13 +11,13 @@ use App\Models\User;
 use App\Models\UserServiceApplication;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ServiceFeedbackExport;
-
+use Illuminate\Support\Facades\Auth;
 class FeedbackController extends Controller
 {
     public function get_pending_feedback_applications(Request $request)
     {
         try {
-            $user = auth()->user();
+            $user = Auth::user();
             if (!$user) {
                 return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
             }
@@ -147,7 +147,7 @@ class FeedbackController extends Controller
     public function service_feedback_list(Request $request)
     {
 
-        $user = auth()->user();
+        $user = Auth::user();
         $perPage = $request->get('per_page', 15);
 
         $query = UserFeedback::with(
@@ -231,7 +231,7 @@ class FeedbackController extends Controller
                 'status'      => 'nullable|in:resolved,pending',
             ]);
 
-            $user = auth()->user();
+            $user = Auth::user();
             $allowed = ['admin', 'department', 'support'];
 
             if (!in_array($user->user_type, $allowed)) {
@@ -247,7 +247,7 @@ class FeedbackController extends Controller
 
             if ($request->filled('status')) {
                 $update_data['status'] = $request->status;
-                $update_data['resolved_by'] = auth()->id();
+                $update_data['resolved_by'] = Auth::id();
             }
 
             $feedback->update($update_data);
