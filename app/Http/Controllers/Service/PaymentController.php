@@ -566,38 +566,21 @@ class PaymentController extends Controller
             };
 
 
-            $paid_orders = PaymentOrder::where('user_id', $user_id)
-                ->where('payment_status', 'paid')
-                ->get();
-
-            $previously_paid_app_ids = [];
-
-            foreach ($paid_orders as $order) {
-
-                $application_ids = json_decode($order->application_id, true);
-
-                if (!empty($application_ids)) {
-                    $previously_paid_app_ids = array_merge($previously_paid_app_ids, $application_ids);
-                }
-            }
-
-            $previously_paid_app_ids = array_unique($previously_paid_app_ids);
-
             $service_user_applications = UserServiceApplication::where('user_id', $user_id)
-                ->where('status', '!=', 'draft')
-                ->where(function ($query) use ($normalized_payment_status, $previously_paid_app_ids) {
-
-                    $query->where('payment_status', $normalized_payment_status);
-
-                    if ($normalized_payment_status == 'paid' && !empty($previously_paid_app_ids)) {
-
-                        $query->orWhere(function ($q) use ($previously_paid_app_ids) {
-
-                            $q->whereIn('id', $previously_paid_app_ids)
-                                ->whereIn('status', ['extra_payment', 'send_back'])
-                                ->where('payment_status', 'pending');
+                ->where('payment_status', $normalized_payment_status)
+                ->where(function ($query) {
+                    $query->where(function ($q) {
+                        $q->whereNotNull('extra_payment')
+                            ->where('extra_payment', '>', 0);
+                    })
+                        ->orWhere(function ($q) {
+                            $q->whereNull('extra_payment')
+                                ->orWhere('extra_payment', 0)
+                                ->where(function ($subq) {
+                                    $subq->where('effective_fee', '>', 0)
+                                        ->orWhere('total_fee', '>', 0);
+                                });
                         });
-                    }
                 })
                 ->orderByDesc('created_at')
                 ->paginate($request->per_page);
@@ -627,14 +610,7 @@ class PaymentController extends Controller
                 $amount = null;
                 $payment_type = null;
 
-                $is_previously_paid_pending = in_array($application->id, $previously_paid_app_ids)
-                    && in_array($application->status, ['extra_payment', 'send_back'])
-                    && $application->payment_status === 'pending';
-
-                if ($is_previously_paid_pending) {
-                    $amount = $application->paid_amount;
-                    $payment_type = 'Application Fee Payment';
-                } elseif ($application->extra_payment != null && $application->payment_status == "pending") {
+                if ($application->extra_payment != null && $application->payment_status == "pending") {
                     $amount = $application->extra_payment;
                     $payment_type = 'Extra Payment Raised';
                 } else {
@@ -642,10 +618,10 @@ class PaymentController extends Controller
                     $payment_type = 'Application Fee Payment';
                 }
 
-                $payment_orders_for_app = $all_payment_orders->filter(function ($order) use ($application) {
+                $payment_orders_grns = $all_payment_orders->filter(function ($order) use ($application) {
                     $ids = is_array($order->application_id) ? $order->application_id : json_decode($order->application_id, true);
                     return in_array($application->id, $ids ?? []);
-                });
+                })->pluck('GRN_number')->toArray();
 
                 $response_data[] = [
                     'user_service_application_id' => $application->id,
@@ -655,8 +631,8 @@ class PaymentController extends Controller
                     'payment_type' => $payment_type,
                     'amount' => $amount,
                     'payment_status'  => $application->payment_status ?? null,
-                    'grn_number'  => $payment_orders_for_app->pluck('GRN_number')->toArray(),
-                    'payment_date'  => $application->payment_time ?? $payment_orders_for_app->whereNotNull('payment_datetime')->first()?->payment_datetime,
+                    'grn_number'  => $payment_orders_grns ?? null,
+                    'payment_date'  => $application->payment_time ?? null,
                     'is_third_party' => $application->is_third_party ?? 0,
                 ];
             }
