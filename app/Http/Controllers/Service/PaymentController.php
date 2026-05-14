@@ -566,9 +566,39 @@ class PaymentController extends Controller
             };
 
 
+            $paid_orders = PaymentOrder::where('user_id', $user_id)
+                ->where('payment_status', 'paid')
+                ->get();
+
+            $previously_paid_app_ids = [];
+
+            foreach ($paid_orders as $order) {
+
+                $application_ids = json_decode($order->application_id, true);
+
+                if (!empty($application_ids)) {
+                    $previously_paid_app_ids = array_merge($previously_paid_app_ids, $application_ids);
+                }
+            }
+
+            $previously_paid_app_ids = array_unique($previously_paid_app_ids);
+
             $service_user_applications = UserServiceApplication::where('user_id', $user_id)
                 ->where('status', '!=', 'draft')
-                ->where('payment_status', $normalized_payment_status)
+                ->where(function ($query) use ($normalized_payment_status, $previously_paid_app_ids) {
+
+                    $query->where('payment_status', $normalized_payment_status);
+
+                    if ($normalized_payment_status == 'paid' && !empty($previously_paid_app_ids)) {
+
+                        $query->orWhere(function ($q) use ($previously_paid_app_ids) {
+
+                            $q->whereIn('id', $previously_paid_app_ids)
+                                ->whereIn('status', ['extra_payment', 'send_back'])
+                                ->where('payment_status', 'pending');
+                        });
+                    }
+                })
                 ->orderByDesc('created_at')
                 ->paginate($request->per_page);
 
