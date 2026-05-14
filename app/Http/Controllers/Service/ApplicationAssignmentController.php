@@ -47,6 +47,10 @@ class ApplicationAssignmentController extends Controller
                 ->orderBy('step_number')
                 ->get();
 
+            $has_payment_order = PaymentOrder::whereJsonContains('application_id', (string) $application->id)
+                ->orWhereJsonContains('application_id', $application->id)
+                ->exists();
+
             $data = [
                 'assignments' => $assignments,
                 'application' => [
@@ -58,7 +62,8 @@ class ApplicationAssignmentController extends Controller
                     'payment_status'      => $application->payment_status,
                     'final_fee'           => $application->final_fee,
                     'paid_fee'            => $application->paid_amount,
-                    'GRN_number'          => $application->GRN_number
+                    'GRN_number'          => $application->GRN_number,
+                    'has_payment_order'   => $has_payment_order,
                 ],
                 'user'    => [
                     'name_of_enterprise'     => $application->user->name_of_enterprise,
@@ -507,5 +512,4 @@ class ApplicationAssignmentController extends Controller
             return response()->json(['status' => 0, 'message' => 'Failed to delete payment order', 'error' => $e->getMessage()], 500);
         }
     }
-
 }
