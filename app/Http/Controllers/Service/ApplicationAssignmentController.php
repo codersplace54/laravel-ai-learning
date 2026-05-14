@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Service;
 
 use App\Http\Controllers\Controller;
 use App\Models\ApplicationWorkflowAssignment;
+use App\Models\ApplicationWorkflowHistory;
 use App\Models\DepartmentUser;
 use App\Models\UserServiceApplication;
 use App\Models\PaymentOrder;
 use App\Traits\LogsActivity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class ApplicationAssignmentController extends Controller
 {
@@ -113,6 +115,22 @@ class ApplicationAssignmentController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Application not found'], 404);
             }
 
+            DB::beginTransaction();
+
+            $last_pending_history = ApplicationWorkflowHistory::where('application_id', $application->id)
+                ->where('status', 'pending')
+                ->latest('id')
+                ->first();
+
+            if ($last_pending_history) {
+                $last_pending_history->update([
+                    'status'          => $request->status,
+                    'remarks'         => $request->remarks,
+                    'action_taken_by' => $request->action_taken_by ?? Auth::id(),
+                    'action_taken_at' => now(),
+                ]);
+            }
+
             $assignment = ApplicationWorkflowAssignment::create([
                 'application_id'  => $application->id,
                 'service_id'      => $application->service_id,
@@ -124,6 +142,19 @@ class ApplicationAssignmentController extends Controller
                 'remarks'         => $request->remarks,
                 'action_taken_by' => $request->action_taken_by ?? Auth::id(),
                 'action_taken_at' => now(),
+            ]);
+
+            ApplicationWorkflowHistory::create([
+                'application_id'  => $application->id,
+                'service_id'      => $application->service_id,
+                'step_number'     => $request->step_number,
+                'step_type'       => $request->step_type,
+                'department_id'   => $request->department_id,
+                'hierarchy_level' => $request->hierarchy_level,
+                'status'          => $request->status,
+                'action_taken_by' => $request->action_taken_by ?? Auth::id(),
+                'action_taken_at' => now(),
+                'remarks'         => $request->remarks,
             ]);
 
             $status_map = [
@@ -145,6 +176,8 @@ class ApplicationAssignmentController extends Controller
                     'status' => $application_status,
                 ]);
             }
+
+            DB::commit();
 
             $this->logActivity(
                 $user->user_name . ' created assignment for application #' . $application->applicationId,
@@ -171,8 +204,10 @@ class ApplicationAssignmentController extends Controller
                 'data'    => $assignment
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json(['status' => 0, 'message' => 'Failed to create assignment', 'error' => $e->getMessage()], 500);
         }
     }
@@ -214,16 +249,58 @@ class ApplicationAssignmentController extends Controller
                 'action_taken_by',
             ]);
 
+            DB::beginTransaction();
+
+            $new_step_number     = $request->step_number ?? $assignment->step_number;
+            $new_step_type       = $request->step_type ?? $assignment->step_type;
+            $new_department_id   = $request->department_id ?? $assignment->department_id;
+            $new_hierarchy_level = $request->hierarchy_level ?? $assignment->hierarchy_level;
+            $new_status          = $request->status ?? $assignment->status;
+            $new_remarks         = $request->remarks ?? $assignment->remarks;
+            $new_action_taken_by = $request->action_taken_by ?? Auth::id();
+
             $assignment->update([
-                'step_number'     => $request->step_number ?? $assignment->step_number,
-                'step_type'       => $request->step_type ?? $assignment->step_type,
-                'department_id'   => $request->department_id ?? $assignment->department_id,
-                'hierarchy_level' => $request->hierarchy_level ?? $assignment->hierarchy_level,
-                'status'          => $request->status ?? $assignment->status,
-                'remarks'         => $request->remarks ?? $assignment->remarks,
-                'action_taken_by' => $request->action_taken_by ?? Auth::id(),
+                'step_number'     => $new_step_number,
+                'step_type'       => $new_step_type,
+                'department_id'   => $new_department_id,
+                'hierarchy_level' => $new_hierarchy_level,
+                'status'          => $new_status,
+                'remarks'         => $new_remarks,
+                'action_taken_by' => $new_action_taken_by,
                 'action_taken_at' => now(),
             ]);
+
+            // Find matching history entry for this step and update it, or create a new one
+            $existing_history = ApplicationWorkflowHistory::where('application_id', $application->id)
+                ->where('step_number', $old_assignment['step_number'])
+                ->latest('id')
+                ->first();
+
+            if ($existing_history) {
+                $existing_history->update([
+                    'step_number'     => $new_step_number,
+                    'step_type'       => $new_step_type,
+                    'department_id'   => $new_department_id,
+                    'hierarchy_level' => $new_hierarchy_level,
+                    'status'          => $new_status,
+                    'remarks'         => $new_remarks,
+                    'action_taken_by' => $new_action_taken_by,
+                    'action_taken_at' => now(),
+                ]);
+            } else {
+                ApplicationWorkflowHistory::create([
+                    'application_id'  => $application->id,
+                    'service_id'      => $application->service_id,
+                    'step_number'     => $new_step_number,
+                    'step_type'       => $new_step_type,
+                    'department_id'   => $new_department_id,
+                    'hierarchy_level' => $new_hierarchy_level,
+                    'status'          => $new_status,
+                    'action_taken_by' => $new_action_taken_by,
+                    'action_taken_at' => now(),
+                    'remarks'         => $new_remarks,
+                ]);
+            }
 
             $status_map = [
                 'pending' => 'under_review',
@@ -236,14 +313,16 @@ class ApplicationAssignmentController extends Controller
                 'in_progress' => 'under_review'
             ];
 
-            $application_status = $status_map[$request->status];
+            $application_status = $status_map[$new_status] ?? null;
 
-            if ($application->current_step_number < $request->step_number) {
+            if ($application_status && $application->current_step_number < $new_step_number) {
                 $application->update([
-                    'current_step_number' => $request->step_number,
+                    'current_step_number' => $new_step_number,
                     'status' => $application_status,
                 ]);
             }
+
+            DB::commit();
 
             $this->logActivity(
                 $user->user_name . ' updated assignment #' . $assignment->id . ' for application #' . $application->applicationId,
@@ -270,8 +349,10 @@ class ApplicationAssignmentController extends Controller
                 'data'    => $assignment->fresh()
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json(['status' => 0, 'message' => 'Failed to update assignment', 'error' => $e->getMessage()], 500);
         }
     }
