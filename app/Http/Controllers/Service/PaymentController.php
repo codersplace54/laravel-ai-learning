@@ -567,7 +567,16 @@ class PaymentController extends Controller
 
 
             $service_user_applications = UserServiceApplication::where('user_id', $user_id)
-                ->where('payment_status', $normalized_payment_status)
+                ->where('status', '!=', 'draft')
+                ->where(function ($query) use ($normalized_payment_status) {
+                    $query->where('payment_status', $normalized_payment_status)
+                        ->orWhere(function ($q) use ($normalized_payment_status) {
+                            if ($normalized_payment_status === 'paid') {
+                                $q->whereIn('status', ['send_back', 'extra_payment'])
+                                    ->where('paid_amount', '>', 0);
+                            }
+                        });
+                })
                 ->where(function ($query) {
                     $query->where(function ($q) {
                         $q->whereNotNull('extra_payment')
@@ -610,7 +619,10 @@ class PaymentController extends Controller
                 $amount = null;
                 $payment_type = null;
 
-                if ($application->extra_payment != null && $application->payment_status == "pending") {
+                if ($normalized_payment_status === 'paid' && $application->payment_status === 'pending' && $application->paid_amount > 0) {
+                    $amount = $application->paid_amount;
+                    $payment_type = 'Application Fee Payment';
+                } elseif ($application->extra_payment != null && $application->payment_status == "pending") {
                     $amount = $application->extra_payment;
                     $payment_type = 'Extra Payment Raised';
                 } else {
