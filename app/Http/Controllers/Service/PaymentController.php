@@ -594,7 +594,7 @@ class PaymentController extends Controller
                         $query->orWhere(function ($q) use ($previously_paid_app_ids) {
 
                             $q->whereIn('id', $previously_paid_app_ids)
-                                ->where('status', 'extra_payment')
+                                ->whereIn('status', ['extra_payment', 'send_back'])
                                 ->where('payment_status', 'pending');
                         });
                     }
