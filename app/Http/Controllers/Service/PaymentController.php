@@ -627,7 +627,14 @@ class PaymentController extends Controller
                 $amount = null;
                 $payment_type = null;
 
-                if ($application->extra_payment != null && $application->payment_status == "pending") {
+                $is_previously_paid_pending = in_array($application->id, $previously_paid_app_ids)
+                    && in_array($application->status, ['extra_payment', 'send_back'])
+                    && $application->payment_status === 'pending';
+
+                if ($is_previously_paid_pending) {
+                    $amount = $application->paid_amount;
+                    $payment_type = 'Application Fee Payment';
+                } elseif ($application->extra_payment != null && $application->payment_status == "pending") {
                     $amount = $application->extra_payment;
                     $payment_type = 'Extra Payment Raised';
                 } else {
@@ -635,10 +642,10 @@ class PaymentController extends Controller
                     $payment_type = 'Application Fee Payment';
                 }
 
-                $payment_orders_grns = $all_payment_orders->filter(function ($order) use ($application) {
+                $payment_orders_for_app = $all_payment_orders->filter(function ($order) use ($application) {
                     $ids = is_array($order->application_id) ? $order->application_id : json_decode($order->application_id, true);
                     return in_array($application->id, $ids ?? []);
-                })->pluck('GRN_number')->toArray();
+                });
 
                 $response_data[] = [
                     'user_service_application_id' => $application->id,
@@ -648,8 +655,8 @@ class PaymentController extends Controller
                     'payment_type' => $payment_type,
                     'amount' => $amount,
                     'payment_status'  => $application->payment_status ?? null,
-                    'grn_number'  => $payment_orders_grns ?? null,
-                    'payment_date'  => $application->payment_time ?? null,
+                    'grn_number'  => $payment_orders_for_app->pluck('GRN_number')->toArray(),
+                    'payment_date'  => $application->payment_time ?? $payment_orders_for_app->whereNotNull('payment_datetime')->first()?->payment_datetime,
                     'is_third_party' => $application->is_third_party ?? 0,
                 ];
             }
