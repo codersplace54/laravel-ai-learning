@@ -567,7 +567,7 @@ class PaymentController extends Controller
 
 
             $service_user_applications = UserServiceApplication::where('user_id', $user_id)
-                ->where('status', '!=', 'draft')
+                ->whereNotIn('status', ['draft', 'expired'])
                 ->where(function ($query) use ($normalized_payment_status) {
                     $query->where('payment_status', $normalized_payment_status)
                         ->orWhere(function ($q) use ($normalized_payment_status) {

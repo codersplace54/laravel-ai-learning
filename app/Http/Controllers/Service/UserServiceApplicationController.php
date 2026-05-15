@@ -1514,6 +1514,7 @@ class UserServiceApplicationController extends Controller
 
             $query = UserServiceApplication::where('user_id', $request->user_id)
                 ->with('my_feedback', 'service.department')
+                ->where('status', '!=', 'expired')
                 ->orderBy('application_date', 'desc');
 
             if ($request->filled('date_from') && $request->filled('date_to')) {
@@ -2700,7 +2701,9 @@ class UserServiceApplicationController extends Controller
                 $status = 're_submitted';
             } elseif ($previous_paid > 0) {
                 $status = 're_submitted';
-            } else {
+            } elseif ($application->previous_application_id != null) {
+                $status = 're_submitted';
+            }else {
                 $status = $application->current_step_number == 0 ? 'approved' : 'submitted';
             }
 
@@ -3176,7 +3179,7 @@ class UserServiceApplicationController extends Controller
 
             $data_changed = ($old_data != $final_data);
 
-            $status = $data_changed ? "re_submitted" : "approved";
+            $status = $data_changed ? "saved" : "approved";
 
             $calculated_fee = $this->calculate_renewal_final_fee(
                 $old_application->service_id,
@@ -3208,7 +3211,7 @@ class UserServiceApplicationController extends Controller
             }
 
 
-            if ($status == "re_submitted") {
+            if ($status == "saved") {
                 $current_step_number = 1;
                 $noc_certificate = null;
             } elseif ($status == "approved") {
