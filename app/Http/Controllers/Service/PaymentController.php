@@ -620,7 +620,21 @@ class PaymentController extends Controller
                 $payment_type = null;
 
                 if ($normalized_payment_status === 'paid' && $application->payment_status === 'pending' && $application->paid_amount > 0) {
-                    $amount = $application->paid_amount;
+                    $matched_order = null;
+                    foreach ($all_payment_orders as $order) {
+                        $ids = is_array($order->application_id) ? $order->application_id : json_decode($order->application_id, true);
+                        if (in_array($application->id, $ids ?? [])) {
+                            $matched_order = $order;
+                            break;
+                        }
+                    }
+
+                    $service_fee_in_order = 0;
+                    if ($matched_order) {
+                        $service_fee_in_order = $matched_order->establishment_fee_paid ?? $matched_order->operational_fee_paid ?? 0;
+                    }
+
+                    $amount = $application->paid_amount + $service_fee_in_order;
                     $payment_type = 'Application Fee Payment';
                 } elseif ($application->extra_payment != null && $application->payment_status == "pending") {
                     $amount = $application->extra_payment;
