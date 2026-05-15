@@ -123,12 +123,6 @@ class HolidayController extends Controller
 
         try {
 
-            $user = Auth::user();
-
-            if (!$user) {
-                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
-            }
-
             $holidays = Holiday::orderBy('holiday_date', 'asc')->get();
 
             if ($holidays->isEmpty()) {
