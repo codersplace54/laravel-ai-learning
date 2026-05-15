@@ -327,7 +327,6 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
     Route::post('holidays-store', [HolidayController::class, 'holidays_store']);
     Route::post('holidays-update', [HolidayController::class, 'holidays_update']);
-    Route::post('holidays-view', [HolidayController::class, 'holidays_view']);
     Route::post('holiday-delete', [HolidayController::class, 'holiday_delete']);
 
     Route::prefix('public')->group(function () {
@@ -514,3 +513,4 @@ Route::prefix('annexure')->group(function () {
 });
 
 Route::post('public-holiday-disabled-dates', [HolidayController::class, 'holiday_disabled_dates']);
+Route::post('holidays-view', [HolidayController::class, 'holidays_view']);
