@@ -2452,7 +2452,7 @@ class UserServiceApplicationController extends Controller
             }
 
             $per_page = $request->per_page ?? 10;
-            $query = UserServiceApplication::with('user')->orderBy('id', 'DESC');
+            $query = UserServiceApplication::with('user', 'latestWorkflow.department')->orderBy('id', 'DESC');
 
             if ($request->search) {
                 $search = $request->search;
@@ -2478,6 +2478,16 @@ class UserServiceApplicationController extends Controller
 
             if ($request->status) {
                 $query->where('payment_status', $request->status);
+            }
+
+            if ($request->service_id) {
+                $query->where('service_id', $request->service_id);
+            }
+
+            if ($request->department_id) {
+                $query->whereHas('workflow', function ($q) use ($request) {
+                    $q->where('department_id', $request->department_id);
+                });
             }
 
             if ($request->min_amount) {
@@ -2507,9 +2517,15 @@ class UserServiceApplicationController extends Controller
                         ? $app->effective_fee
                         : ($app->total_fee ?? 0);
 
+                    $latestWorkflow = $app->latestWorkflow;
+
                     $exportData[] = [
                         'id'                 => $app->id,
                         'application_number' => $app->applicationId,
+                        'service_id'         => $app->service_id,
+                        'service_name'       => $app->service->service_title_or_description,
+                        'department_id'      => $latestWorkflow->department_id ?? null,
+                        'department_name'    => $latestWorkflow->department->name ?? null,
                         'business'           => $app->user->name_of_enterprise ?? null,
                         'email_id'           => $app->user->email_id ?? null,
                         'mobile_no'          => $app->user->mobile_no ?? null,
@@ -2545,9 +2561,15 @@ class UserServiceApplicationController extends Controller
                     ? $app->effective_fee
                     : ($app->total_fee ?? 0);
 
+                $latestWorkflow = $app->latestWorkflow;
+
                 $response_data[] = [
                     'id'                 => $app->id,
                     'application_number' => $app->applicationId,
+                    'service_id'         => $app->service_id,
+                    'service_name'       => $app->service->service_title_or_description,
+                    'department_id'      => $latestWorkflow->department_id ?? null,
+                    'department_name'    => $latestWorkflow->department->name ?? null,
                     'business'           => $app->user->name_of_enterprise ?? null,
                     'email_id'           => $app->user->email_id ?? null,
                     'mobile_no'          => $app->user->mobile_no ?? null,
@@ -2614,6 +2636,16 @@ class UserServiceApplicationController extends Controller
                 $query->where('payment_status', $request->status);
             }
 
+            if ($request->service_id) {
+                $query->where('service_id', $request->service_id);
+            }
+
+            if ($request->department_id) {
+                $query->whereHas('latestWorkflow', function ($q) use ($request) {
+                    $q->where('department_id', $request->department_id);
+                });
+            }
+
             if ($request->min_amount) {
                 $query->whereRaw("COALESCE(effective_fee, total_fee) >= ?", [$request->min_amount]);
             }
@@ -2643,7 +2675,6 @@ class UserServiceApplicationController extends Controller
             ], 500);
         }
     }
-
 
     public function export_all_applications()
     {
@@ -2703,7 +2734,7 @@ class UserServiceApplicationController extends Controller
                 $status = 're_submitted';
             } elseif ($application->previous_application_id != null) {
                 $status = 're_submitted';
-            }else {
+            } else {
                 $status = $application->current_step_number == 0 ? 'approved' : 'submitted';
             }
 
@@ -4819,6 +4850,307 @@ class UserServiceApplicationController extends Controller
                 'ismw_labour_fee'           => $new_ismw_fee,
                 'payment_status'            => 'pending',
             ]);
+        }
+    }
+
+    public function get_department_user_all_applications(Request $request)
+    {
+        try {
+
+            $per_page = $request->per_page ?? 10;
+
+            $user_id = Auth::id();
+
+            $user = User::where('id', $user_id)
+                ->where('user_type', 'department')
+                ->first();
+
+            if (!$user) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Invalid department user.'
+                ], 404);
+            }
+
+            $hierarchy_level = $user->department_user->hierarchy_level;
+            $department_id = $user->department_user->department_id;
+
+            $query = UserServiceApplication::with([
+                'user',
+                'service',
+                'latestWorkflow.department'
+            ])
+                ->where('payment_status', 'paid')
+
+                ->whereHas('workflow', function ($q) use ($department_id, $hierarchy_level) {
+                    $q->where('department_id', $department_id);
+
+                    if (in_array($hierarchy_level, ['state1', 'state2', 'state3'])) {
+                        $q->where('hierarchy_level', $hierarchy_level);
+                    }
+                });
+
+            if ($request->search) {
+
+                $search = $request->search;
+
+                $query->where(function ($q) use ($search) {
+
+                    $q->where('applicationId', 'LIKE', "%{$search}%")
+                        ->orWhereHas('user', function ($u) use ($search) {
+
+                            $u->where('name_of_enterprise', 'LIKE', "%{$search}%")
+                                ->orWhere('mobile_no', 'LIKE', "%{$search}%")
+                                ->orWhere('email_id', 'LIKE', "%{$search}%");
+                        });
+                });
+            }
+
+            if ($request->service_id) {
+                $query->where('service_id', $request->service_id);
+            }
+
+            if ($request->department_id) {
+
+                $query->whereHas('workflow', function ($q) use ($request) {
+
+                    $q->where('department_id', $request->department_id);
+                });
+            }
+
+            if ($request->status) {
+                $query->where('status', $request->status);
+            }
+
+            if ($request->from_date) {
+                $query->whereDate('application_date', '>=', $request->from_date);
+            }
+
+            if ($request->to_date) {
+                $query->whereDate('application_date', '<=', $request->to_date);
+            }
+
+            if ($request->export && $request->export === 'excel') {
+
+                $exportApps = $query->get();
+
+                $exportData = [];
+
+                foreach ($exportApps as $app) {
+                    $amount = !empty($app->effective_fee)
+                        ? $app->effective_fee
+                        : ($app->total_fee ?? 0);
+
+                    $latestWorkflow = $app->latestWorkflow;
+
+                    $exportData[] = [
+                        'id' => $app->id,
+                        'application_number' => $app->applicationId,
+                        'service_id' => $app->service_id,
+                        'service_name' => $app->service->service_title_or_description ?? null,
+                        'department_id' => $latestWorkflow->department_id ?? null,
+                        'department_name' => $latestWorkflow->department->name ?? null,
+                        'business' => $app->user->name_of_enterprise ?? null,
+                        'email_id' => $app->user->email_id ?? null,
+                        'mobile_no' => $app->user->mobile_no ?? null,
+                        'amount' => $amount,
+                        'payment_time' => $app->payment_time,
+                        'expiry_date' => $app->NOC_expiry_date,
+                        'status' => $app->payment_status,
+                        'GRN_number' => $app->GRN_number,
+                        'method'             => null,
+                        'comments' => $app->comments,
+                    ];
+                }
+
+                return Excel::download(new ApplicationsExport($exportData), 'applications.xlsx');
+            }
+
+            $applications = $query->orderByDesc('id')->paginate($per_page);
+
+            $application_ids = $applications->pluck('id')->toArray();
+
+            $payment_map = $this->payment_map_for_applications($application_ids);
+
+            $response_data = [];
+
+            foreach ($applications as $app) {
+
+                $latestWorkflow = $app->latestWorkflow;
+
+                $amount = !empty($app->effective_fee)
+                    ? $app->effective_fee
+                    : ($app->total_fee ?? 0);
+
+                $response_data[] = [
+
+                    'id' => $app->id,
+                    'application_number' => $app->applicationId,
+                    'service_id' => $app->service_id,
+                    'service_name' => $app->service->service_title_or_description ?? null,
+                    'department_id' => $latestWorkflow->department_id ?? null,
+                    'department_name' => $latestWorkflow->department->name ?? null,
+                    'business' => $app->user->name_of_enterprise ?? null,
+                    'email_id' => $app->user->email_id ?? null,
+                    'mobile_no' => $app->user->mobile_no ?? null,
+                    'amount' => $amount,
+                    'payment_time' => $app->payment_time,
+                    'expiry_date' => $app->NOC_expiry_date,
+                    'status' => $app->payment_status,
+                    'GRN_number' => $app->GRN_number,
+                    'method'             => null,
+                    'comments' => $app->comments,
+                    'payment_details' => $payment_map[$app->id] ?? [],
+                ];
+            }
+
+            return response()->json([
+
+                'status' => 1,
+                'message' => 'Applications fetched successfully.',
+                'data' => $response_data,
+                'pagination' => [
+                    'current_page' => $applications->currentPage(),
+                    'last_page' => $applications->lastPage(),
+                    'per_page' => $applications->count(),
+                    'total' => $applications->total(),
+                ]
+
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function export_dept_filtered_applications(Request $request)
+    {
+
+
+        try {
+
+            if (!Auth::check()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Unauthenticated user.'
+                ], 401);
+            }
+
+            $user = Auth::user();
+
+            if ($user->user_type !== 'department') {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Invalid department user.'
+                ], 403);
+            }
+
+            $department_id = $user->department_user->department_id;
+            $hierarchy_level = $user->department_user->hierarchy_level;
+            $query = UserServiceApplication::with([
+                'user',
+                'service',
+                'latestWorkflow.department'
+            ])
+
+                ->where('payment_status', 'paid')
+                ->whereHas('workflow', function ($q) use (
+                    $department_id,
+                    $hierarchy_level
+                ) {
+                    $q->where('department_id', $department_id);
+                    if (in_array($hierarchy_level, ['state1', 'state2', 'state3'])) {
+                        $q->where('hierarchy_level', $hierarchy_level);
+                    }
+                });
+
+            if ($request->search) {
+                $search = $request->search;
+                $query->where(function ($q) use ($search) {
+                    $q->where('applicationId', 'LIKE', "%{$search}%")
+                        ->orWhereHas('user', function ($u) use ($search) {
+                            $u->where('name_of_enterprise', 'LIKE', "%{$search}%")
+                                ->orWhere('email_id', 'LIKE', "%{$search}%")
+                                ->orWhere('mobile_no', 'LIKE', "%{$search}%");
+                        });
+                });
+            }
+
+            if ($request->grn_number) {
+                $query->where('GRN_number', 'LIKE', "%{$request->grn_number}%");
+            }
+
+            if ($request->mobile_no) {
+                $query->whereHas('user', function ($q) use ($request) {
+                    $q->where('mobile_no', 'LIKE', "%{$request->mobile_no}%");
+                });
+            }
+
+            if ($request->status) {
+                $query->where('status', $request->status);
+            }
+
+            if ($request->service_id) {
+                $query->where('service_id', $request->service_id);
+            }
+
+            if ($request->department_id) {
+                $query->whereHas('workflow', function ($q) use ($request) {
+                    $q->where('department_id', $request->department_id);
+                });
+            }
+
+            if ($request->min_amount) {
+                $query->whereRaw(
+                    "COALESCE(effective_fee, total_fee) >= ?",
+                    [$request->min_amount]
+                );
+            }
+
+            if ($request->max_amount) {
+                $query->whereRaw(
+                    "COALESCE(effective_fee, total_fee) <= ?",
+                    [$request->max_amount]
+                );
+            }
+
+            if ($request->from_date) {
+                $query->whereDate(
+                    'payment_time',
+                    '>=',
+                    $request->from_date
+                );
+            }
+
+            if ($request->to_date) {
+                $query->whereDate(
+                    'payment_time',
+                    '<=',
+                    $request->to_date
+                );
+            }
+
+            $applications = $query
+                ->with([
+                    'user',
+                    'service',
+                    'latestWorkflow.department'
+                ])
+                ->orderByDesc('id')
+                ->get();
+
+            return Excel::download(new ApplicationsExport($applications), 'filtered_applications.xlsx');
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Export failed.',
+                'error' => $e->getMessage(),
+            ], 500);
         }
     }
 }

@@ -245,7 +245,6 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-user-payment-orders', [ApplicationAssignmentController::class, 'get_user_payment_orders']);
         Route::post('create-payment-order', [AdminController::class, 'create_payment_order']);
         Route::post('update-payment-order', [AdminController::class, 'update_payment_order']);
-
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
@@ -267,7 +266,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-details-user-service-applications', [UserServiceApplicationController::class, 'get_details_user_service_applications']);
         Route::post('download-user-application-pdf',  [CertificateController::class, 'download_application_pdf']);
         Route::post('get-user-applications-per-service', [UserServiceApplicationController::class, 'get_user_applications_per_service']);
-        Route::match(['get', 'post'],'/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
+        Route::match(['get', 'post'], '/third-party-apply/{service_id}', [ServiceMasterController::class, 'third_party_apply']);
         Route::post('calculate-fee', [UserServiceApplicationController::class, 'calculate_fee']);
         Route::post('calculate-industrial-estate-amounts', [UserServiceApplicationController::class, 'calculate_industrial_estate_amounts']);
         Route::post('get-user-renewed-applications', [UserServiceApplicationController::class, 'get_user_renewed_applications']);
@@ -392,6 +391,9 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
 
         Route::post('annexure/individual-queries-tracker', [AnnexureController::class, 'individual_queries_tracker']);
         Route::post('service-feedback-add-remark', [FeedbackController::class, 'service_feedback_add_remark']);
+
+        Route::post('get-department-user-all-applications', [UserServiceApplicationController::class, 'get_department_user_all_applications']);
+        Route::post('export-filtered', [UserServiceApplicationController::class, 'export_dept_filtered_applications']);
     });
 
     Route::post('table-columns', [SchemaController::class, 'get_table_columns']);
