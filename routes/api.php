@@ -160,6 +160,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('service-template-store',  [CertificateController::class, 'service_template_store']);
 
         Route::post('download-application-pdf',  [CertificateController::class, 'download_application_pdf']);
+        Route::post('generate-certificate', [CertificateController::class, 'admin_generate_certificate']);
         Route::post('regenerate-wrong-certificates', [CertificateController::class, 'regenerate_wrong_certificates']);
 
         Route::post('service-master-store', [ServiceMasterController::class, 'service_master_store']);

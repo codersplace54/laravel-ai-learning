@@ -1195,6 +1195,61 @@ class CertificateController extends Controller
     }
 
 
+    public function admin_generate_certificate(Request $request)
+    {
+        try {
+            if (!Auth::check()) {
+                return response()->json(['status' => 0, 'message' => 'Unauthenticated user.'], 401);
+            }
+
+            $user = Auth::user();
+            if ($user->user_type !== 'admin') {
+                return response()->json(['status' => 0, 'message' => 'Unauthorized access.'], 403);
+            }
+
+            $request->validate([
+                'application_id' => 'required|integer|exists:user_service_applications,id',
+            ]);
+
+            $application = UserServiceApplication::findOrFail($request->application_id);
+
+            if (!empty($application->NOC_certificate)) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'Certificate already generated.',
+                    'data'    => ['certificate_url' => asset('storage/' . $application->NOC_certificate)],
+                ]);
+            }
+
+            DB::beginTransaction();
+
+            $certificateRequest = new Request([
+                'is_preview'     => 'no',
+                'application_id' => $request->application_id,
+            ]);
+
+            $response = $this->user_certificate_generate($certificateRequest);
+
+            DB::commit();
+
+            return $response;
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 0,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function regenerate_wrong_certificates(Request $request)
     {
         try {
