@@ -33,12 +33,16 @@ class ReportController extends Controller
                 'to_date'            => 'required|date|after_or_equal:from_date',
                 'department_id'      => 'nullable|integer',
                 'application_status' => 'nullable|string',
+                'per_page'           => 'nullable|integer',
+                'page'               => 'nullable|integer',
             ]);
 
             $from_date          = $request->from_date;
             $to_date            = $request->to_date;
             $department_id      = $request->department_id;
             $application_status = $request->application_status;
+            $per_page           = $request->per_page ?? 15;
+            $page               = $request->page ?? 1;
 
             $query = UserServiceApplication::with([
                 'user:id,name_of_enterprise,authorized_person_name,mobile_no,email_id,registered_enterprise_address',
@@ -62,8 +66,10 @@ class ReportController extends Controller
                 $query->where('status', $application_status);
             }
 
-            $applications = $query
-                ->orderBy('application_date', 'asc')
+            $total = $query->count();
+            $applications = $query->orderBy('application_date', 'asc')
+                ->skip(($page - 1) * $per_page)
+                ->take($per_page)
                 ->get();
 
             if ($applications->isEmpty()) {
@@ -71,6 +77,12 @@ class ReportController extends Controller
                     'status'  => 1,
                     'message' => 'No record found.',
                     'data'    => [],
+                    'pagination' => [
+                        'total'        => 0,
+                        'per_page'     => $per_page,
+                        'current_page' => $page,
+                        'last_page'    => 0,
+                    ],
                 ]);
             }
 
@@ -96,10 +108,11 @@ class ReportController extends Controller
                     ? Carbon::parse($application->application_date)
                     : null;
 
-                $due_date = null;
-                if ($application_date && $service && $service->target_days !== null) {
-                    $due_date = $application_date->copy()->addDays((int) $service->target_days);
-                }
+                $due_date = $application->max_processing_date
+                    ? Carbon::parse($application->max_processing_date)
+                    : ($application_date && $service && $service->target_days !== null
+                        ? $application_date->copy()->addDays((int) $service->target_days)
+                        : null);
 
                 $decision_status = $application->status;
                 $decision_date   = null;
@@ -175,7 +188,9 @@ class ReportController extends Controller
                     'mobile_no'                => $user ? $user->mobile_no : null,
                     'email_id'                 => $user ? $user->email_id : null,
 
-                    'due_date'                 => $due_date ? $due_date->format('Y-m-d') : null,
+                    'due_date'                 => $application->max_processing_date
+                        ? Carbon::parse($application->max_processing_date)->format('Y-m-d')
+                        : ($due_date ? $due_date->format('Y-m-d') : null),
 
                     'approved_on'              => $approved_step && $approved_step->action_taken_at
                         ? Carbon::parse($approved_step->action_taken_at)->format('Y-m-d')
@@ -197,6 +212,12 @@ class ReportController extends Controller
                 'status'  => 1,
                 'message' => 'Application status report.',
                 'data'    => $rows,
+                'pagination' => [
+                    'total'        => $total,
+                    'per_page'     => $per_page,
+                    'current_page' => $page,
+                    'last_page'    => ceil($total / $per_page),
+                ],
             ]);
         } catch (\Throwable $e) {
             return response()->json([
@@ -419,7 +440,7 @@ class ReportController extends Controller
             $summary = [];
 
             foreach ($user_ids as $user_id) {
-                $unit = $units->get($user_id);
+                $unit = UnitDetail::where('user_id', $user_id)->first();
                 if (!$unit) {
                     continue;
                 }
@@ -521,8 +542,7 @@ class ReportController extends Controller
 
             $application_query = UserServiceApplication::query()
                 ->whereDate('application_date', '>=', $from_date)
-                ->whereDate('application_date', '<=', $to_date)
-                ->whereNotNull('user_id');
+                ->whereDate('application_date', '<=', $to_date);
 
             if (!empty($department_id)) {
                 $application_query->whereHas('service', function ($q) use ($department_id) {
@@ -542,7 +562,10 @@ class ReportController extends Controller
 
             $user_ids = $applications_by_user->keys();
 
-            $users = User::whereIn('id', $user_ids)->get()->keyBy('id');
+            $users = User::whereIn('id', $user_ids)
+                ->with(['district:district_code,district_name', 'subdivision:sub_lgd_code,sub_division'])
+                ->get()
+                ->keyBy('id');
 
             $units = UnitDetail::whereIn('user_id', $user_ids)
                 ->get()
@@ -559,23 +582,15 @@ class ReportController extends Controller
             $rows = [];
 
             foreach ($user_ids as $user_id) {
-                $user  = $users->get($user_id);
-                $unit  = $units->get($user_id);
+                $user = $users->get($user_id);
+                $unit = $units->get($user_id);
 
                 if (!$user || !$unit) {
                     continue;
                 }
 
-                $dist = trim((string) $unit->unit_location_district);
-                $subd = trim((string) $unit->unit_location_subdivision);
-
-                if ($dist === '') {
-                    $dist = 'N/A';
-                }
-
-                if ($subd === '') {
-                    $subd = 'N/A';
-                }
+                $dist = $user->district ? $user->district->district_name : 'N/A';
+                $subd = $user->subdivision ? $user->subdivision->sub_division : 'N/A';
 
                 if (!empty($district) && $district !== $dist) {
                     continue;
@@ -623,9 +638,9 @@ class ReportController extends Controller
                     'nic_2_digit'                    => $activity->nic_2_digit_code ?? null,
                     'nic_4_digit'                    => $activity->nic_4_digit_code ?? null,
                     'nic_5_digit'                    => $activity->nic_5_digit_code ?? null,
-                    'investment'                     => $unit->investment_details_total_project_cost ?? null,
+                    'investment'                     => $unit && $unit->investment_details_total_project_cost ? (int) $unit->investment_details_total_project_cost : null,
                     'employment'                     => $unit->employment_details_total_employment ?? null,
-                    'turnover'                       => $unit->annual_turnover ?? null,
+                    'turnover'                       => $unit && $unit->annual_turnover ? (int) $unit->annual_turnover : null,
                     'land_type'                      => $unit->unit_location_land_type ?? null,
                     'industrial_area_name'           => $unit->unit_location_estate_name ?? null,
                 ];
@@ -672,7 +687,8 @@ class ReportController extends Controller
             ])
                 ->whereHas('service', function ($q) {
                     $q->whereNotNull('department_id');
-                });
+                })
+                ->whereNotIn('status', ['expired', 'draft', 'saved']);
 
             if (!empty($from_date)) {
                 $application_query->whereDate('application_date', '>=', $from_date);
@@ -728,11 +744,6 @@ class ReportController extends Controller
                 $department_row['received']++;
 
                 $workflow_steps = $application->workflow ?? collect();
-                $status         = (string) $application->status;
-
-                if (in_array($status, ['in_progress', 'approved', 'rejected', 'send_back', 'extra_payment'])) {
-                    $department_row['processed']++;
-                }
 
                 $approved_step = $workflow_steps->where('status', 'approved')
                     ->sortByDesc('action_taken_at')
@@ -741,6 +752,10 @@ class ReportController extends Controller
                 $rejected_step = $workflow_steps->where('status', 'rejected')
                     ->sortByDesc('action_taken_at')
                     ->first();
+
+                if ($approved_step || $rejected_step) {
+                    $department_row['processed']++;
+                }
 
                 if ($approved_step) {
                     $department_row['approved']++;
@@ -775,8 +790,10 @@ class ReportController extends Controller
                 }
 
                 $has_final_decision = $approved_step || $rejected_step;
+                $is_in_clarification = $latest_step && $latest_step->status === 'send_back';
+                $is_other_status = $latest_step && !in_array($latest_step->status, ['pending', 'in_progress', 'approved', 'rejected', 'send_back', 'saved']);
 
-                if ($due_date && !$has_final_decision) {
+                if ($due_date && !$has_final_decision && !$is_in_clarification && !$is_other_status) {
                     if ($today->lessThanOrEqualTo($due_date)) {
                         $department_row['submitted_within_timelines']++;
                     } else {
@@ -831,11 +848,11 @@ class ReportController extends Controller
             $inspection_query = Inspection::with(['department:id,name']);
 
             if (!empty($year)) {
-                $inspection_query->whereYear('proposed_date', $year);
+                $inspection_query->whereYear('inspection_date', $year);
             }
 
             if (!empty($month)) {
-                $inspection_query->whereMonth('proposed_date', $month);
+                $inspection_query->whereMonth('inspection_date', $month);
             }
 
             $inspections = $inspection_query->get();
@@ -894,15 +911,18 @@ class ReportController extends Controller
                         $row['third_party_cert_exempt_companies']++;
                     }
                 }
+                if ($inspection_date && !empty($inspection->proposed_date)) {
+                    try {
+                        $proposed_date = Carbon::parse($inspection->proposed_date);
+                        $hours_diff    = $inspection_date->diffInHours($proposed_date);
 
-                if ($inspection_date && $inspection->created_at) {
-                    $uploaded_at = Carbon::parse($inspection->created_at);
-                    $hours_diff  = $inspection_date->diffInHours($uploaded_at);
-
-                    if ($hours_diff <= 48) {
-                        $row['reports_uploaded_within_48_hrs']++;
-                    } else {
-                        $row['reports_uploaded_beyond_48_hrs']++;
+                        if ($hours_diff <= 48) {
+                            $row['reports_uploaded_within_48_hrs']++;
+                        } else {
+                            $row['reports_uploaded_beyond_48_hrs']++;
+                        }
+                    } catch (\Exception $e) {
+                        // Skip if date parsing fails
                     }
                 }
 
@@ -928,6 +948,7 @@ class ReportController extends Controller
             return response()->json([
                 'status'  => 0,
                 'message' => $e->getMessage(),
+                'line' => $e->getLine(),
             ], 500);
         }
     }
@@ -1005,9 +1026,7 @@ class ReportController extends Controller
                     'contact_no'                      => $user ? $user->mobile_no : null,
                     'email'                           => $user ? $user->email_id : null,
                     'act_name'                        => $inspection->inspection_type,
-                    'inspection_date'                 => $inspection->inspection_date
-                        ? Carbon::parse($inspection->inspection_date)->format('Y-m-d')
-                        : null,
+                    'inspection_date'                 => $inspection_date,
                     'self_certification_exempt'       => $self_certification,
                     'third_party_cert_exempt'         => $third_party_cert,
                 ];
@@ -1034,12 +1053,16 @@ class ReportController extends Controller
                 'to_date'       => 'nullable|date',
                 'department_id' => 'nullable|integer|exists:departments,id',
                 'service_id'    => 'nullable|integer|exists:service_masters,id',
+                'per_page'      => 'nullable|integer',
+                'page'          => 'nullable|integer',
             ]);
 
             $from_date     = $request->from_date;
             $to_date       = $request->to_date;
             $department_id = $request->department_id;
             $service_id    = $request->service_id;
+            $per_page      = $request->per_page ?? 15;
+            $page          = $request->page ?? 1;
 
             $query = UserServiceApplication::with([
                 'user:id,name_of_enterprise,authorized_person_name,mobile_no,email_id,registered_enterprise_address',
@@ -1067,8 +1090,11 @@ class ReportController extends Controller
                 $query->whereDate('application_date', '<=', $to_date);
             }
 
+            $total = $query->count();
             $applications = $query
                 ->orderBy('application_date', 'asc')
+                ->skip(($page - 1) * $per_page)
+                ->take($per_page)
                 ->get();
 
             if ($applications->isEmpty()) {
@@ -1076,6 +1102,12 @@ class ReportController extends Controller
                     'status'  => 1,
                     'message' => 'No record found.',
                     'data'    => [],
+                    'pagination' => [
+                        'total'        => 0,
+                        'per_page'     => $per_page,
+                        'current_page' => $page,
+                        'last_page'    => 0,
+                    ],
                 ]);
             }
 
@@ -1138,6 +1170,12 @@ class ReportController extends Controller
                 'status'  => 1,
                 'message' => 'User list report.',
                 'data'    => $rows,
+                'pagination' => [
+                    'total'        => $total,
+                    'per_page'     => $per_page,
+                    'current_page' => $page,
+                    'last_page'    => ceil($total / $per_page),
+                ],
             ]);
         } catch (\Throwable $e) {
             return response()->json([
