@@ -437,6 +437,8 @@ Route::prefix('report')->group(function () {
     Route::post('cis-details-report', [ReportController::class, 'cis_details_report']);
     Route::post('inspection-summary-report', [ReportController::class, 'inspection_summary_report']);
     Route::post('grievance-feedback-summary', [ReportController::class, 'grievance_feedback_summary']);
+    Route::post('payment-report', [ReportController::class, 'payment_report']);
+    Route::post('payment-report-export', [ReportController::class, 'payment_report_export']);
 });
 
 Route::post('user-feedback-store', [UserFeedbackController::class, 'user_feedback_store']);

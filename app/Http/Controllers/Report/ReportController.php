@@ -19,6 +19,9 @@ use App\Models\TripuraMasterData;
 use App\Models\Department;
 use App\Models\UserFeedback;
 use App\Models\SingleWindowReport;
+use App\Models\PaymentOrder;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\PaymentReportExport;
 
 class ReportController extends Controller
 {
@@ -1576,96 +1579,148 @@ class ReportController extends Controller
         }
     }
 
-    public function grievance_feedback_summary(Request $request)
+    public function payment_report(Request $request)
     {
-
         try {
-
             $request->validate([
-                'department_id' => 'nullable|integer|exists:departments,id',
-                'service_id'    => 'nullable|integer|exists:service_masters,id',
-                'from_date'     => 'nullable|date',
-                'to_date'       => 'nullable|date',
+                'department_id'  => 'nullable|integer|exists:departments,id',
+                'service_id'     => 'nullable|integer|exists:service_masters,id',
+                'from_date'      => 'nullable|date',
+                'to_date'        => 'nullable|date',
+                'payment_status' => 'nullable|string|in:pending,paid,failed',
+                'per_page'       => 'nullable|integer|min:1|max:500',
             ]);
 
-            $query = UserFeedback::query()
-                ->select(
-                    'service_id',
-                    DB::raw('COUNT(*) as total_received'),
-                    DB::raw("SUM(CASE WHEN updated_at IS NOT NULL THEN 1 ELSE 0 END) as total_responded")
-                )
-                ->groupBy('service_id');
+            [$allRows, $summary] = $this->build_payment_report_data($request);
 
-            if ($request->filled('from_date') && $request->filled('to_date')) {
-                $query->whereBetween('created_at', [$request->from_date, $request->to_date]);
-            }
+            $per_page     = (int) ($request->per_page ?? 15);
+            $current_page = (int) ($request->page ?? 1);
+            $total        = count($allRows);
+            $paged_rows   = array_slice($allRows, ($current_page - 1) * $per_page, $per_page);
 
-            if ($request->filled('service_id')) {
-                $query->where('service_id', $request->service_id);
-            }
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Payment report generated successfully.',
+                'summary' => $summary,
+                'report'  => [
+                    'data'       => $paged_rows,
+                    'pagination' => [
+                        'total'        => $total,
+                        'per_page'     => $per_page,
+                        'current_page' => $current_page,
+                        'last_page'    => (int) ceil($total / $per_page),
+                    ],
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['status' => 0, 'message' => $e->getMessage()], 500);
+        }
+    }
 
-            if ($request->filled('department_id')) {
-                $query->where('department_id', $request->department_id);
-            }
+    public function payment_report_export(Request $request)
+    {
+        try {
+            $request->validate([
+                'department_id'  => 'nullable|integer|exists:departments,id',
+                'service_id'     => 'nullable|integer|exists:service_masters,id',
+                'from_date'      => 'nullable|date',
+                'to_date'        => 'nullable|date',
+                'payment_status' => 'nullable|string|in:pending,paid,failed',
+            ]);
 
-            $data = $query->get();
+            [$rows, $summary] = $this->build_payment_report_data($request);
 
-            $report = $data->map(function ($row) {
+            $filename = 'payment_report_' . now()->format('Y_m_d_His') . '.xlsx';
 
-                $service = ServiceMaster::find($row->service_id);
+            return Excel::download(new PaymentReportExport($rows, $summary), $filename);
+        } catch (\Throwable $e) {
+            return response()->json(['status' => 0, 'message' => $e->getMessage()], 500);
+        }
+    }
 
-                $records = UserFeedback::where('service_id', $row->service_id)
-                    ->whereNotNull('created_at')
-                    ->whereNotNull('updated_at')
-                    ->get(['created_at', 'updated_at']);
+    private function build_payment_report_data(Request $request): array
+    {
+        $query = PaymentOrder::query()->orderByDesc('payment_datetime');
 
-                $durations = $records->map(function ($r) {
-                    return (strtotime($r->updated_at) - strtotime($r->created_at)) / 86400;
-                })->filter();
+        if ($request->filled('payment_status')) {
+            $query->where('payment_status', $request->payment_status);
+        }
 
-                $avg = $durations->avg() ?? 0;
-                $min = $durations->min() ?? 0;
-                $max = $durations->max() ?? 0;
+        if ($request->filled('from_date')) {
+            $query->whereDate('payment_datetime', '>=', $request->from_date);
+        }
 
-                $count = $durations->count();
-                $median = 0;
+        if ($request->filled('to_date')) {
+            $query->whereDate('payment_datetime', '<=', $request->to_date);
+        }
 
-                if ($count > 0) {
-                    $sorted = $durations->sort()->values();
-                    $middle = floor(($count - 1) / 2);
+        $orders = $query->get();
 
-                    $median = ($count % 2)
-                        ? $sorted[$middle]
-                        : ($sorted[$middle] + $sorted[$middle + 1]) / 2;
+        $all_application_ids = $orders
+            ->flatMap(fn($order) => json_decode($order->application_id, true) ?? [])
+            ->unique()->values()->all();
+
+        $applications = UserServiceApplication::with(['service.department'])
+            ->whereIn('id', $all_application_ids)
+            ->when($request->filled('department_id'), fn($q) => $q->whereHas('service', fn($q) => $q->where('department_id', $request->department_id)))
+            ->when($request->filled('service_id'), fn($q) => $q->where('service_id', $request->service_id))
+            ->get()
+            ->keyBy('id');
+
+        $rows    = [];
+        $summary = [];
+
+        foreach ($orders as $order) {
+            $app_ids    = json_decode($order->application_id, true) ?? [];
+            $serviceFee = $order->payment_status === 'paid'
+                ? (float) ($order->establishment_fee_paid ?? $order->operational_fee_paid ?? 0)
+                : 0;
+
+            foreach ($app_ids as $index => $app_id) {
+                $app = $applications->get($app_id);
+
+                if (!$app) continue;
+
+                $amount         = (float) ($app->paid_amount ?? 0) + ($index === 0 ? $serviceFee : 0);
+                $department     = $app->service?->department?->name ?? 'N/A';
+                $department_id  = $app->service?->department?->id ?? 0;
+                $payment_status = strtolower($order->payment_status);
+
+                $rows[] = [
+                    'id'             => $order->id,
+                    'date'           => $order->payment_datetime
+                        ? Carbon::parse($order->payment_datetime)->format('d-m-Y')
+                        : null,
+                    'department'     => $department,
+                    'application_no' => $app->applicationId ?? $app->id,
+                    'service'        => $app->service?->service_title_or_description,
+                    'order_id'       => $order->order_id,
+                    'grn_no'         => $order->GRN_number,
+                    'payment_status' => ucfirst($order->payment_status),
+                    'amount'         => $amount,
+                ];
+
+                if (!isset($summary[$department_id])) {
+                    $summary[$department_id] = [
+                        'department_id'      => $department_id,
+                        'department'         => $department,
+                        'total_transactions' => 0,
+                        'paid'               => 0,
+                        'pending'            => 0,
+                        'failed'             => 0,
+                        'total_amount'       => 0,
+                    ];
                 }
 
-                return [
-                    'department_name' => $service->department->name ?? null,
-                    'noc_description' => $service->service_title_or_description ?? null,
-                    'time_limit' => $service->target_days ?? null,
+                $summary[$department_id]['total_transactions']++;
+                $summary[$department_id][$payment_status]++;
 
-                    'total_grievance_received' => (int) $row->total_received,
-                    'total_grievance_responded' => (int) $row->total_responded,
-
-                    'avg_time_to_respond_days' => round($avg, 2),
-                    'median_time_to_respond_days' => round($median, 2),
-                    'min_time_to_respond_days' => round($min, 2),
-                    'max_time_to_respond_days' => round($max, 2),
-                ];
-            });
-
-            return response()->json([
-                'status' => 1,
-                'message' => 'Grievance report generated successfully',
-                'data' => $report
-            ]);
-        } catch (\Exception $e) {
-
-            return response()->json([
-                'status' => 0,
-                'message' => 'Failed to generate report',
-                'error' => $e->getMessage()
-            ], 500);
+                if ($payment_status === 'paid') {
+                    $summary[$department_id]['total_amount'] += $amount;
+                }
+            }
         }
+
+        return [$rows, array_values($summary)];
     }
 }
