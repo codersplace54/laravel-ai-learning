@@ -743,38 +743,20 @@ class ReportController extends Controller
 
                 $department_row['received']++;
 
+                $app_status = strtolower(trim((string) $application->status));
                 $workflow_steps = $application->workflow ?? collect();
 
-                $approved_step = $workflow_steps->where('status', 'approved')
-                    ->sortByDesc('action_taken_at')
-                    ->first();
-
-                $rejected_step = $workflow_steps->where('status', 'rejected')
-                    ->sortByDesc('action_taken_at')
-                    ->first();
-
-                if ($approved_step || $rejected_step) {
+                if ($workflow_steps->isNotEmpty()) {
                     $department_row['processed']++;
                 }
 
-                if ($approved_step) {
+                if ($app_status === 'noc_issued') {
                     $department_row['approved']++;
-                }
-
-                if ($rejected_step) {
+                } elseif ($app_status === 'rejected') {
                     $department_row['rejected']++;
-                }
-
-                $latest_step = $workflow_steps->sortByDesc('action_taken_at')->first();
-
-                if ($latest_step && $latest_step->status === 'send_back') {
+                } elseif ($app_status === 'send_back') {
                     $department_row['clarification_stage']++;
-                }
-
-                if (
-                    $latest_step &&
-                    !in_array($latest_step->status, ['pending', 'in_progress', 'approved', 'rejected', 'send_back', 'saved'])
-                ) {
+                } elseif (!in_array($app_status, ['pending', 'in_progress', 'saved', 'under_review'])) {
                     $department_row['other_status']++;
                 }
 
@@ -789,9 +771,9 @@ class ReportController extends Controller
                     $due_date = $application_date->copy()->addDays($target_days);
                 }
 
-                $has_final_decision = $approved_step || $rejected_step;
-                $is_in_clarification = $latest_step && $latest_step->status === 'send_back';
-                $is_other_status = $latest_step && !in_array($latest_step->status, ['pending', 'in_progress', 'approved', 'rejected', 'send_back', 'saved']);
+                $has_final_decision = in_array($app_status, ['approved', 'rejected']);
+                $is_in_clarification = $app_status === 'send_back';
+                $is_other_status = !in_array($app_status, ['pending', 'in_progress', 'approved', 'rejected', 'send_back', 'saved', 'under_review']);
 
                 if ($due_date && !$has_final_decision && !$is_in_clarification && !$is_other_status) {
                     if ($today->lessThanOrEqualTo($due_date)) {
