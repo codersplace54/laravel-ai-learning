@@ -11,15 +11,23 @@ class PaymentReportExport implements WithMultipleSheets
 {
     protected $rows;
     protected $summary;
+    protected $export_type;
 
-    public function __construct(array $rows, array $summary)
+    public function __construct(array $rows, array $summary, string $export_type = 'detailed')
     {
-        $this->rows    = $rows;
-        $this->summary = $summary;
+        $this->rows       = $rows;
+        $this->summary    = $summary;
+        $this->export_type = $export_type;
     }
 
     public function sheets(): array
     {
+        if ($this->export_type === 'summary') {
+            return [
+                new PaymentReportSummarySheet($this->rows),
+            ];
+        }
+
         return [
             new PaymentReportDetailSheet($this->rows),
             new PaymentReportSummarySheet($this->summary),
@@ -49,15 +57,15 @@ class PaymentReportDetailSheet implements FromArray, WithHeadings, WithTitle
     public function array(): array
     {
         return array_map(fn($row) => [
-            $row['id'],
-            $row['date'],
-            $row['department'],
-            $row['application_no'],
-            $row['service'],
-            $row['order_id'],
-            $row['grn_no'],
-            $row['payment_status'],
-            $row['amount'],
+            $row['id'] ?? '',
+            $row['date'] ?? '',
+            $row['department'] ?? '',
+            $row['application_no'] ?? '',
+            $row['service'] ?? '',
+            $row['order_id'] ?? '',
+            $row['grn_no'] ?? '',
+            $row['payment_status'] ?? '',
+            $row['amount'] ?? '',
         ], $this->rows);
     }
 }
