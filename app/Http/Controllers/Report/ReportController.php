@@ -382,12 +382,21 @@ class ReportController extends Controller
                 $application_query->whereDate('application_date', '<=', $to_date);
             }
 
-            $user_ids = $application_query
-                ->whereNotNull('user_id')
-                ->pluck('user_id')
-                ->unique()
-                ->values();
+            $user_query = User::whereIn('id', function ($q) {
+                $q->select('user_id')
+                    ->from('user_service_applications')
+                    ->whereNotNull('user_id');
+            });
 
+            if (!empty($district_id)) {
+                $user_query->where('district_code', $district_id);
+            }
+
+            if (!empty($sub_division_id)) {
+                $user_query->where('sub_lgd_code', $sub_division_id);
+            }
+
+            $user_ids = $user_query->pluck('id')->unique()->values();
             if ($user_ids->isEmpty()) {
                 return response()->json([
                     'status'  => 1,
@@ -396,11 +405,9 @@ class ReportController extends Controller
                 ]);
             }
 
-            $units = UnitDetail::whereIn('user_id', $user_ids)
-                ->get()
-                ->keyBy('user_id');
+            $units = UnitDetail::whereIn('user_id', $user_ids)->get()->keyBy('user_id');
 
-            $activities = Activity::whereIn('user_id', $user_ids)
+            $activities = Activity::whereIn('user_id', $units->pluck('user_id'))
                 ->get()
                 ->keyBy('user_id');
 
@@ -439,8 +446,8 @@ class ReportController extends Controller
 
             $summary = [];
 
-            foreach ($user_ids as $user_id) {
-                $unit = UnitDetail::where('user_id', $user_id)->first();
+            foreach ($units->pluck('user_id') as $user_id) {
+                $unit = $units->get($user_id);
                 if (!$unit) {
                     continue;
                 }
@@ -449,14 +456,6 @@ class ReportController extends Controller
                 $subd_id = $unit->unit_location_subdivision;
 
                 if (empty($dist_id) || empty($subd_id)) {
-                    continue;
-                }
-
-                if (!empty($district_id) && (int) $district_id !== (int) $dist_id) {
-                    continue;
-                }
-
-                if (!empty($sub_division_id) && (int) $sub_division_id !== (int) $subd_id) {
                     continue;
                 }
 
@@ -987,6 +986,9 @@ class ReportController extends Controller
 
             $rows = $inspections->map(function ($inspection) {
                 $user = $inspection->user;
+                $inspection_date = $inspection->inspection_date
+                    ? Carbon::parse($inspection->inspection_date)->format('Y-m-d')
+                    : null;
 
                 $type_text = strtolower(trim((string) $inspection->inspection_type));
                 $self_certification  = '';
@@ -1646,13 +1648,15 @@ class ReportController extends Controller
                 'from_date'      => 'nullable|date',
                 'to_date'        => 'nullable|date',
                 'payment_status' => 'nullable|string|in:pending,paid,failed',
+                'export_type'    => 'nullable|string|in:detailed,summary',
             ]);
 
             [$rows, $summary] = $this->build_payment_report_data($request);
-
+            $export_type = $request->input('export_type', 'detailed');
+            $export_data = $export_type === 'summary' ? $summary : $rows;
             $filename = 'payment_report_' . now()->format('Y_m_d_His') . '.xlsx';
 
-            return Excel::download(new PaymentReportExport($rows, $summary), $filename);
+            return Excel::download(new PaymentReportExport($export_data, $summary, $export_type), $filename);
         } catch (\Throwable $e) {
             return response()->json(['status' => 0, 'message' => $e->getMessage()], 500);
         }
