@@ -1213,19 +1213,19 @@ class CertificateController extends Controller
 
             $application = UserServiceApplication::findOrFail($request->application_id);
 
-            if (!empty($application->NOC_certificate)) {
-                return response()->json([
-                    'status'  => 1,
-                    'message' => 'Certificate already generated.',
-                    'data'    => ['certificate_url' => asset('storage/' . $application->NOC_certificate)],
-                ]);
+            if (!empty($application->NOC_certificate) && Storage::disk('public')->exists($application->NOC_certificate)) {
+                Storage::disk('public')->delete($application->NOC_certificate);
             }
 
             DB::beginTransaction();
 
+            $application_data = json_decode($application->application_data, true) ?? [];
+
             $certificateRequest = new Request([
-                'is_preview'     => 'no',
-                'application_id' => $request->application_id,
+                'is_preview'       => 'no',
+                'application_id'   => $request->application_id,
+                'add_watermark'    => $request->add_watermark ?? 'yes',
+                'application_data' => $application_data,
             ]);
 
             $response = $this->user_certificate_generate($certificateRequest);
