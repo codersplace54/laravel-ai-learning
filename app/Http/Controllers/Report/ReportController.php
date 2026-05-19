@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Report;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use App\Models\UserServiceApplication;
 use App\Models\ServiceMaster;
 use Carbon\Carbon;
@@ -39,6 +40,7 @@ class ReportController extends Controller
                 'page'               => 'nullable|integer',
             ]);
 
+            $user = Auth::user();
             $from_date          = $request->from_date;
             $to_date            = $request->to_date;
             $department_id      = $request->department_id;
@@ -59,7 +61,11 @@ class ReportController extends Controller
             $query->whereDate('application_date', '>=', $from_date)
                 ->whereDate('application_date', '<=', $to_date);
 
-            if (!empty($department_id)) {
+            if ($user && $user->user_type === 'department') {
+                $query->whereHas('service', function ($q) use ($user) {
+                    $q->where('department_id', $user->department_user->department_id ?? null);
+                });
+            } elseif (!empty($department_id)) {
                 $query->whereHas('service', function ($q) use ($department_id) {
                     $q->where('department_id', $department_id);
                 });
