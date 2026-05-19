@@ -412,6 +412,27 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
     });
 
     Route::post('get-application-tracking-details', [UserServiceApplicationController::class, 'get_application_tracking_details']);
+
+    Route::prefix('report')->group(function () {
+        Route::post('registration-renewal-granted', [ReportController::class, 'registration_renewal_granted']);
+        Route::post('online-single-windows', [ReportController::class, 'online_single_windows']);
+        Route::post('application-status', [ReportController::class, 'application_status']);
+        Route::post('department-user-list', [ReportController::class, 'department_user_list']);
+        Route::post('department-user-list-export', [ReportController::class, 'department_user_list_export']);
+        Route::post('approval-steps-list', [ReportController::class, 'approval_step_list']);
+        Route::post('user-list', [ReportController::class, 'user_list']);
+        Route::post('industry-report-summary', [ReportController::class, 'industry_report_summary']);
+        Route::post('industry-report-details', [ReportController::class, 'industry_report_details']);
+        Route::post('department-approvals', [ReportController::class, 'departmental_approvals']);
+        Route::post('cis-summary-report', [ReportController::class, 'cis_summary_report']);
+        Route::post('cis-details-report', [ReportController::class, 'cis_details_report']);
+        Route::post('inspection-summary-report', [ReportController::class, 'inspection_summary_report']);
+        Route::post('grievance-feedback-summary', [ReportController::class, 'grievance_feedback_summary']);
+        Route::post('payment-report', [ReportController::class, 'payment_report']);
+        Route::post('payment-report-export', [ReportController::class, 'payment_report_export']);
+        Route::post('update-third-party-report', [ReportController::class, 'update_third_party_report']);
+        Route::post('online-single-windows-report', [ReportController::class, 'online_single_windows_report']);
+    });
 });
 
 Route::post('department-get-all-departments', [DepartmentController::class, 'all_departments'])->name('department.all_departments');
@@ -423,24 +444,6 @@ Route::post('/tripura/get-block-names', [TripuraMasterDataController::class, 'ge
 Route::post('/tripura/get-gp-vc-wards', [TripuraMasterDataController::class, 'get_wards']);
 Route::post('/tripura/get-multiple-subdivisions', [TripuraMasterDataController::class, 'get__multiple_subdivisions']);
 Route::post('/tripura/get-multiple-block', [TripuraMasterDataController::class, 'get_multiple_ulbs']);
-
-Route::prefix('report')->group(function () {
-    Route::post('registration-renewal-granted', [ReportController::class, 'registration_renewal_granted']);
-    Route::post('online-single-windows', [ReportController::class, 'online_single_windows']);
-    Route::post('application-status', [ReportController::class, 'application_status']);
-    Route::post('department-user-list', [ReportController::class, 'department_user_list']);
-    Route::post('approval-steps-list', [ReportController::class, 'approval_step_list']);
-    Route::post('user-list', [ReportController::class, 'user_list']);
-    Route::post('industry-report-summary', [ReportController::class, 'industry_report_summary']);
-    Route::post('industry-report-details', [ReportController::class, 'industry_report_details']);
-    Route::post('department-approvals', [ReportController::class, 'departmental_approvals']);
-    Route::post('cis-summary-report', [ReportController::class, 'cis_summary_report']);
-    Route::post('cis-details-report', [ReportController::class, 'cis_details_report']);
-    Route::post('inspection-summary-report', [ReportController::class, 'inspection_summary_report']);
-    Route::post('grievance-feedback-summary', [ReportController::class, 'grievance_feedback_summary']);
-    Route::post('payment-report', [ReportController::class, 'payment_report']);
-    Route::post('payment-report-export', [ReportController::class, 'payment_report_export']);
-});
 
 Route::post('user-feedback-store', [UserFeedbackController::class, 'user_feedback_store']);
 Route::post('user-feedback-list', [UserFeedbackController::class, 'user_feedback_list']);
@@ -493,9 +496,6 @@ Route::post('investor-query-store', [InvestorQueryController::class, 'investor_q
 Route::post('previous-investor-query', [InvestorQueryController::class, 'get_previous_queries']);
 
 Route::post('government-orders-list', [GovernmentOrderController::class, 'government_orders_list']);
-
-Route::post('update-third-party-report', [ReportController::class, 'update_third_party_report']);
-Route::post('online-single-windows-report', [ReportController::class, 'online_single_windows_report']);
 
 Route::post('public-certificate-download', [CertificateController::class, 'public_certificate_download']);
 
