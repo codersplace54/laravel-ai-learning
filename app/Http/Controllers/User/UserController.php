@@ -1031,7 +1031,7 @@ class UserController extends Controller
 
             $sms_mobile_no = $mobile_no;
             if (str_contains($mobile_no, 'eeee')) {
-                $sms_mobile_no = '8730891796';
+                $sms_mobile_no = '7085534092';
             } elseif (str_contains($mobile_no, 'eee')) {
                 $sms_mobile_no = '7005367884';
             }
