@@ -22,6 +22,7 @@ use App\Models\SingleWindowReport;
 use App\Models\PaymentOrder;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\PaymentReportExport;
+use App\Exports\DepartmentUserListReportExport;
 
 class ReportController extends Controller
 {
@@ -33,6 +34,7 @@ class ReportController extends Controller
                 'to_date'            => 'required|date|after_or_equal:from_date',
                 'department_id'      => 'nullable|integer',
                 'application_status' => 'nullable|string',
+                'applicationId'      => 'nullable|string',
                 'per_page'           => 'nullable|integer',
                 'page'               => 'nullable|integer',
             ]);
@@ -41,6 +43,7 @@ class ReportController extends Controller
             $to_date            = $request->to_date;
             $department_id      = $request->department_id;
             $application_status = $request->application_status;
+            $applicationId      = $request->applicationId;
             $per_page           = $request->per_page ?? 15;
             $page               = $request->page ?? 1;
 
@@ -64,6 +67,10 @@ class ReportController extends Controller
 
             if (!empty($application_status)) {
                 $query->where('status', $application_status);
+            }
+
+            if (!empty($applicationId)) {
+                $query->where('applicationId', $applicationId);
             }
 
             $total = $query->count();
@@ -234,120 +241,27 @@ class ReportController extends Controller
                 'department_id' => 'nullable|integer|exists:departments,id',
                 'service_id'    => 'nullable|integer|exists:service_masters,id',
                 'approval_step' => 'nullable|string',
+                'per_page'      => 'nullable|integer',
+                'page'          => 'nullable|integer',
             ]);
 
-            $department_id = $request->department_id;
-            $service_id    = $request->service_id;
-            $approval_step = $request->approval_step;
+            $per_page = $request->per_page ?? 15;
+            $page     = $request->page ?? 1;
 
-            $hierarchy_levels = collect();
-
-            $department_user_query = DepartmentUser::with([
-                'department:id,name',
-                'user:id,user_name,authorized_person_name,name_of_enterprise,email_id,mobile_no',
-            ])
-                ->where('is_active', 1);
-
-            if (!empty($department_id)) {
-                $department_user_query->where('department_id', $department_id);
-            }
-
-            $flows = collect();
-
-            if (!empty($department_id) || !empty($service_id) || !empty($approval_step)) {
-                $flow_query = ServiceApprovalFlow::query();
-
-                if (!empty($department_id)) {
-                    $flow_query->where('department_id', $department_id);
-                }
-
-                if (!empty($service_id)) {
-                    $flow_query->where('service_id', $service_id);
-                }
-
-                if (!empty($approval_step)) {
-                    $flow_query->where('step_type', $approval_step);
-                }
-
-                $flows = $flow_query->get();
-
-                if ($flows->isEmpty()) {
-                    return response()->json([
-                        'status'  => 1,
-                        'message' => 'No record found.',
-                        'data'    => [],
-                    ]);
-                }
-
-                $hierarchy_levels    = $flows->pluck('hierarchy_level')->filter()->unique()->values();
-                $flow_department_ids = $flows->pluck('department_id')->filter()->unique()->values();
-
-                if (empty($department_id) && $flow_department_ids->isNotEmpty()) {
-                    $department_user_query->whereIn('department_id', $flow_department_ids);
-                }
-
-                if ($hierarchy_levels->isNotEmpty()) {
-                    $department_user_query->whereIn('hierarchy_level', $hierarchy_levels->all());
-                }
-            }
-
-            $department_users = $department_user_query
-                ->whereHas('user')
-                ->whereIn('id', function ($q) {
-                    $q->selectRaw('MAX(id)')
-                        ->from('department_users')
-                        ->where('is_active', 1)
-                        ->groupBy('user_id');
-                })
-                ->orderBy('id', 'asc')
-                ->get();
-
-            if ($department_users->isEmpty()) {
-                return response()->json([
-                    'status'  => 1,
-                    'message' => 'No record found.',
-                    'data'    => [],
-                ]);
-            }
-
-            $service_label = null;
-
-            if (!empty($service_id)) {
-                $service = ServiceMaster::select('id', 'service_title_or_description')
-                    ->find($service_id);
-
-                if ($service) {
-                    $service_label = $service->service_title_or_description;
-                }
-            }
-
-            $rows = $department_users->map(function ($department_user) use ($service_label) {
-                $department = $department_user->department;
-                $user       = $department_user->user;
-
-                $name = null;
-                if ($user) {
-                    $name = $user->authorized_person_name ?: $user->name_of_enterprise;
-                }
-
-                return [
-                    'department_name'    => $department ? $department->name : null,
-                    'role'               => $service_label,
-                    'user_name'          => $user ? $user->user_name : null,
-                    'name'               => $name,
-                    'designation'        => $department_user->designation,
-                    'email_id'           => $user ? $user->email_id : null,
-                    'mobile_number'      => $user ? $user->mobile_no : null,
-                    'date_of_assignment' => $department_user->created_at
-                        ? $department_user->created_at->format('Y-m-d')
-                        : null,
-                ];
-            });
+            $rows = $this->get_department_user_list_data($request);
+            $total = count($rows);
+            $paged_rows = array_slice($rows, ($page - 1) * $per_page, $per_page);
 
             return response()->json([
                 'status'  => 1,
                 'message' => 'Department user list.',
-                'data'    => $rows,
+                'data'    => $paged_rows,
+                'pagination' => [
+                    'total'        => $total,
+                    'per_page'     => $per_page,
+                    'current_page' => $page,
+                    'last_page'    => ceil($total / $per_page),
+                ],
             ]);
         } catch (\Throwable $e) {
             return response()->json([
@@ -355,6 +269,138 @@ class ReportController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function department_user_list_export(Request $request)
+    {
+        try {
+            $request->validate([
+                'department_id' => 'nullable|integer|exists:departments,id',
+                'service_id'    => 'nullable|integer|exists:service_masters,id',
+                'approval_step' => 'nullable|string',
+            ]);
+
+            $rows = $this->get_department_user_list_data($request);
+
+            if (empty($rows)) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => 'No record found.',
+                    'data'    => [],
+                ]);
+            }
+
+            $filename = 'department_user_list_' . now()->format('Y_m_d_His') . '.xlsx';
+            return Excel::download(new DepartmentUserListReportExport($rows), $filename);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function get_department_user_list_data(Request $request): array
+    {
+        $department_id = $request->department_id;
+        $service_id    = $request->service_id;
+        $approval_step = $request->approval_step;
+
+        $hierarchy_levels = collect();
+
+        $department_user_query = DepartmentUser::with([
+            'department:id,name',
+            'user:id,user_name,authorized_person_name,name_of_enterprise,email_id,mobile_no',
+        ])
+            ->where('is_active', 1);
+
+        if (!empty($department_id)) {
+            $department_user_query->where('department_id', $department_id);
+        }
+
+        $flows = collect();
+
+        if (!empty($department_id) || !empty($service_id) || !empty($approval_step)) {
+            $flow_query = ServiceApprovalFlow::query();
+
+            if (!empty($department_id)) {
+                $flow_query->where('department_id', $department_id);
+            }
+
+            if (!empty($service_id)) {
+                $flow_query->where('service_id', $service_id);
+            }
+
+            if (!empty($approval_step)) {
+                $flow_query->where('step_type', $approval_step);
+            }
+
+            $flows = $flow_query->get();
+
+            if ($flows->isEmpty()) {
+                return [];
+            }
+
+            $hierarchy_levels    = $flows->pluck('hierarchy_level')->filter()->unique()->values();
+            $flow_department_ids = $flows->pluck('department_id')->filter()->unique()->values();
+
+            if (empty($department_id) && $flow_department_ids->isNotEmpty()) {
+                $department_user_query->whereIn('department_id', $flow_department_ids);
+            }
+
+            if ($hierarchy_levels->isNotEmpty()) {
+                $department_user_query->whereIn('hierarchy_level', $hierarchy_levels->all());
+            }
+        }
+
+        $department_users = $department_user_query
+            ->whereHas('user')
+            ->whereIn('id', function ($q) {
+                $q->selectRaw('MAX(id)')
+                    ->from('department_users')
+                    ->where('is_active', 1)
+                    ->groupBy('user_id');
+            })
+            ->orderBy('id', 'asc')
+            ->get();
+
+        if ($department_users->isEmpty()) {
+            return [];
+        }
+
+        $service_label = null;
+
+        if (!empty($service_id)) {
+            $service = ServiceMaster::select('id', 'service_title_or_description')
+                ->find($service_id);
+
+            if ($service) {
+                $service_label = $service->service_title_or_description;
+            }
+        }
+
+        return $department_users->map(function ($department_user) use ($service_label) {
+            $department = $department_user->department;
+            $user       = $department_user->user;
+
+            $name = null;
+            if ($user) {
+                $name = $user->authorized_person_name ?: $user->name_of_enterprise;
+            }
+
+            return [
+                'department_name'    => $department ? $department->name : null,
+                'role'               => $service_label,
+                'user_name'          => $user ? $user->user_name : null,
+                'name'               => $name,
+                'designation'        => $department_user->designation,
+                'email_id'           => $user ? $user->email_id : null,
+                'mobile_number'      => $user ? $user->mobile_no : null,
+                'date_of_assignment' => $department_user->created_at
+                    ? $department_user->created_at->format('Y-m-d')
+                    : null,
+            ];
+        })->toArray();
     }
 
     public function industry_report_summary(Request $request)
@@ -389,11 +435,11 @@ class ReportController extends Controller
             });
 
             if (!empty($district_id)) {
-                $user_query->where('district_code', $district_id);
+                $user_query->where('district_id', $district_id);
             }
 
             if (!empty($sub_division_id)) {
-                $user_query->where('sub_lgd_code', $sub_division_id);
+                $user_query->where('subdivision_id', $sub_division_id);
             }
 
             $user_ids = $user_query->pluck('id')->unique()->values();
