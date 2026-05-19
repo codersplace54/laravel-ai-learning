@@ -4028,16 +4028,17 @@ class UserServiceApplicationController extends Controller
             }
 
             $request->validate([
-                'applicationId' => 'nullable|string|exists:user_service_applications,applicationId',
-                'application_id' => 'nullable|string|exists:user_service_applications,id',
+                'applicationId' => 'required',
             ]);
 
+            $search_value = $request->application_id;
+
             $app = UserServiceApplication::with(['service.department', 'workflow.actionTaker', 'workflow.department'])
-                ->when($request->applicationId, function ($query) use ($request) {
-                    return $query->where('applicationId', $request->applicationId);
-                })
-                ->when($request->application_id, function ($query) use ($request) {
-                    return $query->where('id', $request->application_id);
+                ->where(function ($query) use ($search_value) {
+                    if (is_numeric($search_value)) {
+                        $query->orWhere('id', $search_value);
+                    }
+                    $query->orWhere('applicationId', $search_value);
                 })
                 ->first();
 
