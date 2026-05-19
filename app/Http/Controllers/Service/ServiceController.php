@@ -462,10 +462,14 @@ class ServiceController extends Controller
         try {
 
 
+            $per_page = $request->per_page ?? 10;
+
             $request->validate([
-                'department_id'   => 'required|integer|exists:departments,id',
-                'status'          => 'nullable|in:submitted,under_review,approved,rejected,saved,extra_payment,re_submitted,send_back,noc_issued',
-                'service_id'      => 'nullable|integer|exists:service_masters,id',
+                'department_id'     => 'required|array',
+                'department_id.*'   => 'required|integer|exists:departments,id',
+                'status'            => 'nullable|in:submitted,under_review,approved,rejected,saved,extra_payment,re_submitted,send_back,noc_issued',
+                'service_id'        => 'nullable|array',
+                'service_id.*'      => 'nullable|integer|exists:service_masters,id',
                 'applicant_name'  => 'nullable|string',
                 'applicant_phone' => 'nullable|string',
                 'date_from'       => 'nullable|date',
@@ -476,7 +480,11 @@ class ServiceController extends Controller
             $data = UserServiceApplication::with(['service', 'user', 'latestWorkflow'])
                 ->where('status', '!=', 'draft')
                 ->whereHas('service', function ($service) use ($request) {
-                    $service->where('department_id', $request->department_id);
+                    $service->whereIn('department_id', $request->department_id);
+
+                    if ($request->filled('service_id')) {
+                        $service->whereIn('service_id', $request->service_id);
+                    }
                 });
 
             if ($request->filled('search')) {
@@ -505,10 +513,6 @@ class ServiceController extends Controller
                 });
             }
 
-            if ($request->filled('service_id')) {
-                $data->where('service_id', $request->service_id);
-            }
-
             if ($request->filled('district_id')) {
                 $data->whereHas('user', function ($q) use ($request) {
                     $q->where('district_id', $request->district_id);
@@ -529,46 +533,56 @@ class ServiceController extends Controller
                 $data->whereDate('application_date', '<=', $request->date_to);
             }
 
-            $data = $data->orderByDesc('id');
-            $applications_data = $data->get();
-            $application_ids = $applications_data->pluck('id')->toArray();
+            $applications_data = $data
+                ->orderByDesc('id')
+                ->paginate($per_page);
+            $application_ids = collect($applications_data->items())->pluck('id')->toArray();
             $payment_map = $this->payment_map_for_applications($application_ids);
 
-            $applications = $applications_data->map(function ($application) use ($payment_map) {
-                return [
-                    'application_id'      => $application->id,
-                    'application_number'  => $application->applicationId,
-                    'service_name'        => $application->service->service_title_or_description,
-                    'applicant_name'      => optional($application->user)->authorized_person_name,
-                    'name_of_enterprise'  => optional($application->user)->name_of_enterprise,
-                    'applicant_phone'     => $application->user->mobile_no,
-                    'status'              => $application->status,
-                    'submission_date'     => $application->application_date,
-                    'final_fee'           => $application->final_fee,
-                    'extra_payment'       => $application->extra_payment ?? 0,
-                    'total_fee'           => $application->total_fee  ?? 0,
-                    'payment_status'      => $application->payment_status,
-                    'current_step_number' => $application->current_step_number,
-                    'max_processing_date' => $application->max_processing_date,
-                    'district_code'   => $application->user->district->district_code ?? null,
-                    'district_name' => $application->user->district->district_name ?? null,
-                    'subdivision_code'   => $application->user->subdivision->sub_lgd_code ?? null,
-                    'subdivision_name' =>  $application->user->subdivision->sub_division ?? null,
-                    'ulb_code'   => $application->user->ulb->ulb_lgd_code ?? null,
-                    'ulb_name' => $application->user->ulb->ulb_name ?? null,
-                    'ward_code'   => $application->user->ward->gp_vc_ward_lgd_code ?? null,
-                    'ward_name' => $application->user->ward->name_of_gp_vc_or_ward ?? null,
-                    'hierarchy_level'     => $application->latestWorkflow->hierarchy_level ?? null,
-                    'payment_details'     => $payment_map[$application->id] ?? [],
-                    'renewal' => $application->renewal === 'yes' ? 'YES' : 'NO',
-                    'previous_application_id' => $application->previous_application_id,
-                ];
-            });
+            $applications = collect($applications_data->items())
+                ->map(function ($application) use ($payment_map) {
+                    return [
+                        'application_id'      => $application->id,
+                        'application_number'  => $application->applicationId,
+                        'service_name'        => $application->service->service_title_or_description,
+                        'applicant_name'      => optional($application->user)->authorized_person_name,
+                        'name_of_enterprise'  => optional($application->user)->name_of_enterprise,
+                        'applicant_phone'     => $application->user->mobile_no,
+                        'status'              => $application->status,
+                        'submission_date'     => $application->application_date,
+                        'final_fee'           => $application->final_fee,
+                        'extra_payment'       => $application->extra_payment ?? 0,
+                        'total_fee'           => $application->total_fee  ?? 0,
+                        'payment_status'      => $application->payment_status,
+                        'current_step_number' => $application->current_step_number,
+                        'max_processing_date' => $application->max_processing_date,
+                        'district_code'   => $application->user->district->district_code ?? null,
+                        'district_name' => $application->user->district->district_name ?? null,
+                        'subdivision_code'   => $application->user->subdivision->sub_lgd_code ?? null,
+                        'subdivision_name' =>  $application->user->subdivision->sub_division ?? null,
+                        'ulb_code'   => $application->user->ulb->ulb_lgd_code ?? null,
+                        'ulb_name' => $application->user->ulb->ulb_name ?? null,
+                        'ward_code'   => $application->user->ward->gp_vc_ward_lgd_code ?? null,
+                        'ward_name' => $application->user->ward->name_of_gp_vc_or_ward ?? null,
+                        'hierarchy_level'     => $application->latestWorkflow->hierarchy_level ?? null,
+                        'payment_details'     => $payment_map[$application->id] ?? [],
+                        'renewal' => $application->renewal === 'yes' ? 'YES' : 'NO',
+                        'previous_application_id' => $application->previous_application_id,
+                    ];
+                });
 
             return response()->json([
                 'status' => 1,
                 'message' => 'List of applications assigned to the department fetched successfully.',
-                'data'    => $applications
+                'data'    => $applications,
+                'pagination' => [
+                    'current_page' => $applications_data->currentPage(),
+                    'last_page'    => $applications_data->lastPage(),
+                    'per_page'     => $applications_data->count(),
+                    'total'        => $applications_data->total(),
+                    'next_page_url' => $applications_data->nextPageUrl(),
+                    'prev_page_url' => $applications_data->previousPageUrl(),
+                ]
             ], 200);
         } catch (\Exception $e) {
 

@@ -418,7 +418,7 @@ class AuthController extends Controller
             if ($user_otp->code !== $otp_code) {
 
                 $user_otp->recordFailedAttempt();
-                
+
                 $remaining = Otp::MAX_FAILED_ATTEMPTS - $user_otp->fresh()->failed_attempts;
 
                 DB::commit();
@@ -505,7 +505,7 @@ class AuthController extends Controller
             $sms_mobile_no = $mobile_no;
             if (!preg_match('/[A-Za-z]/', $cleaned_phone_or_pan)) {
                 if (str_contains($phone_or_pan, 'eeee')) {
-                    $sms_mobile_no = '8730891796';
+                    $sms_mobile_no = '7085534092';
                 } elseif (str_contains($phone_or_pan, 'eee')) {
                     $sms_mobile_no = '7005367884';
                 }
@@ -1058,7 +1058,7 @@ class AuthController extends Controller
         }
     }
 
-    //For external portals 
+    //For external portals
     public function external_send_otp(Request $request)
     {
         try {
