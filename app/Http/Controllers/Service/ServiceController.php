@@ -465,8 +465,8 @@ class ServiceController extends Controller
             $per_page = $request->per_page ?? 10;
 
             $request->validate([
-                'department_id'     => 'required|array',
-                'department_id.*'   => 'required|integer|exists:departments,id',
+                'department_id'     => 'nullable|array',
+                'department_id.*'   => 'nullable|integer|exists:departments,id',
                 'status'            => 'nullable|in:submitted,under_review,approved,rejected,saved,extra_payment,re_submitted,send_back,noc_issued',
                 'service_id'        => 'nullable|array',
                 'service_id.*'      => 'nullable|integer|exists:service_masters,id',
@@ -480,7 +480,10 @@ class ServiceController extends Controller
             $data = UserServiceApplication::with(['service', 'user', 'latestWorkflow'])
                 ->where('status', '!=', 'draft')
                 ->whereHas('service', function ($service) use ($request) {
-                    $service->whereIn('department_id', $request->department_id);
+
+                    if ($request->filled('department_id')) {
+                        $service->whereIn('department_id', $request->department_id);
+                    }
 
                     if ($request->filled('service_id')) {
                         $service->whereIn('service_id', $request->service_id);
