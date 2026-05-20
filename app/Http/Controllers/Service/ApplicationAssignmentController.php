@@ -414,7 +414,7 @@ class ApplicationAssignmentController extends Controller
 
             $request->validate([
                 'application_id'  => 'required|exists:user_service_applications,id',
-                'applicationId'   => 'nullable|string|max:255|unique:user_service_applications,applicationId',
+                'applicationId'   => 'nullable|string|max:255|unique:user_service_applications,applicationId,' . $request->application_id . ',id',
                 'status'          => 'nullable|in:draft,submitted,under_review,approved,rejected,saved,extra_payment,re_submitted,send_back,noc_issued',
                 'payment_status'  => 'nullable|in:pending,paid,failed',
                 'current_step_number' => 'nullable|integer|min:1',
@@ -423,7 +423,7 @@ class ApplicationAssignmentController extends Controller
                 'GRN_number'      => 'nullable|string|max:255',
             ]);
 
-            $application = UserServiceApplication::where('id', $request->application_id)->first();
+            $application = UserServiceApplication::where('id',$request->application_id)->first();
 
             $old_values = [
                 'applicationId'       => $application->applicationId,
