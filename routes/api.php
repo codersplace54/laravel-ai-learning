@@ -358,6 +358,7 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('/preview-certificate/{application_id}', [ServiceController::class, 'preview_certificate']);
         Route::post('get-user-approved-applications', [ServiceController::class, 'get_user_approved_applications']);
         Route::post('get-user-previous-applications', [ServiceController::class, 'get_user_previous_applications']);
+        Route::post('get-departments-services', [ServiceMasterController::class, 'get_departments_services']);
 
         Route::post('certificate-variables-list',  [CertificateController::class, 'certificate_variables_list']);
         Route::post('user-certificate-view',  [CertificateController::class, 'user_certificate_view']);
