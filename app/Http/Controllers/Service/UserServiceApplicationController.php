@@ -4054,7 +4054,7 @@ class UserServiceApplicationController extends Controller
                 'applicationId' => 'required',
             ]);
 
-            $search_value = $request->application_id;
+            $search_value = $request->applicationId;
 
             $app = UserServiceApplication::with(['service.department', 'workflow.actionTaker', 'workflow.department'])
                 ->where(function ($query) use ($search_value) {
