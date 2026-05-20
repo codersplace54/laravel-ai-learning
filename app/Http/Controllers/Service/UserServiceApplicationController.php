@@ -3201,6 +3201,19 @@ class UserServiceApplicationController extends Controller
             $renewal_cycle   = RenewalCycle::find($request->renewal_cycle_id);
 
             $old_data = json_decode($old_application->application_data, true) ?? [];
+            $labour_deposit = LabourDeposit::where('application_id', $old_application->id)->first();
+
+            if ($labour_deposit) {
+
+                $old_data['882'] = $labour_deposit->no_of_contract_labour
+                    ?? $labour_deposit->old_no_of_contract_labour
+                    ?? ($old_data['882'] ?? 0);
+
+                $old_data['883'] = $labour_deposit->no_of_ismw_labour
+                    ?? $labour_deposit->old_no_of_ismw_labour
+                    ?? ($old_data['883'] ?? 0);
+            }
+
             $new_data = $request->input('application_data', []);
 
             $final_data = $old_data;
@@ -3211,6 +3224,7 @@ class UserServiceApplicationController extends Controller
             $data_changed = ($old_data != $final_data);
 
             $status = $data_changed ? "saved" : "approved";
+            $payment_status = "pending";
 
             $calculated_fee = $this->calculate_renewal_final_fee(
                 $old_application->service_id,
@@ -3219,6 +3233,15 @@ class UserServiceApplicationController extends Controller
                 $renewal_cycle,
                 $request->renewal_cycle_id
             );
+
+            if ((float) $calculated_fee['renewal_fee'] == 0) {
+                if (!$data_changed) {
+                    $status = "approved";
+                } else {
+                    $status = "re_submitted";
+                }
+                $payment_status = "paid";
+            }
 
             $late_fee = $calculated_fee['late_fee'];
             $service = $old_application->service;
@@ -3242,7 +3265,7 @@ class UserServiceApplicationController extends Controller
             }
 
 
-            if ($status == "saved") {
+            if ($status == "saved" || $status == "re_submitted" ) {
                 $current_step_number = 1;
                 $noc_certificate = null;
             } elseif ($status == "approved") {
@@ -3273,7 +3296,7 @@ class UserServiceApplicationController extends Controller
                 'final_fee'               => $calculated_fee['renewal_fee'],
                 'effective_fee'           => 0,
                 'paid_amount'             => 0,
-                'payment_status'          => 'pending',
+                'payment_status'          => $payment_status,
                 'status'                  => $status,
                 'payment_time'            => null,
                 'NOC_expiry_date'         => $noc_expiry_date,

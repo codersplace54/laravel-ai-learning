@@ -1063,4 +1063,34 @@ class ServiceMasterController extends Controller
             ], 500);
         }
     }
+
+    public function get_departments_services(Request $request)
+    {
+
+        try {
+
+            $request->validate([
+                'department_id' => 'required|array|min:1',
+                'department_id.*' => 'integer|exists:departments,id',
+            ]);
+
+            $services = ServiceMaster::whereIn('department_id', $request->department_id)
+                ->where('status', 1)
+                ->select('id','department_id', 'service_title_or_description')
+                ->get();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Services list fetched successfully.',
+                'data' => $services
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong while fetching services.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
