@@ -423,7 +423,7 @@ class UnitDetailController extends Controller
             ]);
 
 
-            $unitDetails = UnitDetail::where('user_id', $request->user_id)->first();
+            $unit_details = UnitDetail::with(['district', 'subdivision'])->where('user_id', $request->user_id)->first();
             $user_units = UserUnit::with([
                 'district',
                 'subdivision',
@@ -452,7 +452,7 @@ class UnitDetailController extends Controller
                     ];
                 });
 
-            if (!$unitDetails) {
+            if (!$unit_details) {
 
 
                 return response()->json([
@@ -461,12 +461,15 @@ class UnitDetailController extends Controller
                 ], 404);
             }
 
+            $unit_details->unit_location_district = $unit_details->district->district_name ?? $unit_details->unit_location_district;
+            $unit_details->unit_location_subdivision = $unit_details->subdivision->sub_division ?? $unit_details->unit_location_subdivision;
+
             return response()->json([
 
 
                 'status' => 1,
                 'message' => 'Unit details fetched successfully.',
-                'data' => $unitDetails,
+                'data' => $unit_details,
                 'multiple_units'  => $user_units,
             ], 200);
         } catch (\Exception $e) {
