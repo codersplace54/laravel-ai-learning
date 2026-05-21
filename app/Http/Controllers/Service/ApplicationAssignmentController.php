@@ -126,7 +126,7 @@ class ApplicationAssignmentController extends Controller
                 $last_pending_history->update([
                     'status'          => $request->status,
                     'remarks'         => $request->remarks,
-                    'action_taken_by' => $request->action_taken_by ?? Auth::id(),
+                    'action_taken_by' => $request->action_taken_by,
                     'action_taken_at' => now(),
                 ]);
             }
@@ -140,7 +140,7 @@ class ApplicationAssignmentController extends Controller
                 'hierarchy_level' => $request->hierarchy_level,
                 'status'          => $request->status,
                 'remarks'         => $request->remarks,
-                'action_taken_by' => $request->action_taken_by ?? Auth::id(),
+                'action_taken_by' => $request->action_taken_by,
                 'action_taken_at' => now(),
             ]);
 
@@ -152,7 +152,7 @@ class ApplicationAssignmentController extends Controller
                 'department_id'   => $request->department_id,
                 'hierarchy_level' => $request->hierarchy_level,
                 'status'          => $request->status,
-                'action_taken_by' => $request->action_taken_by ?? Auth::id(),
+                'action_taken_by' => $request->action_taken_by,
                 'action_taken_at' => now(),
                 'remarks'         => $request->remarks,
             ]);
@@ -257,7 +257,7 @@ class ApplicationAssignmentController extends Controller
             $new_hierarchy_level = $request->hierarchy_level ?? $assignment->hierarchy_level;
             $new_status          = $request->status ?? $assignment->status;
             $new_remarks         = $request->remarks ?? $assignment->remarks;
-            $new_action_taken_by = $request->action_taken_by ?? Auth::id();
+            $new_action_taken_by = $request->has('action_taken_by') ? $request->action_taken_by : $assignment->action_taken_by;
 
             $assignment->update([
                 'step_number'     => $new_step_number,
