@@ -2730,14 +2730,26 @@ class UserServiceApplicationController extends Controller
             $previous_paid = (float) ($application->paid_amount ?? 0);
             $final_paid_amount = $previous_paid + $current_payment;
 
+            $status = $application->current_step_number == 0 ? 'approved' : 'submitted';
+
             if ($is_extra_payment) {
                 $status = 're_submitted';
             } elseif ($previous_paid > 0) {
                 $status = 're_submitted';
             } elseif ($application->previous_application_id != null) {
-                $status = 're_submitted';
-            } else {
-                $status = $application->current_step_number == 0 ? 'approved' : 'submitted';
+
+                $old_application = UserServiceApplication::find($application->previous_application_id);
+
+                $old_data = json_decode($old_application->application_data, true);
+                $new_data = json_decode($application->application_data, true) ?? [];
+
+                $data_changed = empty($old_data) ? true : ($old_data != $new_data);
+
+                $status = $data_changed ? 're_submitted' : 'noc_issued';
+
+                if ($status == "noc_issued") {
+                    app(CertificateController::class)->auto_generate_certificate($application);
+                }
             }
 
             $application->update([
@@ -3203,30 +3215,32 @@ class UserServiceApplicationController extends Controller
             $renewal_cycle   = RenewalCycle::find($request->renewal_cycle_id);
 
             $old_data = json_decode($old_application->application_data, true) ?? [];
-            $labour_deposit = LabourDeposit::where('application_id', $old_application->id)->first();
+            // $labour_deposit = LabourDeposit::where('application_id', $old_application->id)->first();
 
-            if ($labour_deposit) {
+            // if ($labour_deposit) {
 
-                $old_data['882'] = $labour_deposit->no_of_contract_labour
-                    ?? $labour_deposit->old_no_of_contract_labour
-                    ?? ($old_data['882'] ?? 0);
+            //     $old_data['882'] = $labour_deposit->no_of_contract_labour
+            //         ?? $labour_deposit->old_no_of_contract_labour
+            //         ?? ($old_data['882'] ?? 0);
 
-                $old_data['883'] = $labour_deposit->no_of_ismw_labour
-                    ?? $labour_deposit->old_no_of_ismw_labour
-                    ?? ($old_data['883'] ?? 0);
-            }
+            //     $old_data['883'] = $labour_deposit->no_of_ismw_labour
+            //         ?? $labour_deposit->old_no_of_ismw_labour
+            //         ?? ($old_data['883'] ?? 0);
+            // }
 
             $new_data = $request->input('application_data', []);
+            $final_data = $old_data ?? [];
 
             $final_data = $old_data;
             foreach ($new_data as $key => $value) {
                 $final_data[(string)$key] = $value;
             }
 
-            $data_changed = ($old_data != $final_data);
+            foreach ($new_data as $key => $value) {
+                $final_data[(string)$key] = $value;
+            }
 
-            $status = $data_changed ? "saved" : "approved";
-            $payment_status = "pending";
+            $data_changed = empty($old_data) ? true : ($old_data != $final_data);
 
             $calculated_fee = $this->calculate_renewal_final_fee(
                 $old_application->service_id,
@@ -3236,13 +3250,20 @@ class UserServiceApplicationController extends Controller
                 $request->renewal_cycle_id
             );
 
-            if ((float) $calculated_fee['renewal_fee'] == 0) {
-                if (!$data_changed) {
-                    $status = "approved";
-                } else {
-                    $status = "re_submitted";
-                }
+            $renewal_fee = (float) $calculated_fee['renewal_fee'];
+
+            if ($renewal_fee > 0) {
+
+                $status = "saved";
+                $payment_status = "pending";
+            } else {
+
                 $payment_status = "paid";
+                if ($data_changed) {
+                    $status = "re_submitted";
+                } else {
+                    $status = "approved";
+                }
             }
 
             $late_fee = $calculated_fee['late_fee'];
@@ -3267,11 +3288,9 @@ class UserServiceApplicationController extends Controller
             }
 
 
-            if ($status == "saved" || $status == "re_submitted" ) {
+            if ($status == "saved" || $status == "re_submitted") {
                 $current_step_number = 1;
-                $noc_certificate = null;
             } elseif ($status == "approved") {
-                $noc_certificate = $old_application->NOC_certificate;
                 $current_step_number = $old_application->current_step_number;
             }
 
@@ -3281,6 +3300,10 @@ class UserServiceApplicationController extends Controller
 
             $latest_assignment = ApplicationWorkflowAssignment::where('application_id', $old_application->id)
                 ->orderByDesc('id')
+                ->first();
+
+            $last_approval_step = ServiceApprovalFlow::where('service_id', $old_application->service_id)
+                ->orderBy('step_number', 'desc')
                 ->first();
 
             $new_application = UserServiceApplication::create([
@@ -3301,11 +3324,15 @@ class UserServiceApplicationController extends Controller
                 'payment_status'          => $payment_status,
                 'status'                  => $status,
                 'payment_time'            => null,
-                'NOC_expiry_date'         => $noc_expiry_date,
-                'NOC_certificate'         => $noc_certificate,
+                'NOC_expiry_date'         => null,
+                'NOC_certificate'         => null,
                 'max_processing_date'     => $old_application->max_processing_date,
                 'current_step_number'     => $current_step_number,
             ]);
+
+            if ($status == "approved") {
+                app(CertificateController::class)->auto_generate_certificate($new_application);
+            }
 
             $application_number = $this->generate_application_number($service->id, $new_application->id);
 
@@ -3332,7 +3359,7 @@ class UserServiceApplicationController extends Controller
                 'renewal_fee' => $calculated_fee['renewal_fee'],
             ], 'Application renewal');
 
-            if ($status == "re_submitted") {
+            if ($data_changed) {
                 ApplicationWorkflowAssignment::create([
                     'application_id'     => $new_application->id,
                     'service_id'         => $old_application->service_id,
@@ -3346,19 +3373,19 @@ class UserServiceApplicationController extends Controller
                     'action_taken_at'    => null,
                     'remarks'            => null,
                 ]);
-            } elseif ($status == "approved") {
+            } else {
                 ApplicationWorkflowAssignment::create([
                     'application_id'     => $new_application->id,
                     'service_id'         => $old_application->service_id,
-                    'step_number'        => $latest_assignment->step_number ?? null,
-                    'step_type'          => $latest_assignment->step_type ?? null,
-                    'department_id'      => $latest_assignment->department_id ?? null,
-                    'hierarchy_level'    => $latest_assignment->hierarchy_level ?? null,
+                    'step_number'        => $latest_assignment->step_number ?? $last_approval_step->step_number,
+                    'step_type'          => $latest_assignment->step_type ?? $last_approval_step->step_type,
+                    'department_id'      => $latest_assignment->department_id ?? $last_approval_step->department_id,
+                    'hierarchy_level'    => $latest_assignment->hierarchy_level ?? $last_approval_step->hierarchy_level,
                     'assigned_to_group'  => true,
-                    'status'             => $latest_assignment->status,
-                    'action_taken_by'    => $latest_assignment->action_taken_by,
-                    'action_taken_at'    => $latest_assignment->action_taken_at,
-                    'remarks'            => $latest_assignment->remarks,
+                    'status'             => $latest_assignment->status ?? 'approved',
+                    'action_taken_by'    => $latest_assignment->action_taken_by ?? null,
+                    'action_taken_at'    => $latest_assignment->action_taken_at ?? null,
+                    'remarks'            => $latest_assignment->remarks ?? null,
                 ]);
             }
 
