@@ -2135,6 +2135,7 @@ class UserServiceApplicationController extends Controller
                 'application_date'     => 'nullable|date',
                 'updation_date'        => 'nullable|date',
                 'egras_account_head'   => 'nullable|string|max:255',
+                'external_payment_link' => 'nullable|string',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -2183,6 +2184,7 @@ class UserServiceApplicationController extends Controller
 
                     'external_status'              => $status,
                     'external_payment_status'      => $normalized_payment_status ?? $data->external_payment_status,
+                    'external_payment_link'        => $request->external_payment_link ?? $data->external_payment_link,
                     'external_max_processing_date' => $max_processing_date ?? $data->external_max_processing_date,
                     'external_noc_number'          => $noc_number ?? $data->external_noc_number,
                     'external_valid_till'          => $noc_valid_till ?? $data->external_valid_till,
@@ -2209,6 +2211,7 @@ class UserServiceApplicationController extends Controller
 
                     'external_status'              => $status,
                     'external_payment_status'      => $normalized_payment_status ?? 'pending',
+                    'external_payment_link'        => $request->external_payment_link,
                     'external_max_processing_date' => $max_processing_date,
                     'external_noc_number'          => $noc_number,
                     'external_valid_till'          => $noc_valid_till,
