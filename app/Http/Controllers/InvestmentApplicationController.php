@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\InvestmentApplication;
 use App\Models\DepartmentUser;
 use App\Jobs\SendWhatsAppNotification;
+use App\Services\SmsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -87,6 +88,10 @@ class InvestmentApplicationController extends Controller
             if ($phone) {
                 SendWhatsAppNotification::dispatch($phone, 'investor_application_received_v1', [$application->query_id]);
             }
+
+            $template = config('sms_templates.investor_application_received');
+            $message = str_replace('{REQUEST_ID}', $application->query_id, $template['message']);
+            SmsService::send($user->mobile_no, $message, $template['template_id']);
 
             return response()->json([
                 'status'  => 1,
@@ -309,6 +314,10 @@ class InvestmentApplicationController extends Controller
                     $request->remark ?? 'No remark provided',
                 ]);
             }
+
+            $template = config('sms_templates.investor_application_update');
+            $message = str_replace('{REQUEST_ID}', $application->query_id, $template['message']);
+            SmsService::send($application->user->mobile_no, $message, $template['template_id']);
 
             return response()->json(['status' => 1, 'message' => 'Status updated successfully', 'data' => $application->fresh()], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
