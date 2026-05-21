@@ -58,6 +58,7 @@ class UserServiceApplication extends Model
         'external_application_id',
         'external_status',
         'external_payment_status',
+        'external_payment_link',
         'external_max_processing_date',
         'external_noc_number',
         'external_valid_till',

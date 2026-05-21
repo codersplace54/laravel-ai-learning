@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\UserServiceApplication;
+use App\Jobs\SendDeptNotificationSms;
 use Illuminate\Support\Facades\Auth;
 
 class ServiceApplicationStatusChangeObserver
@@ -30,6 +31,18 @@ class ServiceApplicationStatusChangeObserver
 
     public function updating(UserServiceApplication $application)
     {
+        if ($application->isDirty('payment_status')) {
+            $old_payment_status = $application->getOriginal('payment_status');
+            $new_payment_status = $application->payment_status;
+            
+            if ($old_payment_status !== 'paid' && $new_payment_status === 'paid') {
+                SendDeptNotificationSms::dispatch(
+                    $application->id,
+                    $application->applicationId
+                );
+            }
+        }
+
         if ($application->isDirty('status')) {
             $old_status = $application->getOriginal('status');
             $new_status = $application->status;

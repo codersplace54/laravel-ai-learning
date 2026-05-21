@@ -30,4 +30,19 @@ return [
         'template_id' => '1007860856268153586',
         'message' => 'Dear Applicant, your OTP for registration is {#var#}. Use this access code to validate your registration in www.swaagat.tripura.gov.in.',
     ],
+
+    'dept_notification' => [
+        'template_id' => '1007223765503650760',
+        'message' => 'Sir/Madam, a new application with ID {APPLICATION_NUMBER} has been submitted on SWAAGAT portal. Please login to your department account to process the application. - Regards, SWAAGAT Team',
+    ],
+
+    'investor_application_received' => [
+        'template_id' => '1007875404892833507',
+        'message' => 'Dear User, Thank you for expressing your interest in investing in Tripura. Your Request ID {REQUEST_ID} has been received and will be processed shortly. We will update you once it has been processed by the department. You can track the status on the SWAAGAT portal. - Thanks & Regards, SWAAGAT Team',
+    ],
+
+    'investor_application_update' => [
+        'template_id' => '1007853602739666426',
+        'message' => 'Dear User, your have received a response from the departmental officials against your Request ID {REQUEST_ID}. Please login to SWAAGAT Portal to find the details. - Thanks & Regards, SWAAGAT Team',
+    ],
 ];
