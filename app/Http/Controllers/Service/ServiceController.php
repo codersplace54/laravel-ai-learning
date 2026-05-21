@@ -754,18 +754,28 @@ class ServiceController extends Controller
                 'extra_payment'        => $application->extra_payment ?? 0,
                 'total_fee'         => $application->total_fee ?? 0,
                 'payment_status'   => $application->payment_status,
-                'workflow' => $application->workflow->map(function ($flow) use ($step_files) {
+                'workflow' => $application->workflow->map(function ($flow) use ($step_files, $application) {
                     $history = $step_files->first(function ($h) use ($flow) {
                         return $h->step_number == $flow->step_number
                             && $h->status === $flow->status;
                     });
                     $actionTaker = $flow->actionTaker;
 
+                    $max_step_number = $application->workflow->max('step_number');
+                    $display_status = $flow->status;
+
+                    if (
+                        $flow->status === 'approved' &&
+                        $flow->step_number != $max_step_number
+                    ) {
+                        $display_status = 'forwarded';
+                    }
+
                     return [
                         'step_number'     => $flow->step_number,
                         'step_type'       => $flow->step_type,
                         'department'      => $flow->department?->name,
-                        'status'          => $flow->status,
+                        'status'          => $display_status,
                         'action_taken_by' => $actionTaker
                             ? "{$actionTaker->authorized_person_name} ({$actionTaker->email_id})"
                             : null,

@@ -34,6 +34,19 @@ class PaymentSuccessService
                     ? $application->effective_fee
                     : ($application->total_fee ?? 0);
                 $status = 're_submitted';
+            } elseif ($application->previous_application_id != null) {
+
+                $old_application = UserServiceApplication::find($application->previous_application_id);
+
+                $old_data = json_decode($old_application->application_data, true);
+                $new_data = json_decode($application->application_data, true) ?? [];
+
+                $data_changed = empty($old_data)
+                    ? true
+                    : ($old_data != $new_data);
+
+                $status = $data_changed ? 're_submitted' : 'approved';
+                $amount =  $application->total_fee;
             } else {
                 $amount = ($application->effective_fee !== null && $application->effective_fee > 0)
                     ? $application->effective_fee
@@ -85,7 +98,10 @@ class PaymentSuccessService
                 }
             }
 
-            if (!$has_approval_flow && $status === 'approved') {
+            $is_auto_approved_renewal = $application->previous_application_id != null && $status === 'approved';
+
+            if (!$has_approval_flow && $status === 'approved' || $is_auto_approved_renewal) {
+                $application->refresh();
                 app(CertificateController::class)->auto_generate_certificate($application);
             }
 
