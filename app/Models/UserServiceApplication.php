@@ -67,6 +67,7 @@ class UserServiceApplication extends Model
         'egras_scheme_code',
         'license_id',
         'NOC_mode',
+        'certificate_history'
     ];
 
     protected $casts = [
