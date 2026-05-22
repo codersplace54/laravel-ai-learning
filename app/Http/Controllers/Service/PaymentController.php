@@ -279,7 +279,7 @@ class PaymentController extends Controller
             $form_html .= '<input type="hidden" name="Cityname" value="' . e($user->registered_enterprise_city) . '"/>';
             $form_html .= '<input type="hidden" name="Address" value="' . e($user->registered_enterprise_address) . '"/>';
             $form_html .= '<input type="hidden" name="Officename" value="' . e($user->name_of_enterprise) . '"/>';
-            $form_html .= '<input type="hidden" name="ChallanYear" value="2526"/>';
+            $form_html .= '<input type="hidden" name="ChallanYear" value="2627"/>';
             $form_html .= '<input type="hidden" name="PINCODE" value="799001"/>';
             $form_html .= '<input type="hidden" name="Bank" value="0001509"/>';
             $form_html .= '<input type="hidden" name="Remarks" value="Swaagat Payment"/>';

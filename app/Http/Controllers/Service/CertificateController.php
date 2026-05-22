@@ -195,7 +195,7 @@ class CertificateController extends Controller
 
             $base_data = $this->build_certificate_base_data($application, $qr_data_uri, null);
 
-            $always_keep = ['add_watermark', 'field_1', 'field_2'];
+            $always_keep = ['add_watermark', 'field_1', 'field_2','remark'];
 
             $data = [];
 
@@ -213,10 +213,12 @@ class CertificateController extends Controller
             $structured_application_data = $this->build_structured_application_data($application, $placeholders);
             $data['application_data'] = $structured_application_data;
 
+            $certificate_history = json_decode($application->certificate_history, true) ?? [];
+            
             return response()->json([
                 'status'  => 1,
                 'message' => 'Certificate data fetched successfully.',
-                'data'    => $data,
+                'data'    => array_merge($data, ['certificate_history' => $certificate_history]),
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -415,13 +417,16 @@ class CertificateController extends Controller
 
                 $application->NOC_certificate = asset('storage/' . $application->NOC_certificate);
 
-                return response()->json([
-                    'status'  => 1,
-                    'message' => 'Certificate generated.',
-                    'data'    => [
-                        'application' => $application->withoutRelations(),
-                    ],
-                ]);
+            $certificate_history = json_decode($application->certificate_history, true) ?? [];
+            
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Certificate generated.',
+                'data'    => [
+                    'application' => $application->withoutRelations(),
+                    'certificate_history' => $certificate_history,
+                ],
+            ]);
             }
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -780,6 +785,7 @@ class CertificateController extends Controller
                     'NOC_expiry_date' => $application->NOC_expiry_date,
                     'NOC_mode' => $application->NOC_mode,
                     'license_id' => $application->license_id,
+                    'remark' => $request->input('remark'),
                 ]
             ]);
         } catch (\Exception $e) {
