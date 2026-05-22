@@ -406,6 +406,8 @@ class CertificateController extends Controller
                 ];
 
                 $application->update($update_data);
+                
+                $this->store_certificate_history($application, $request->input('remark'));
                 // $clearance_response = $this->store_clearance($application);
 
                 // Send WhatsApp notification
@@ -755,19 +757,19 @@ class CertificateController extends Controller
 
             $file = $request->file('certificate_file');
             if ($file) {
-
-
-                $filename = uniqid() . '.' . $file->getClientOriginalExtension();
-
+                $filename = $application->applicationId . '.pdf';
                 $certificate_file_path = $file->storeAs("uploads/{$application->user_id}/application", $filename, 'public');
             }
+            $path = "uploads/{$application->user_id}/application/{$application->applicationId}.pdf";
             $application->update([
-                'NOC_certificate' => $request->certificate_file ?  $certificate_file_path : $application->NOC_certificate,
+                'NOC_certificate' => $request->certificate_file ? $path : $application->NOC_certificate,
                 'NOC_generationDate' => $request->noc_generation_date,
                 'NOC_expiry_date' => $request->noc_expiry_date,
                 'license_id' => $request->license_id,
                 'NOC_mode' => "offline",
             ]);
+            
+            $this->store_certificate_history($application, $request->input('remark'));
 
             return response()->json([
                 'status' => 1,
@@ -1191,6 +1193,26 @@ class CertificateController extends Controller
             );
         } catch (\Exception $e) {
             Log::error('Certificate WhatsApp notification failed: ' . $e->getMessage());
+        }
+    }
+
+    private function store_certificate_history(UserServiceApplication $application, ?string $remark = null)
+    {
+        try {
+            $history_entry = [
+                'remark' => $remark,
+                'updated_on' => now()->toDateTimeString()
+            ];
+
+            $existing_history = json_decode($application->certificate_history, true) ?? [];
+            if (!is_array($existing_history)) {
+                $existing_history = [];
+            }
+
+            $existing_history[] = $history_entry;
+            $application->update(['certificate_history' => json_encode($existing_history)]);
+        } catch (\Exception $e) {
+            Log::error('Failed to store certificate history: ' . $e->getMessage());
         }
     }
 

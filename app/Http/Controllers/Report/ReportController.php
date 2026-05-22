@@ -1736,7 +1736,7 @@ class ReportController extends Controller
             ->flatMap(fn($order) => json_decode($order->application_id, true) ?? [])
             ->unique()->values()->all();
 
-        $applications = UserServiceApplication::with(['service.department'])
+        $applications = UserServiceApplication::with(['service.department', 'user:id,name_of_enterprise,authorized_person_name'])
             ->whereIn('id', $all_application_ids)
             ->when($request->filled('department_id'), fn($q) => $q->whereHas('service', fn($q) => $q->where('department_id', $request->department_id)))
             ->when($request->filled('service_id'), fn($q) => $q->where('service_id', $request->service_id))
@@ -1770,6 +1770,8 @@ class ReportController extends Controller
                     'department'     => $department,
                     'application_no' => $app->applicationId ?? $app->id,
                     'service'        => $app->service?->service_title_or_description,
+                    'name_of_enterprise' => $app->user?->name_of_enterprise,
+                    'user_name'      => $app->user?->user_name,
                     'order_id'       => $order->order_id,
                     'grn_no'         => $order->GRN_number,
                     'payment_status' => ucfirst($order->payment_status),
