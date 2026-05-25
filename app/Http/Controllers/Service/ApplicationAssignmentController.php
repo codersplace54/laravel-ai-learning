@@ -419,6 +419,7 @@ class ApplicationAssignmentController extends Controller
                 'payment_status'  => 'nullable|in:pending,paid,failed',
                 'current_step_number' => 'nullable|integer|min:1',
                 'final_fee'       => 'nullable|numeric|min:0',
+                'effective_fee'   => 'nullable|numeric|min:0',
                 'paid_amount'     => 'nullable|numeric|min:0',
                 'GRN_number'      => 'nullable|string|max:255',
             ]);
@@ -431,6 +432,7 @@ class ApplicationAssignmentController extends Controller
                 'payment_status'      => $application->payment_status,
                 'current_step_number' => $application->current_step_number,
                 'final_fee'           => $application->final_fee,
+                'effective_fee'       => $application->effective_fee,
                 'paid_amount'         => $application->paid_amount,
                 'GRN_number'          => $application->GRN_number,
             ];
@@ -455,6 +457,10 @@ class ApplicationAssignmentController extends Controller
 
             if ($request->final_fee !== null) {
                 $new_values['final_fee'] = $request->final_fee;
+            }
+
+            if ($request->effective_fee !== null) {
+                $new_values['effective_fee'] = $request->effective_fee;
             }
 
             if ($request->paid_amount !== null) {

@@ -1303,13 +1303,30 @@ class UserIncentiveApplicationController extends Controller
             $latest       = $history->last();
             $last_approved = $history->whereIn('to_status', ['approved_by_da', 'noc_issued', 'claim_approved_by_gm', 'claim_approved_by_slc'])->last();
 
-            $history_data = $history->map(function ($h) {
+            $label_map = [
+                'submitted' => 'Submitted',
+                're_submitted' => 'Re-submitted',
+                'approved_by_da' => 'Review by Dealing Assistant',
+                'claim_approved_by_gm' => 'Approval by General Manager',
+                'claim_approved_by_slc' => 'Final Approval by SLC (if applicable)',
+                'noc_issued' => 'NOC Issuance by General Manager',
+                'sent_back_by_da' => 'Query raised by DA',
+                'sent_back_by_gm' => 'Query raised by GM',
+                'sent_back_by_slc' => 'Query raised by SLC',
+                'rejected_by_da' => 'Rejected by DA',
+                'rejected_by_gm' => 'Rejected by GM',
+                'rejected_by_slc' => 'Rejected by SLC',
+                'under_review_slc' => 'Under Review SLC',
+            ];
+
+            $history_data = $history->map(function ($h) use ($label_map) {
                 return [
                     'id'                    => $h->id,
                     'from_status'           => $h->from_status,
-                    'from_status_label'     => $this->status_label($h->from_status),
+                    'from_status_label'     => $h->from_status ? $this->status_label($h->from_status) : null,
                     'to_status'             => $h->to_status,
-                    'to_status_label'       => $this->status_label($h->to_status),
+                    'to_status_label'       => $h->to_status ? $this->status_label($h->to_status) : null,
+                    'label'                 => $label_map[$h->to_status] ?? null,
                     'remarks'               => $h->remarks,
                     'review_file'           => $h->review_file ? asset('storage/' . $h->review_file) : null,
                     'action_taken_at'       => optional($h->action_taken_at)->toDateTimeString(),
