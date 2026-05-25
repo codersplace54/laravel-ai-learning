@@ -238,20 +238,55 @@ class AppealController extends Controller
                 'dept_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png',
             ]);
 
-            $appeal = Appeal::where('id', $request->appeal_id)
+            $appeal = Appeal::with('application.user')
+                ->where('id', $request->appeal_id)
                 ->first();
+
+            if (!$appeal) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Appeal not found'
+                ], 404);
+            }
+
+            $user_department_id = $user->department_user?->department_id;
+            $hierarchy_level = $user->department_user?->hierarchy_level;
+            $dept_user_locations = $user->department_user_location;
+
+            if (!$user_department_id || $appeal->department_id !== $user_department_id) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'You do not have authority to update this appeal. Only related department users can take action.'
+                ], 403);
+            }
+
+            $has_location_access = false;
+            if ($dept_user_locations && $appeal->application->user) {
+                foreach ($dept_user_locations as $location) {
+                    if ($hierarchy_level === 'block' && $appeal->application->user->ulb_id == $location->block_id) {
+                        $has_location_access = true;
+                        break;
+                    } elseif (str_starts_with($hierarchy_level, 'subdivision') && $appeal->application->user->subdivision_id == $location->subdivision_id) {
+                        $has_location_access = true;
+                        break;
+                    } elseif (str_starts_with($hierarchy_level, 'district') && $appeal->application->user->district_id == $location->district_id) {
+                        $has_location_access = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!$has_location_access) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'You do not have authority to update this appeal. The applicant is not in your jurisdiction.'
+                ], 403);
+            }
 
             $filePath = null;
             if ($request->hasFile('dept_file')) {
                 $filePath = $request->file('dept_file')
                     ->store('appeals/dept_file/' . $appeal->user_id, 'public');
-            }
-
-            if (!$appeal) {
-                return response()->json([
-                    'status' => 0,
-                    'message' => 'Appeal not found or access denied'
-                ], 404);
             }
 
             $appeal->logAs($user->user_name . ' ' . $request->status . ' appeal for application: ' . $appeal->application->applicationId, 'Appeal Status Updated');
