@@ -652,7 +652,10 @@ class PaymentController extends Controller
 
                 $response_data[] = [
                     'user_service_application_id' => $application->id,
-                    'application_id' => $application->applicationId,
+                    'application_id' => $application->id,
+                    'applicationId' => $application->applicationId,
+                    'service_id' => $application->service_id,
+                    'service_mode' => $application->service->service_mode,
                     'service_title_or_description' => $application->service->service_title_or_description ?? null,
                     'application_date' => $application->application_date ?? null,
                     'payment_type' => $payment_type,
