@@ -246,6 +246,8 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('get-user-payment-orders', [ApplicationAssignmentController::class, 'get_user_payment_orders']);
         Route::post('create-payment-order', [AdminController::class, 'create_payment_order']);
         Route::post('update-payment-order', [AdminController::class, 'update_payment_order']);
+
+        Route::post('get-user-all-service-applications', [UserServiceApplicationController::class, 'get_user_all_service_applications']);
     });
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
