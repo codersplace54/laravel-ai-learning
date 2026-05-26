@@ -159,7 +159,7 @@ class DashboardController extends Controller
 
                 $district_wise_application_in_department =  UserServiceApplication::join('service_masters', 'service_masters.id', '=', 'user_service_applications.service_id')
                     ->join('users', 'users.id', '=', 'user_service_applications.user_id')
-                    ->join('tripura_master_data as tmd', 'tmd.id', '=', 'users.district_id')
+                    ->join('tripura_master_data as tmd', 'tmd.district_code', '=', 'users.district_id')
                     ->where('service_masters.department_id', $department_id)
                     ->whereNotIn('user_service_applications.status', ['expired', 'draft', 'saved'])
                     ->selectRaw('tmd.district_name, COUNT(*) as count')
@@ -169,7 +169,7 @@ class DashboardController extends Controller
                 $district_wise_application_per_service =
                     UserServiceApplication::join('service_masters', 'service_masters.id', '=', 'user_service_applications.service_id')
                     ->join('users', 'users.id', '=', 'user_service_applications.user_id')
-                    ->join('tripura_master_data as tmd', 'tmd.id', '=', 'users.district_id')
+                    ->join('tripura_master_data as tmd', 'tmd.district_code', '=', 'users.district_id')
                     ->where('service_masters.department_id', $department_id)
                     ->whereNotIn('user_service_applications.status', ['expired', 'draft', 'saved'])
                     ->selectRaw('
