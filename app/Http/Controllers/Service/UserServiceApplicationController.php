@@ -5209,4 +5209,71 @@ class UserServiceApplicationController extends Controller
             ], 500);
         }
     }
+
+    public function get_user_all_service_applications(Request $request)
+    {
+        try {
+
+            $request->validate([
+                'user_id' => 'required|integer|exists:users,id',
+            ]);
+
+            $applications = UserServiceApplication::with([
+                'service:id,service_title_or_description,noc_type,department_id,service_mode'
+            ])
+                ->where('user_id', $request->user_id)
+                ->get()
+                ->map(function ($application) {
+
+                    $latest_workflow = $application->latest_workflow ?? null;
+                    $appeal_for = $application->appeal_for ?? null;
+
+                    return [
+                        'application_id' => $application->id,
+                        'service_id' => $application->service_id,
+                        'service_title_or_description' => $application->service->service_title_or_description ?? null,
+                        'application_type' => $application->service->noc_type ?? null,
+                        'department' => $application->service->department_id ?? null,
+                        'department_name' => $application->service->department->name ?? null,
+                        'application_number' => $application->applicationId ?? null,
+                        'application_date' => $application->application_date ?? null,
+                        'noc_payment_type' => $application->noc_payment_type ?? null,
+                        'NOC_expiry_date' => $application->NOC_expiry_date ?? null,
+                        'payment_status' => $application->payment_status ?? null,
+                        'status' => $application->status ?? null,
+                        'renewal_date' => $application->renewalYear ?? null,
+                        'allow_repeat_application' => $application->allow_repeat_application ?? null,
+                        'latest_workflow_status' => $latest_workflow?->status ?? null,
+                        'service_mode' => $application->service->service_mode ?? null,
+                        'already_rated' => $application->my_feedback ? true : false,
+                        'rating' => $application->my_feedback->satisfaction ?? null,
+                        'feedback_id' => $application->my_feedback->id ?? null,
+                        'is_certificate' => $application->NOC_certificate ? true : false,
+                        'appeal_for' => $appeal_for,
+                        'renewal' => $application->renewal === 'yes' ? 'YES' : 'NO',
+                        'previous_application_id' => $application->previous_application_id,
+                    ];
+                });
+
+            if ($applications->isEmpty()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'No service user applications found for the given user_id.',
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Applications fetched successfully.',
+                'data' => $applications,
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

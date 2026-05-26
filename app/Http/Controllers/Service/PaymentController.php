@@ -655,7 +655,7 @@ class PaymentController extends Controller
                     'application_id' => $application->id,
                     'applicationId' => $application->applicationId,
                     'service_id' => $application->service_id,
-                    'service_mode' => $application->service->service_mode,
+                    'service_mode' => $application->service?->service_mode,
                     'service_title_or_description' => $application->service->service_title_or_description ?? null,
                     'application_date' => $application->application_date ?? null,
                     'payment_type' => $payment_type,
@@ -664,6 +664,7 @@ class PaymentController extends Controller
                     'grn_number'  => $payment_orders_grns ?? null,
                     'payment_date'  => $application->payment_time ?? null,
                     'is_third_party' => $application->is_third_party ?? 0,
+                    'external_payment_link' => $application->external_payment_link,
                 ];
             }
 

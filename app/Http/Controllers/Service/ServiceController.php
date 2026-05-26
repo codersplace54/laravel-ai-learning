@@ -1285,7 +1285,7 @@ class ServiceController extends Controller
                 'application.user:id,authorized_person_name,name_of_enterprise,email_id,mobile_no,district_id,subdivision_id,ulb_id'
             ])
                 ->whereIn('id', $latest_assignments)
-                ->where('status', 'pending')
+                ->whereIn('status', ['pending','submitted','re_submitted'])
                 ->where('hierarchy_level', $hierarchy_level)
                 ->whereHas('application', function ($q) use ($department_id) {
                     $q->where('payment_status', 'paid')

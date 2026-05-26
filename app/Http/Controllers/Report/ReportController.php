@@ -1748,7 +1748,7 @@ class ReportController extends Controller
 
         foreach ($orders as $order) {
             $app_ids    = json_decode($order->application_id, true) ?? [];
-            $serviceFee = $order->payment_status === 'paid'
+            $service_fee = $order->payment_status === 'paid'
                 ? (float) ($order->establishment_fee_paid ?? $order->operational_fee_paid ?? 0)
                 : 0;
 
@@ -1757,7 +1757,10 @@ class ReportController extends Controller
 
                 if (!$app) continue;
 
-                $amount         = (float) ($app->paid_amount ?? 0) + ($index === 0 ? $serviceFee : 0);
+                $application_amount = $order->payment_status === 'pending'
+                    ? (float) (($app->effective_fee !== null && $app->effective_fee > 0) ? $app->effective_fee : ($app->total_fee ?? 0))
+                    : (float) ($app->paid_amount ?? 0);
+                $amount = $application_amount + ($index === 0 ? $service_fee : 0);
                 $department     = $app->service?->department?->name ?? 'N/A';
                 $department_id  = $app->service?->department?->id ?? 0;
                 $payment_status = strtolower($order->payment_status);

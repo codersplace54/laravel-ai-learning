@@ -458,6 +458,7 @@ class ApplicationAssignmentController extends Controller
 
             if ($request->final_fee !== null) {
                 $new_values['final_fee'] = $request->final_fee;
+                $new_values['total_fee'] = $request->final_fee;
             }
 
             if ($request->effective_fee !== null) {

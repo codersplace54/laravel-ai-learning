@@ -57,6 +57,11 @@ class AdminController extends Controller
                         ->orWhere('pan', 'LIKE', "%$search%");
                 });
             }
+
+            if ($request->filled('is_pan_verified')) {
+                $query->where('is_pan_verified', $request->is_pan_verified);
+            }
+            
             if ($request->export == 'excel') {
 
                 $users = $query->get();
@@ -87,6 +92,7 @@ class AdminController extends Controller
                         'mobile_no'                     => $user->mobile_no,
                         'pan'                           => $user->pan,
                         'user_name'                     => $user->user_name,
+                        'is_pan_verified'               => $user->is_pan_verified,
                         'bin'                           => $user->bin,
                         'ch_name'                       => $user->ch_name ?? null,
                         'district_code'                 => $user->district->district_code ?? null,
