@@ -425,7 +425,7 @@ class ApplicationAssignmentController extends Controller
                 'GRN_number'      => 'nullable|string|max:255',
             ]);
 
-            $application = UserServiceApplication::where('id',$request->application_id)->first();
+            $application = UserServiceApplication::where('id', $request->application_id)->first();
 
             $old_values = [
                 'applicationId'       => $application->applicationId,
@@ -545,6 +545,8 @@ class ApplicationAssignmentController extends Controller
 
             $order = PaymentOrder::whereJsonContains('application_id', $request->application_id)->get();
 
+            $user_id = UserServiceApplication::where('id', $request->application_id)->value('user_id');
+
             if (!$order) {
                 return response()->json(['status' => 0, 'message' => 'Application not found'], 404);
             }
@@ -553,6 +555,7 @@ class ApplicationAssignmentController extends Controller
                 'status'  => 1,
                 'message' => 'Application Payment orders fetched successfully',
                 'data'    => $order,
+                'user_id' => $user_id
 
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
