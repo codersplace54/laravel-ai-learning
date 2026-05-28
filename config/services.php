@@ -50,4 +50,8 @@ return [
         'key' => env('PAN_LOOKUP_HMAC_KEY'),
     ],
 
+    'saral_sso' => [
+        'secret' => env('SARAL_SSO_SHARED_SECRET'),
+    ],
+
 ];
