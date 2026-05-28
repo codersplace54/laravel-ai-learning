@@ -253,8 +253,6 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('reset-user-pan-verification', [ApplicationAssignmentController::class, 'reset_user_pan_verification']);
     });
 
-    Route::post('saral-sso-login', [SaralSsoController::class, 'saral_sso_login']);
-
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
     Route::post('fetch-service-details', [ServiceMasterController::class, 'fetch_service_details']);
     Route::post('service-questionnaire-view', [ServiceQuestionnaireController::class, 'service_questionnaire_view']);
@@ -527,3 +525,4 @@ Route::prefix('annexure')->group(function () {
 
 Route::post('public-holiday-disabled-dates', [HolidayController::class, 'holiday_disabled_dates']);
 Route::post('holidays-view', [HolidayController::class, 'holidays_view']);
+Route::post('saral-sso-login', [SaralSsoController::class, 'saral_sso_login']);
