@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Models\ExistingLicense;
 use App\Models\User;
 use App\Models\ServiceMaster;
+use App\Models\UserServiceApplication;
 use Exception;
 
 class ExistingLicenseController extends Controller
@@ -313,6 +314,7 @@ class ExistingLicenseController extends Controller
             $request->validate([
                 'id'     => 'required|integer|exists:existing_licenses,id',
                 'status' => 'required|in:approved,rejected',
+                'certificate_file' => 'nullable|file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
             ]);
 
             $admin   = Auth::user();
@@ -333,6 +335,26 @@ class ExistingLicenseController extends Controller
                 'updated_by'      => $admin->email_id ?? null,
             ]);
 
+            if ($request->status === 'approved') {
+                $certificate_file_path = "uploads/{$license->user_id}/application/{$license->application_no}.pdf";
+
+                $exists = UserServiceApplication::where('applicationId',$license->application_no)->exists();
+
+                if (!$exists) {
+                    UserServiceApplication::create([
+                        'user_id'          => $license->user_id,
+                        'service_id'       => $license->service_id,
+                        'applicationId'    => $license->application_no,
+                        'application_date' => $license->valid_from ? \Carbon\Carbon::parse($license->valid_from)->subDays(7) : null,
+                        'status'           => 'noc_issued',
+                        'license_id'       => $license->license_no,
+                        'NOC_certificate'  => $certificate_file_path,
+                        'NOC_expiry_date'  => $license->expiry_date,
+                        'NOC_mode'         => "offline",
+                        'payment_status'   => "paid"
+                    ]);
+                }
+            }
 
             DB::commit();
 

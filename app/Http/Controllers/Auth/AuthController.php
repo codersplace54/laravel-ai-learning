@@ -195,6 +195,82 @@ class AuthController extends Controller
         }
     }
 
+    public function refresh(Request $request)
+    {
+        try {
+            $token = JWTAuth::getToken();
+
+            if (!$token) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Session expired. Please login again.'
+                ], 401);
+            }
+
+            $db_token = JWTToken::where('token', $token)->first();
+
+            if (!$db_token) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Session expired or logged out.'
+                ], 401);
+            }
+
+            if ($db_token->last_activity_at && $db_token->last_activity_at->lt(now()->subHour())) {
+                $db_token->delete();
+
+                try {
+                    JWTAuth::setToken($token)->invalidate();
+                } catch (Exception $e) {
+                    // ignore
+                }
+
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Session expired due to inactivity.'
+                ], 401);
+            }
+
+            $new_token = JWTAuth::setToken($token)->refresh();
+
+            $db_token->update([
+                'token' => $new_token,
+                'expires_at' => now()->addMinutes(JWTAuth::factory()->getTTL()),
+                'last_activity_at' => now(),
+            ]);
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Token refreshed successfully.',
+                'data' => [
+                    'access_token' => $new_token,
+                    'token_type' => 'bearer',
+                    'expires_in' => JWTAuth::factory()->getTTL() * 60,
+                ]
+            ]);
+        } catch (\Tymon\JWTAuth\Exceptions\TokenExpiredException $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Session expired. Please login again.'
+            ], 401);
+        } catch (\Tymon\JWTAuth\Exceptions\TokenInvalidException $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Session expired. Please login again.'
+            ], 401);
+        } catch (JWTException $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Session expired. Please login again.'
+            ], 401);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Failed to refresh token'
+            ], 500);
+        }
+    }
+
     public function logout(Request $request)
     {
 
