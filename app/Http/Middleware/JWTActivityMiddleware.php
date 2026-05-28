@@ -35,7 +35,9 @@ class JWTActivityMiddleware
                 return response()->json(['message' => 'Session expired due to inactivity'], 401);
             }
 
-            $db_token->update(['last_activity_at' => now()]);
+            if (!$db_token->last_activity_at || $db_token->last_activity_at->lt(now()->subMinutes(5))) {
+                $db_token->update(['last_activity_at' => now()]);
+            }
         } catch (\Exception $e) {
             return response()->json(['message' => 'Unauthorized: ' . $e->getMessage()], 401);
         }

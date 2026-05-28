@@ -54,10 +54,12 @@ use App\Http\Controllers\TestingFacilityCapabilityController;
 use App\Http\Controllers\PublicNotificationController;
 use App\Http\Controllers\InformationWizardController;
 use App\Http\Controllers\Service\ApplicationAssignmentController;
+use App\Http\Controllers\Integration\SaralSsoController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
+    Route::post('refresh', [AuthController::class, 'refresh']);
     Route::post('send-otp', [AuthController::class, 'send_otp'])->middleware('otp.rl');
     Route::post('verify-otp', [AuthController::class, 'verify_otp']);
     Route::post('forgot-password-send-otp', [AuthController::class, 'forgot_password_send_otp'])->middleware('otp.rl');
@@ -248,7 +250,10 @@ Route::middleware(['auth:api', JWTActivityMiddleware::class])->group(function ()
         Route::post('update-payment-order', [AdminController::class, 'update_payment_order']);
 
         Route::post('get-user-all-service-applications', [UserServiceApplicationController::class, 'get_user_all_service_applications']);
+        Route::post('reset-user-pan-verification', [ApplicationAssignmentController::class, 'reset_user_pan_verification']);
     });
+
+    Route::post('saral-sso-login', [SaralSsoController::class, 'saral_sso_login']);
 
     Route::post('fetch-all-services', [ServiceMasterController::class, 'fetch_all_services']);
     Route::post('fetch-service-details', [ServiceMasterController::class, 'fetch_service_details']);

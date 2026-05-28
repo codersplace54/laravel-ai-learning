@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ApplicationWorkflowAssignment;
 use App\Models\ApplicationWorkflowHistory;
 use App\Models\DepartmentUser;
+use App\Models\User;
 use App\Models\UserServiceApplication;
 use App\Models\PaymentOrder;
 use App\Traits\LogsActivity;
@@ -416,7 +417,7 @@ class ApplicationAssignmentController extends Controller
             $request->validate([
                 'application_id'  => 'required|exists:user_service_applications,id',
                 'applicationId'   => 'nullable|string|max:255|unique:user_service_applications,applicationId,' . $request->application_id . ',id',
-                'status'          => 'nullable|in:draft,submitted,under_review,approved,rejected,saved,extra_payment,re_submitted,send_back,noc_issued',
+                'status'          => 'nullable|in:draft,submitted,under_review,approved,rejected,saved,extra_payment,re_submitted,send_back,noc_issued,expired',
                 'payment_status'  => 'nullable|in:pending,paid,failed',
                 'current_step_number' => 'nullable|integer|min:0',
                 'final_fee'       => 'nullable|numeric|min:0',
@@ -562,6 +563,41 @@ class ApplicationAssignmentController extends Controller
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             return response()->json(['status' => 0, 'message' => 'Failed to fetch assignments', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function reset_user_pan_verification(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            if (!$user || $user->user_type !== 'admin') {
+                return response()->json(['status' => 0, 'message' => 'Unauthorized. Admin access only.'], 403);
+            }
+
+            $request->validate([
+                'user_id' => 'required|exists:users,id',
+            ]);
+
+            $target_user = User::where('id',$request->user_id)->first();
+            $target_user->update(['is_pan_verified' => 0]);
+
+            $this->logActivity(
+                $user->user_name . ' reset PAN verification for user #' . $target_user->id,
+                $target_user,
+                $user,
+                ['old' => ['is_pan_verified' => 1], 'new' => ['is_pan_verified' => 0]],
+                'PAN Verification Reset'
+            );
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'User PAN verification reset successfully',
+                'data'    => ['user_id' => $target_user->id, 'is_pan_verified' => 0],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 0, 'message' => 'Failed to reset PAN verification', 'error' => $e->getMessage()], 500);
         }
     }
 
