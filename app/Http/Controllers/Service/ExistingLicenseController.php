@@ -161,7 +161,6 @@ class ExistingLicenseController extends Controller
 
     public function existing_license_view()
     {
-        // dd(Auth::id());
         try {
             $user_type = User::where('id', Auth::id())->value('user_type');
 
@@ -170,11 +169,27 @@ class ExistingLicenseController extends Controller
                     'service:id,department_id,service_title_or_description',
                     'service.department:id,name'
                 ])->latest()->get();
-            } else {
+            } elseif($user_type === 'individual') {
                 $licenses = ExistingLicense::where('user_id', Auth::id())->with([
                     'service:id,department_id,service_title_or_description',
                     'service.department:id,name'
                 ])->latest()->get();
+            } elseif($user_type === 'department') {
+                // $licenses = ExistingLicense::whereHas('service', function ($query) {
+                //     $query->where('department_id', function ($q) {
+                //         $q->select('id')
+                //             ->from('departments')
+                //             ->where('email_id', Auth::user()->email_id);
+                //     });
+                // })->with([
+                //     'service:id,department_id,service_title_or_description',
+                //     'service.department:id,name'
+                // ])->latest()->get();
+            } else {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Invalid user type.',
+                ], 403);
             }
 
             $licenses = $licenses->map(function ($license) {
