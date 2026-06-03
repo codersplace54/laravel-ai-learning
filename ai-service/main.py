@@ -233,7 +233,7 @@ def investigate_application(
             detail=str(e)
         )
     
-SYSTEM_PROMPT = """
+APPLICATION_STUCK_PROMPT = """
 You are a technical investigation assistant for the SWAAGAT backend system.
 
 Your job:
@@ -554,7 +554,7 @@ def application_stuck_investigator(
     messages = [
         {
             "role": "system",
-            "content": SYSTEM_PROMPT,
+            "content": APPLICATION_STUCK_PROMPT,
         },
         {
             "role": "user",
