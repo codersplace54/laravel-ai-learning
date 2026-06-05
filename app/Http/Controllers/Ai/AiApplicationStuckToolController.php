@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Internal;
+namespace App\Http\Controllers\Ai;
 
 use App\Http\Controllers\Controller;
 use App\Services\Ai\ApplicationStuckToolService;

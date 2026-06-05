@@ -57,8 +57,8 @@ use App\Http\Controllers\Service\ApplicationAssignmentController;
 use App\Http\Controllers\Integration\SaralSsoController;
 
 use App\Http\Controllers\AI\AiInvestigationController;
-use App\Http\Controllers\Api\AI\Admin\ApplicationStuckInvestigationController;
-use App\Http\Controllers\Api\AiApplicationStuckToolController;
+use App\Http\Controllers\AI\Admin\ApplicationStuckInvestigationController;
+use App\Http\Controllers\Ai\AiApplicationStuckToolController;
 
 Route::prefix('user')->group(function () {
     Route::post('register', [UserController::class, 'register']);
@@ -533,10 +533,10 @@ Route::post('saral-sso-login', [SaralSsoController::class, 'saral_sso_login']);
 
 Route::prefix('ai')->group(function () {
     Route::post('investigate-application', [AiInvestigationController::class, 'investigate_application']);
-    Route::middleware(['auth:api'])->group(function () {
+    // Route::middleware(['auth:api'])->group(function () {
         Route::post('/application-stuck-investigator', [ApplicationStuckInvestigationController::class, 'investigate']);
         Route::post('tools/application-stuck', [AiApplicationStuckToolController::class, 'run_tool']);
-    });
+    // });
 
 });
 
