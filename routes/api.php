@@ -57,7 +57,7 @@ use App\Http\Controllers\Service\ApplicationAssignmentController;
 use App\Http\Controllers\Integration\SaralSsoController;
 
 use App\Http\Controllers\AI\AiInvestigationController;
-use App\Http\Controllers\AI\Admin\ApplicationStuckInvestigationController;
+use App\Http\Controllers\Ai\Admin\ApplicationStuckInvestigationController;
 use App\Http\Controllers\Ai\AiApplicationStuckToolController;
 
 Route::prefix('user')->group(function () {

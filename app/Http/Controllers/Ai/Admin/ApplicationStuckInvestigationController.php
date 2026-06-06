@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Ai\Admin;
+namespace App\Http\Controllers\Ai\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ApplicationStuckInvestigationRequest;
