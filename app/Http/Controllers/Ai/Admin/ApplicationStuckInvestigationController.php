@@ -16,6 +16,7 @@ class ApplicationStuckInvestigationController extends Controller
         FastApiAiService $ai_service
     ) {
         try {
+            
             $search_type = $request->input('search_type');
             $search_value = $request->input('search_value');
             $issue_text = $request->input('issue_text') ?: 'Find why this application is stuck.';

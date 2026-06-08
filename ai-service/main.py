@@ -4,7 +4,7 @@ from groq import Groq
 
 from config import GROQ_API_KEY, GROQ_MODEL, AI_SERVICE_SECRET, check_config
 from schemas import InvestigationRequest, InvestigationResponse, ApplicationStuckRequest, ApplicationStuckResponse
-
+import requests
 
 check_config()
 
@@ -463,7 +463,7 @@ TOOLS = [
 ]
 
 def call_laravel_tool(tool_name: str, arguments: dict) -> dict:
-    tool_url = f"{LARAVEL_BASE_URL}/api/internal/ai-tools/application-stuck"
+    tool_url = f"http://swaagat_backend.test/api/internal/ai-tools/application-stuck"
 
     response = requests.post(
         tool_url,

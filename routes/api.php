@@ -534,7 +534,7 @@ Route::post('saral-sso-login', [SaralSsoController::class, 'saral_sso_login']);
 Route::prefix('ai')->group(function () {
     Route::post('investigate-application', [AiInvestigationController::class, 'investigate_application']);
     // Route::middleware(['auth:api'])->group(function () {
-        Route::post('/application-stuck-investigator', [ApplicationStuckInvestigationController::class, 'investigate']);
+        Route::post('application-stuck-investigator', [ApplicationStuckInvestigationController::class, 'investigate']);
         Route::post('tools/application-stuck', [AiApplicationStuckToolController::class, 'run_tool']);
     // });
 
