@@ -5,6 +5,7 @@ from groq import Groq
 from config import GROQ_API_KEY, GROQ_MODEL, AI_SERVICE_SECRET, check_config
 from schemas import InvestigationRequest, InvestigationResponse, ApplicationStuckRequest, ApplicationStuckResponse
 import requests
+from services import extract_text_from_pdf
 
 check_config()
 
@@ -165,6 +166,15 @@ Common issue types:
 - unknown
 """
 
+
+@app.get("/extract-pdf")
+def extract_pdf():
+    text = extract_text_from_pdf()
+
+    return {
+        "success": True,
+        "text": text
+    }
 
 def verify_secret(x_ai_secret: str | None):
     if not x_ai_secret:
