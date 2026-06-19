@@ -5,7 +5,7 @@ from groq import Groq
 from config import GROQ_API_KEY, GROQ_MODEL, AI_SERVICE_SECRET, check_config
 from schemas import InvestigationRequest, InvestigationResponse, ApplicationStuckRequest, ApplicationStuckResponse
 import requests
-from services import extract_text_from_pdf
+from services import extract_text_from_pdf, split_text_into_chunks
 
 check_config()
 
@@ -174,6 +174,20 @@ def extract_pdf():
     return {
         "success": True,
         "text": text
+    }
+print("Registering split route...")
+
+@app.get("/split-text-into-chunks")
+def split_text():
+    text = extract_text_from_pdf()
+    chunks = split_text_into_chunks(text)
+
+    return {
+        "success": True,
+        "total_text_length": len(text),
+        "total_chunks": len(chunks),
+        "first_chunk": chunks[0] if chunks else None,
+        "last_chunk": chunks[-1] if chunks else None
     }
 
 def verify_secret(x_ai_secret: str | None):
