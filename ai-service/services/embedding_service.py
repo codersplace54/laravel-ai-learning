@@ -1,5 +1,11 @@
-# Only embedding generation.
+from openai import openAI
 
-# It will contain:
+client = openAI();
 
-# create_embedding()
+def create_embedding(text):
+    response = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=text
+    )
+
+    return response.data[0].embedding

@@ -186,8 +186,7 @@ def split_text():
         "success": True,
         "total_text_length": len(text),
         "total_chunks": len(chunks),
-        "first_chunk": chunks[0] if chunks else None,
-        "last_chunk": chunks[-1] if chunks else None
+        "chunks": chunks,
     }
 
 def verify_secret(x_ai_secret: str | None):

@@ -9,6 +9,7 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 AI_SERVICE_SECRET = os.getenv("AI_SERVICE_SECRET")
 
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "swaagat_documents")
 
 def check_config():
     if not GROQ_API_KEY:
@@ -16,3 +17,4 @@ def check_config():
 
     if not AI_SERVICE_SECRET:
         raise Exception("AI_SERVICE_SECRET is missing in .env")
+        
