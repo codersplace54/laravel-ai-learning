@@ -1,11 +1,6 @@
-from openai import openAI
+from sentence_transformers import SentenceTransformer
 
-client = openAI();
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 def create_embedding(text):
-    response = client.embeddings.create(
-        model="text-embedding-3-small",
-        input=text
-    )
-
-    return response.data[0].embedding
+    return model.encode(text).tolist()

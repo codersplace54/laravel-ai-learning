@@ -1,11 +1,14 @@
 import json
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, UploadFile, File
 from groq import Groq
+import os 
+import shutil
 
 from config import GROQ_API_KEY, GROQ_MODEL, AI_SERVICE_SECRET, check_config
-from schemas import InvestigationRequest, InvestigationResponse, ApplicationStuckRequest, ApplicationStuckResponse
+from schemas import InvestigationRequest, InvestigationResponse, ApplicationStuckRequest, ApplicationStuckResponse, AskRequest
 import requests
-from services import extract_text_from_pdf, split_text_into_chunks
+
+from services.rag_service import process_document, answer_question
 
 check_config()
 
@@ -13,6 +16,9 @@ app = FastAPI(
     title="SWAAGAT AI Service",
     version="1.0.0"
 )
+
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
@@ -166,28 +172,39 @@ Common issue types:
 - unknown
 """
 
-
-@app.get("/extract-pdf")
-def extract_pdf():
-    text = extract_text_from_pdf()
-
+@app.get("/")
+def home():
     return {
-        "success": True,
-        "text": text
+        "message": "Swaagat ai service is running"
     }
-print("Registering split route...")
 
-@app.get("/split-text-into-chunks")
-def split_text():
-    text = extract_text_from_pdf()
-    chunks = split_text_into_chunks(text)
+@app.post("/upload-document")
+def upload_document(file: UploadFile = File(...)):
+    """
+    Upload PDF and save its chunks in vector DB.
+    """
 
-    return {
-        "success": True,
-        "total_text_length": len(text),
-        "total_chunks": len(chunks),
-        "chunks": chunks,
-    }
+    file_path = os.path.join(UPLOAD_DIR, file.filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    result = process_document(
+        file_path=file_path,
+        document_name=file.filename
+    )
+
+    return result
+@app.post("/ask")
+def ask_question(request: AskRequest):
+    """
+    Ask question from uploaded documents.
+    """
+
+    result = answer_question(request.question)
+
+    return result
+
 
 def verify_secret(x_ai_secret: str | None):
     if not x_ai_secret:

@@ -1,7 +1,9 @@
 from typing import Any, Dict, List, Optional, Literal
 from pydantic import BaseModel, Field
 
-
+class AskRequest(BaseModel):
+    question: str
+    
 class SearchInput(BaseModel):
     search_type: str
     search_value: str
