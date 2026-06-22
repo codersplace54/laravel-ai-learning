@@ -1,5 +1,5 @@
 from groq import Groq
-from config import GROQ_API_KEY
+from config import GROQ_API_KEY,GROQ_MODEL
 
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -26,7 +26,7 @@ Question:
 """
 
     response = client.chat.completions.create(
-        model="gpt-4.1-mini",
+        model=GROQ_MODEL,
         messages=[
             {
                 "role": "user",
