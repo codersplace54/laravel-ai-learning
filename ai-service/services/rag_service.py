@@ -65,5 +65,7 @@ def answer_question(question: str):
     return {
         "question": question,
         "answer": answer,
-        "chunks_used": len(chunks)
+        "chunks_used": len(chunks),
+        "matched_chunks": chunks
+
     }
