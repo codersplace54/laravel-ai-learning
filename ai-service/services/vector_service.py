@@ -56,7 +56,7 @@ def save_to_vector_db(chunks: list, document_name: str):
 
 def search_similar_chunks(question: str, limit: int = 15):
     question_vector = create_embedding(question)
-    //embedding
+    
     results = qdrant.query_points(
         collection_name=QDRANT_COLLECTION,
         query=question_vector,
@@ -69,3 +69,16 @@ def search_similar_chunks(question: str, limit: int = 15):
         chunks.append(point.payload["text"])
 
     return chunks
+
+def clear_vector_db():
+    if qdrant.collection_exists(collection_name=QDRANT_COLLECTION):
+        qdrant.delete_collection(collection_name=QDRANT_COLLECTION)
+
+        return {
+            "status": "success",
+            "message": "Vector db cleared successfully"
+        }
+    return {
+        "status": "info",
+        "message": "Collection does not exist"
+    }

@@ -6,6 +6,8 @@ import shutil
 
 from config import GROQ_API_KEY, GROQ_MODEL, AI_SERVICE_SECRET, check_config
 from schemas import InvestigationRequest, InvestigationResponse, ApplicationStuckRequest, ApplicationStuckResponse, AskRequest
+from services.vector_service import clear_vector_db
+
 import requests
 
 from services.rag_service import process_document, answer_question
@@ -219,6 +221,9 @@ def verify_secret(x_ai_secret: str | None):
     if x_ai_secret != AI_SERVICE_SECRET:
         raise HTTPException(status_code=403, detail="Invalid AI service secret")
 
+@app.delete("/clear-documents")
+def clear_documents():
+    return clear_vector_db()
 
 @app.get("/health")
 def health_check():
