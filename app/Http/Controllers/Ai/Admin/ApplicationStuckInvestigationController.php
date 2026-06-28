@@ -3,45 +3,38 @@
 namespace App\Http\Controllers\Ai\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\ApplicationStuckInvestigationRequest;
-use App\Models\AiInvestigationLog;
 use App\Services\Ai\FastApiAiService;
-use Illuminate\Support\Facades\Auth;
-use Throwable;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class ApplicationStuckInvestigationController extends Controller
 {
-    public function investigate(
-        ApplicationStuckInvestigationRequest $request,
-        FastApiAiService $ai_service
-    ) {
-        try {
-            
-            $search_type = $request->input('search_type');
-            $search_value = $request->input('search_value');
-            $issue_text = $request->input('issue_text') ?: 'Find why this application is stuck.';
+    public function investigate(Request $request, FastApiAiService $fastApiAiService)
+    {
+        $validator = Validator::make($request->all(), [
+            'search_type' => 'required|string|in:application_id,applicationId,mobile,order_id,grn',
+            'search_value' => 'required|string',
+            'issue_text' => 'nullable|string',
+        ]);
 
-            $payload = [
-                'issue_text' => $issue_text,
-                'search' => [
-                    'search_type' => $search_type,
-                    'search_value' => $search_value,
-                ],
-            ];
-
-            $ai_response = $ai_service->investigate_application_stuck($payload);
-
+        if ($validator->fails()) {
             return response()->json([
-                'status' => 1,
-                'message' => 'Application stuck investigation completed.',
-                'data' => $ai_response,
-            ]);
-        } catch (Throwable $e) {
-            return response()->json([
-                'status' => 0,
-                'message' => 'Application stuck investigation failed.',
-                'error' => $e->getMessage(),
-            ], 500);
+                'status' => false,
+                'message' => 'Validation failed.',
+                'errors' => $validator->errors(),
+            ], 422);
         }
+
+        $payload = [
+            'issue_text' => $request->issue_text ?: 'Where is this application stuck?',
+            'search' => [
+                'search_type' => $request->search_type,
+                'search_value' => $request->search_value,
+            ],
+        ];
+
+        $result = $fastApiAiService->applicationStuckInvestigator($payload);
+
+        return response()->json($result);
     }
 }

@@ -540,5 +540,6 @@ Route::prefix('ai')->group(function () {
 
 });
 
+
 Route::post('summarize-text', [AiInvestigationController::class, 'summarize_text']);
 

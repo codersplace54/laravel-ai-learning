@@ -8,6 +8,9 @@ class SearchInput(BaseModel):
     search_type: str
     search_value: str
 
+class ApplicationSearch(BaseModel):
+    search_type: Literal["application_id", "applicationId", "mobile", "order_id", "grn"]
+    search_value: str
 class InvestigationRequest(BaseModel):
     issue_text: Optional[str] = None
     search: SearchInput
@@ -63,7 +66,7 @@ class EvidenceItem(BaseModel):
 class ApplicationStuckResponse(BaseModel):
     issue_found: bool
     issue_type: str
-    severity: Literal["low", "medium", "high", "critical"]
+    severity: str
     summary: str
     root_cause: str
     evidence: List[EvidenceItem]
