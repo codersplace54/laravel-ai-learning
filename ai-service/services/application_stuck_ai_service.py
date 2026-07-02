@@ -24,19 +24,17 @@ Your job:
 - Return only valid JSON.
 - Do not return markdown.
 
-Important logic:
-- If application is not found, issue_type = application_not_found.
-- If payment is pending and payment order is missing/pending, issue_type = payment_pending.
-- If payment order is success/paid but application payment_status is pending, issue_type = payment_success_but_application_pending.
-- If paid_amount >= total_fee but application is still pending/submitted, issue_type = payment_success_but_application_pending.
-- If GRN_number is null but payment_status is paid, mention GRN writeback/check.
-- If approval flow exists but no assignment exists, issue_type = assignment_missing.
-- If assignment exists but action_taken_at is null, issue_type = approval_flow_stuck.
-- If workflow history is empty after submission, issue_type = status_history_missing.
-- If status is noc_issued/approved/completed, application may not be stuck. Explain clearly.
+Application stuck diagnosis rules:
+
+- Use Laravel computed summaries as the main truth.
+- If current_assignment_summary exists, trust its waiting_on and meaning.
+- Do not override computed summary using old raw rows.
+- Raw rows are only supporting evidence.
+- Explain the issue in simple backend language.
+- Return valid JSON only.
 
 Allowed JSON format:
-{
+{ 
   "issue_found": true,
   "issue_type": "payment_pending",
   "severity": "low | medium | high | critical",
@@ -338,59 +336,85 @@ def investigate_application_stuck_with_rag(request_data: ApplicationStuckRequest
 
     rag_context = "\n\n".join(rag_chunks)
 
-    # 5. Final Groq call WITHOUT tools
-    final_user_prompt = f"""
-User question:
-{request_data.issue_text or "Where is this application stuck?"}
+    assignment_data = assignment_flow.get("data", assignment_flow) if isinstance(assignment_flow, dict) else assignment_flow
 
-Laravel collected data:
-{json.dumps(collected_data, default=str)}
+    has_assignment_data = False
 
-Relevant RAG document context:
-{rag_context}
+    if isinstance(assignment_data, list) and len(assignment_data) > 0:
+        has_assignment_data = True
 
-Now return final JSON only.
-"""
+    if isinstance(assignment_data, dict) and len(assignment_data) > 0:
+        has_assignment_data = True
 
-    try:
-        completion = groq_client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": APPLICATION_STUCK_FINAL_PROMPT
+
+        decision_hint = ""
+
+        if has_assignment_data:
+            decision_hint = """
+        IMPORTANT DECISION HINT:
+        The assignment table has current assignment data.
+        For the question "where is application stuck", assignment table is the main source.
+        Do NOT use status_history_missing as the main issue.
+        Use issue_type = "approval_flow_stuck".
+        Mention the current department/officer/role from assignment data if available.
+        Workflow history empty can be mentioned only as secondary evidence.
+        """
+
+        # 5. Final Groq call WITHOUT tools
+        final_user_prompt = f"""
+        {decision_hint}
+
+        User question:
+        {request_data.issue_text or "Where is this application stuck?"}
+
+        Laravel collected data:
+        {json.dumps(collected_data, default=str)}
+
+        Relevant RAG document context:
+        {rag_context}
+
+        Now return final JSON only.
+        """
+
+        try:
+            completion = groq_client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": APPLICATION_STUCK_FINAL_PROMPT
+                    },
+                    {
+                        "role": "user",
+                        "content": final_user_prompt
+                    }
+                ],
+                temperature=0.1,
+                response_format={
+                    "type": "json_object"
                 },
-                {
-                    "role": "user",
-                    "content": final_user_prompt
+                max_completion_tokens=1200,
+            )
+
+        except BadRequestError as e:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "message": "Groq final JSON generation failed",
+                    "error": str(e)
                 }
-            ],
-            temperature=0.1,
-            response_format={
-                "type": "json_object"
-            },
-            max_completion_tokens=1200,
-        )
+            )
 
-    except BadRequestError as e:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "message": "Groq final JSON generation failed",
-                "error": str(e)
-            }
-        )
+        ai_text = completion.choices[0].message.content
 
-    ai_text = completion.choices[0].message.content
+        if not ai_text:
+            raise HTTPException(
+                status_code=500,
+                detail="AI returned empty response"
+            )
 
-    if not ai_text:
-        raise HTTPException(
-            status_code=500,
-            detail="AI returned empty response"
-        )
+        final_response = validate_final_response(ai_text)
 
-    final_response = validate_final_response(ai_text)
+        final_response["rag_chunks_used"] = len(rag_chunks)
 
-    final_response["rag_chunks_used"] = len(rag_chunks)
-
-    return final_response
+        return final_response

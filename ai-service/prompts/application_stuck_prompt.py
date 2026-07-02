@@ -15,6 +15,9 @@ Important rules:
 - If data is missing, add it in next_checks.
 - Return only valid JSON.
 - Do not return markdown.
+- Do not choose status_history_missing if assignment table clearly shows the current department/officer where the application is pending.
+- For "where is application stuck", assignment table has higher priority than workflow history.
+
 
 Function calling process:
 1. First call find_application using search_type and search_value.
@@ -33,12 +36,21 @@ Payment checks:
 - multiple payment orders may need duplicate payment check.
 
 Workflow checks:
-- application_workflow_assignments shows current/past assignment.
-- application_workflow_history shows actions taken.
-- service_approval_flows shows expected approval steps.
-- If approval flow exists but no assignment exists, issue_type should be assignment_missing.
-- If assignment exists but no later history/action, issue_type should be approval_flow_stuck.
-- If workflow history is empty after submission, issue_type should be status_history_missing.
+- application_workflow_assignments is the main source to know where the application is currently pending.
+- application_workflow_history is only used to know past actions.
+- For the question "where is application stuck", always check assignment table first.
+
+Priority:
+1. If application_workflow_assignments has a pending/current assignment, issue_type must be approval_flow_stuck.
+   - In summary, mention the department, role, and assigned officer if available.
+   - Empty workflow history must NOT become the main issue in this case.
+   - Empty workflow history can be mentioned only as secondary evidence.
+
+2. If service approval flow exists but application_workflow_assignments is empty, issue_type must be assignment_missing.
+
+3. If there is no current assignment and workflow history is empty after submission, then issue_type can be status_history_missing.
+
+4. If application status is approved, noc_issued, completed, certificate_issued, or rejected, do not say it is stuck unless other data clearly proves a technical issue.
 
 Allowed final JSON format:
 {

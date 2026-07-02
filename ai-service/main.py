@@ -1,13 +1,14 @@
 import os
 import shutil
 
-from fastapi import FastAPI, Header, HTTPException, UploadFile, File
+from fastapi import FastAPI, Header, HTTPException, UploadFile, File, Request
 
 from config import check_config
 from schemas import AskRequest, ApplicationStuckRequest
 from services.rag_service import process_document, answer_question
 from services.vector_service import clear_vector_db
 from services.application_stuck_ai_service import investigate_application_stuck_with_rag
+from services.application_stuck_explanation_service import explain_application_stuck
 
 check_config()
 
@@ -96,3 +97,14 @@ def application_stuck_investigator(
 
 
     return investigate_application_stuck_with_rag(request_data)
+
+@app.post("/api/ai/application-stuck-explain")
+def application_stuck_explain(
+    request_data: Request,
+    x_ai_secret: str | None = Header(default=None),
+):
+
+    return explain_application_stuck(
+        message=request_data.message,
+        context=request_data.context
+    )
