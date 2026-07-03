@@ -6,16 +6,23 @@ from config import QDRANT_COLLECTION
 from services.embedding_service import create_embedding
 
 # Qdrant data will be stored inside qdrant_storage folder
-qdrant = QdrantClient(path="qdrant_storage")
+_qdrant = None
 
+def get_qdrant():
+    global _qdrant
+
+    if _qdrant is None:
+        _qdrant = QdrantClient(path="qdrant_storage")
+
+    return _qdrant
 
 def ensure_collection(vector_size: int):
-    exists = qdrant.collection_exists(
+    exists = get_qdrant().collection_exists(
         collection_name=QDRANT_COLLECTION
     )
 
     if not exists:
-        qdrant.create_collection(
+        get_qdrant().create_collection(
             collection_name=QDRANT_COLLECTION,
             vectors_config=VectorParams(
                 size=vector_size,
@@ -44,7 +51,7 @@ def save_to_vector_db(chunks: list, document_name: str):
             )
         )
 
-    qdrant.upsert(
+    get_qdrant().upsert(
         collection_name=QDRANT_COLLECTION,
         points=points
     )
@@ -57,7 +64,7 @@ def save_to_vector_db(chunks: list, document_name: str):
 def search_similar_chunks(question: str, limit: int = 15):
     question_vector = create_embedding(question)
     
-    results = qdrant.query_points(
+    results = get_qdrant().query_points(
         collection_name=QDRANT_COLLECTION,
         query=question_vector,
         limit=limit
@@ -71,8 +78,8 @@ def search_similar_chunks(question: str, limit: int = 15):
     return chunks
 
 def clear_vector_db():
-    if qdrant.collection_exists(collection_name=QDRANT_COLLECTION):
-        qdrant.delete_collection(collection_name=QDRANT_COLLECTION)
+    if get_qdrant().collection_exists(collection_name=QDRANT_COLLECTION):
+        get_qdrant().delete_collection(collection_name=QDRANT_COLLECTION)
 
         return {
             "status": "success",

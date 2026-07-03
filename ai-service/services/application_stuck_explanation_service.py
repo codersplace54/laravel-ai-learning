@@ -69,18 +69,18 @@ Return JSON only.
 """
     try:
         completion = groq_client.chat.completions.create(
-            model=GROQ_MODEL
+            model=GROQ_MODEL,
             messages=[
                 {
-                    role: "system"
-                    content: APPLICATION_STUCK_EXPLANATION_PROMPT
+                    "role": "system",
+                    "content": APPLICATION_STUCK_EXPLANATION_PROMPT
                 },
                 {
-                    role: "user"
-                    content: user_prompt
+                    "role": "user",
+                    "content": user_prompt
                 }
             ],
-            temperatre=0.2
+            temperature=0.2,
             response_format ={
                 "type": "json_object"
             },

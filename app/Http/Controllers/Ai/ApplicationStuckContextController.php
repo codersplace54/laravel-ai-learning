@@ -181,7 +181,7 @@ class ApplicationStuckContextController extends Controller
     private function call_fastapi_stuck_explanation(string $message, array $context_data): array
     {
         try {
-            $base_url = rtrim(config('services.fastapi_ai.url'), '/');
+            $base_url = rtrim(config('ai.base_url'), '/');
 
             $response = Http::timeout(120)
                 ->withHeaders([
@@ -189,7 +189,7 @@ class ApplicationStuckContextController extends Controller
                     'Content-Type' => 'application/json',
                     'X-AI-SECRET'  => config('services.fastapi_ai.secret'),
                 ])
-                ->post($base_url . '/api/ai/application-stuck/explain', [
+                ->post($base_url . '/api/ai/application-stuck-explain', [
                     'message' => $message,
                     'context' => $context_data,
                 ]);
