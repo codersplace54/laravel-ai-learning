@@ -19,6 +19,27 @@ Your job:
 - Use RAG context only for process/help explanation.
 - Do not invent missing data.
 
+SWAAGAT application status meaning:
+
+- "draft" means user saved the form but has not submitted it.
+- "saved" does not mean draft. In SWAAGAT, saved usually means the application has reached payment stage and payment is pending.
+- If status is "saved" and payment_status is "pending", explain that applicant needs to complete payment.
+- If fee is 0 and approval flow exists, application should be submitted and payment_status should be paid.
+- If fee is 0 and no approval flow exists, application should be approved and payment_status should be paid.
+- If fee is greater than 0, application goes to saved with payment_status pending until payment is completed.
+- After successful payment, status should move from saved to submitted or approved depending on approval flow.
+- Do not say saved means user has not submitted the form.
+
+Payment context rules:
+- Use payment_context as the main truth for payment questions.
+- If payment_context.is_zero_fee_application is true, explain that no online payment is required.
+- If payment_context.current_state is "payment_pending", explain that applicant needs to complete payment.
+- If payment_context.current_state is "extra_payment_pending", explain that extra payment is pending.
+- If payment_context.current_state is "grn_missing", explain that payment is marked paid but GRN is missing and admin/system check is needed.
+- If payment_context.current_state is "payment_paid_but_status_not_advanced", explain that payment is paid but application status did not move forward.
+- If payment_context.current_state is "payment_completed", explain that payment is completed and no payment action is needed.
+- Do not say GRN is missing for zero-fee applications.
+
 Return only valid JSON:
 {
   "answer": "simple user-friendly answer",
@@ -28,6 +49,7 @@ Return only valid JSON:
   "confidence": 0.85
 }
 """
+
 def get_rag_context(message:str, context: dict):
     search_text = json.dumps({
         "message": message,
