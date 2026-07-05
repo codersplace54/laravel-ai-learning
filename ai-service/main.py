@@ -98,7 +98,7 @@ def application_stuck_investigator(
 
     return investigate_application_stuck_with_rag(request_data)
 
-@app.post("/api/ai/application-stuck-explain")
+@app.post("/api/ai/application-chat")
 async def application_stuck_explain(
     request_data: Request,
     x_ai_secret: str | None = Header(default=None),

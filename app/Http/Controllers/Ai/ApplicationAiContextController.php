@@ -13,9 +13,9 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 
-class ApplicationStuckContextController extends Controller
+class ApplicationAiContextController extends Controller
 {
-    public function get_context(Request $request)
+    public function application_chat(Request $request)
     {
 
         $validator = Validator::make($request->all(), [
@@ -62,6 +62,11 @@ class ApplicationStuckContextController extends Controller
                     'GRN_number',
                     'created_at',
                     'updated_at',
+                    'NOC_certificate',
+                    'NOC_rejection_certificate',
+                    'NOC_generationDate',
+                    'NOC_letter_number',
+                    'NOC_letter_date',
                 ])
                 ->first();
 
@@ -139,6 +144,30 @@ class ApplicationStuckContextController extends Controller
                 approval_flow: $approval_flow
             );
 
+            $payment_context = $this->build_payment_context(
+                application: $application,
+                latest_payment: $latest_payment,
+                approval_flow: $approval_flow
+            );
+
+            $department_context = $this->build_department_context(
+                application: $application,
+                latest_assignment: $latest_assignment
+            );
+
+            $send_back_context = $this->build_send_back_context(
+                application: $application
+            );
+
+            $certificate_context = $this->build_certificate_context(
+                application: $application
+            );
+
+            $timeline_context = $this->build_timeline_context(
+                application: $application,
+                recent_assignments: $recent_assignments
+            );
+
             $context_data = [
                 'application' => [
                     'id'                 => $application->id,
@@ -155,11 +184,17 @@ class ApplicationStuckContextController extends Controller
                     'created_at'         => $application->created_at,
                     'updated_at'         => $application->updated_at,
                 ],
-                'stuck_context'      => $stuck_context,
-                'payment_context'    => $payment_context,
-                'latest_assignment'  => $latest_assignment,
-                'recent_assignments' => $recent_assignments,
-                'latest_payment'     => $latest_payment,
+
+                'stuck_context'       => $stuck_context,
+                'payment_context'     => $payment_context,
+                'department_context'  => $department_context,
+                'send_back_context'   => $send_back_context,
+                'certificate_context' => $certificate_context,
+                'timeline_context'    => $timeline_context,
+
+                'latest_assignment'   => $latest_assignment,
+                'recent_assignments'  => $recent_assignments,
+                'latest_payment'      => $latest_payment,
             ];
 
             $message = $request->message;
@@ -227,6 +262,7 @@ class ApplicationStuckContextController extends Controller
             return null;
         }
     }
+
     private function call_fastapi_stuck_explanation(string $message, array $context_data): array
     {
         try {
@@ -238,7 +274,7 @@ class ApplicationStuckContextController extends Controller
                     'Content-Type' => 'application/json',
                     'X-AI-SECRET'  => config('services.fastapi_ai.secret'),
                 ])
-                ->post($base_url . '/api/ai/application-stuck-explain', [
+                ->post($base_url . '/api/ai/application-chat', [
                     'message' => $message,
                     'context' => $context_data,
                 ]);
@@ -273,7 +309,6 @@ class ApplicationStuckContextController extends Controller
             ];
         }
     }
-
 
     private function build_payment_context($application, $latest_payment, $approval_flow): array
     {
@@ -324,12 +359,12 @@ class ApplicationStuckContextController extends Controller
         $grn_required = $payment_required;
 
         /*
-    |--------------------------------------------------------------------------
-    | Safe amount calculation
-    |--------------------------------------------------------------------------
-    | AI should never calculate this.
-    | AI should only copy amount_to_pay_display if present.
-    */
+        |--------------------------------------------------------------------------
+        | Safe amount calculation
+        |--------------------------------------------------------------------------
+        | AI should never calculate this.
+        | AI should only copy amount_to_pay_display if present.
+        */
 
         $amount_to_pay = null;
         $amount_source = 'none';
@@ -376,10 +411,10 @@ class ApplicationStuckContextController extends Controller
         ];
 
         /*
-    |--------------------------------------------------------------------------
-    | 1. Draft
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | 1. Draft
+        |--------------------------------------------------------------------------
+        */
 
         if ($application_status === 'draft') {
             return [
@@ -406,10 +441,10 @@ class ApplicationStuckContextController extends Controller
         }
 
         /*
-    |--------------------------------------------------------------------------
-    | 2. Zero-fee application
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | 2. Zero-fee application
+        |--------------------------------------------------------------------------
+        */
 
         if ($is_zero_fee_application) {
             if ($payment_status === 'paid') {
@@ -460,10 +495,10 @@ class ApplicationStuckContextController extends Controller
         }
 
         /*
-    |--------------------------------------------------------------------------
-    | 3. Payment order says success/paid but application still pending
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | 3. Payment order says success/paid but application still pending
+        |--------------------------------------------------------------------------
+        */
 
         if (
             $payment_status === 'pending'
@@ -493,10 +528,10 @@ class ApplicationStuckContextController extends Controller
         }
 
         /*
-    |--------------------------------------------------------------------------
-    | 4. EGRAS response has GRN but says Pending
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | 4. EGRAS response has GRN but says Pending
+        |--------------------------------------------------------------------------
+        */
 
         if (
             $payment_status === 'pending'
@@ -527,10 +562,10 @@ class ApplicationStuckContextController extends Controller
         }
 
         /*
-    |--------------------------------------------------------------------------
-    | 5. Extra payment pending
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | 5. Extra payment pending
+        |--------------------------------------------------------------------------
+        */
 
         if ($extra_payment > 0 && $payment_status === 'pending') {
             return [
@@ -558,10 +593,10 @@ class ApplicationStuckContextController extends Controller
         }
 
         /*
-    |--------------------------------------------------------------------------
-    | 6. Normal pending payment
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | 6. Normal pending payment
+        |--------------------------------------------------------------------------
+        */
 
         if ($payment_status === 'pending') {
             $current_state = 'payment_pending';
@@ -604,10 +639,10 @@ class ApplicationStuckContextController extends Controller
         }
 
         /*
-    |--------------------------------------------------------------------------
-    | 7. Paid but status still saved
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | 7. Paid but status still saved
+        |--------------------------------------------------------------------------
+        */
 
         if ($application_status === 'saved' && $payment_status === 'paid') {
             return [
@@ -634,10 +669,10 @@ class ApplicationStuckContextController extends Controller
         }
 
         /*
-    |--------------------------------------------------------------------------
-    | 8. Paid but GRN missing
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | 8. Paid but GRN missing
+        |--------------------------------------------------------------------------
+        */
 
         if ($payment_status === 'paid' && !$has_grn && $grn_required) {
             return [
@@ -664,10 +699,10 @@ class ApplicationStuckContextController extends Controller
         }
 
         /*
-    |--------------------------------------------------------------------------
-    | 9. Payment completed
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | 9. Payment completed
+        |--------------------------------------------------------------------------
+        */
 
         if ($payment_status === 'paid') {
             return [
@@ -694,10 +729,10 @@ class ApplicationStuckContextController extends Controller
         }
 
         /*
-    |--------------------------------------------------------------------------
-    | 10. Payment failed
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | 10. Payment failed
+        |--------------------------------------------------------------------------
+        */
 
         if ($payment_status === 'failed') {
             return [
@@ -838,11 +873,11 @@ class ApplicationStuckContextController extends Controller
         }
 
         /*
-    |--------------------------------------------------------------------------
-    | 3. Send back should be understood from application status also
-    | This handles old/no-assignment applications.
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | 3. Send back should be understood from application status also
+        | This handles old/no-assignment applications.
+        |--------------------------------------------------------------------------
+        */
 
         if ($application_status === 'send_back') {
             $waiting_on = 'applicant';
@@ -1111,5 +1146,209 @@ class ApplicationStuckContextController extends Controller
             'next_action',
             'payment_note'
         );
+    }
+
+    private function build_department_context($application, $latest_assignment): array
+    {
+        if (!$latest_assignment) {
+            return [
+                'has_department_assignment' => false,
+                'department_name' => null,
+                'step_number' => null,
+                'step_type' => null,
+                'waiting_on' => 'system',
+                'meaning' => 'No department assignment was found for this application.',
+                'next_action' => 'Admin should check workflow assignment creation.',
+            ];
+        }
+
+        $assignment_status = strtolower(trim((string) ($latest_assignment->status ?? '')));
+
+        if ($assignment_status === 'pending' && empty($latest_assignment->action_taken_at)) {
+            return [
+                'has_department_assignment' => true,
+                'department_name' => $latest_assignment->department_name ?? null,
+                'department_id' => $latest_assignment->department_id ?? null,
+                'step_number' => $latest_assignment->step_number ?? null,
+                'step_type' => $latest_assignment->step_type ?? null,
+                'hierarchy_level' => $latest_assignment->hierarchy_level ?? null,
+                'assignment_status' => $assignment_status,
+                'waiting_on' => 'department',
+                'meaning' => 'Application is currently pending with the assigned department/officer.',
+                'next_action' => 'Department/officer should review and take action.',
+            ];
+        }
+
+        if ($assignment_status === 'send_back') {
+            return [
+                'has_department_assignment' => true,
+                'department_name' => $latest_assignment->department_name ?? null,
+                'department_id' => $latest_assignment->department_id ?? null,
+                'step_number' => $latest_assignment->step_number ?? null,
+                'step_type' => $latest_assignment->step_type ?? null,
+                'hierarchy_level' => $latest_assignment->hierarchy_level ?? null,
+                'assignment_status' => $assignment_status,
+                'waiting_on' => 'applicant',
+                'meaning' => 'Department has sent the application back to the applicant.',
+                'next_action' => 'Applicant should check remarks and resubmit.',
+            ];
+        }
+
+        return [
+            'has_department_assignment' => true,
+            'department_name' => $latest_assignment->department_name ?? null,
+            'department_id' => $latest_assignment->department_id ?? null,
+            'step_number' => $latest_assignment->step_number ?? null,
+            'step_type' => $latest_assignment->step_type ?? null,
+            'hierarchy_level' => $latest_assignment->hierarchy_level ?? null,
+            'assignment_status' => $assignment_status,
+            'waiting_on' => 'system',
+            'meaning' => 'Latest department assignment is not pending. Workflow/final status should be checked.',
+            'next_action' => 'Admin should verify next workflow step or final status.',
+        ];
+    }
+
+    private function build_send_back_context($application): array
+    {
+        $latest_send_back = DB::table('application_workflow_assignments as awa')
+            ->leftJoin('departments as d', 'd.id', '=', 'awa.department_id')
+            ->where('awa.application_id', $application->id)
+            ->where('awa.status', 'send_back')
+            ->orderByDesc('awa.action_taken_at')
+            ->orderByDesc('awa.id')
+            ->select([
+                'awa.id',
+                'awa.step_number',
+                'awa.step_type',
+                'awa.department_id',
+                'd.name as department_name',
+                'awa.hierarchy_level',
+                'awa.status',
+                'awa.action_taken_by',
+                'awa.action_taken_at',
+                'awa.remarks',
+                'awa.created_at',
+                'awa.updated_at',
+            ])
+            ->first();
+
+        if (!$latest_send_back) {
+            return [
+                'was_sent_back' => false,
+                'latest_send_back' => null,
+                'remarks' => null,
+                'meaning' => 'No send back record was found for this application.',
+                'next_action' => null,
+            ];
+        }
+
+        return [
+            'was_sent_back' => true,
+            'latest_send_back' => $latest_send_back,
+            'remarks' => $latest_send_back->remarks,
+            'department_name' => $latest_send_back->department_name ?? null,
+            'step_number' => $latest_send_back->step_number ?? null,
+            'step_type' => $latest_send_back->step_type ?? null,
+            'sent_back_at' => $latest_send_back->action_taken_at ?? null,
+            'meaning' => 'Application was sent back by the department with remarks.',
+            'next_action' => 'Applicant should check the remarks, correct the application or upload required documents, and resubmit.',
+        ];
+    }
+
+    private function build_certificate_context($application): array
+    {
+        $application_status = strtolower(trim((string) ($application->status ?? '')));
+
+        $has_noc_certificate = !empty($application->NOC_certificate);
+        $has_rejection_certificate = !empty($application->NOC_rejection_certificate);
+
+        if ($has_noc_certificate) {
+            return [
+                'certificate_available' => true,
+                'certificate_type' => 'noc_certificate',
+                'certificate_path' => $application->NOC_certificate,
+                'noc_letter_number' => $application->NOC_letter_number ?? null,
+                'noc_letter_date' => $application->NOC_letter_date ?? null,
+                'noc_generation_date' => $application->NOC_generationDate ?? null,
+                'meaning' => 'NOC certificate is available for this application.',
+                'next_action' => 'Applicant can download/view the certificate from the application dashboard.',
+            ];
+        }
+
+        if ($has_rejection_certificate) {
+            return [
+                'certificate_available' => true,
+                'certificate_type' => 'rejection_certificate',
+                'certificate_path' => $application->NOC_rejection_certificate,
+                'meaning' => 'Rejection certificate is available for this application.',
+                'next_action' => 'Applicant can view the rejection certificate/details from the application dashboard.',
+            ];
+        }
+
+        if (in_array($application_status, ['approved', 'noc_issued', 'completed'])) {
+            return [
+                'certificate_available' => false,
+                'certificate_type' => null,
+                'certificate_path' => null,
+                'meaning' => 'Application is approved/final, but certificate file is not available in current data.',
+                'next_action' => 'Admin should check certificate generation/download availability.',
+            ];
+        }
+
+        return [
+            'certificate_available' => false,
+            'certificate_type' => null,
+            'certificate_path' => null,
+            'meaning' => 'Certificate is not available yet because application has not reached final certificate stage.',
+            'next_action' => 'No certificate action is needed right now.',
+        ];
+    }
+
+    private function build_timeline_context($application, $recent_assignments): array
+    {
+        $timeline = [];
+
+        $timeline[] = [
+            'type' => 'application_created',
+            'title' => 'Application created',
+            'status' => $application->status,
+            'date' => $application->created_at,
+            'description' => 'Application record was created.',
+        ];
+
+        foreach ($recent_assignments->reverse()->values() as $assignment) {
+            $status = strtolower(trim((string) ($assignment->status ?? '')));
+
+            $title = 'Workflow step updated';
+
+            if ($status === 'pending') {
+                $title = 'Pending with department';
+            } elseif ($status === 'approved') {
+                $title = 'Step approved';
+            } elseif ($status === 'send_back') {
+                $title = 'Sent back to applicant';
+            } elseif ($status === 'rejected') {
+                $title = 'Application rejected at workflow step';
+            }
+
+            $timeline[] = [
+                'type' => 'assignment',
+                'title' => $title,
+                'step_number' => $assignment->step_number ?? null,
+                'step_type' => $assignment->step_type ?? null,
+                'department_name' => $assignment->department_name ?? null,
+                'status' => $assignment->status ?? null,
+                'remarks' => $assignment->remarks ?? null,
+                'action_taken_at' => $assignment->action_taken_at ?? null,
+                'created_at' => $assignment->created_at ?? null,
+                'description' => $assignment->remarks ?: $title,
+            ];
+        }
+
+        return [
+            'events_count' => count($timeline),
+            'events' => $timeline,
+            'meaning' => 'This timeline shows the recent application creation and workflow assignment events.',
+        ];
     }
 }
