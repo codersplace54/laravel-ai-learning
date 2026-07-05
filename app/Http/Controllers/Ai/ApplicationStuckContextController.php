@@ -185,6 +185,48 @@ class ApplicationStuckContextController extends Controller
         }
     }
 
+    private function format_rupee($amount): ?string
+    {
+        if ($amount === null) {
+            return null;
+        }
+
+        $amount = (float) $amount;
+
+        if ($amount <= 0) {
+            return null;
+        }
+
+        return '₹' . rtrim(rtrim(number_format($amount, 2, '.', ''), '0'), '.');
+    }
+
+    private function decode_gateway_response($latest_payment): ?array
+    {
+        if (!$latest_payment || empty($latest_payment->gateway_response)) {
+            return null;
+        }
+
+        if (is_array($latest_payment->gateway_response)) {
+            return $latest_payment->gateway_response;
+        }
+
+        $decoded = json_decode($latest_payment->gateway_response, true);
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    private function payment_order_age_minutes($latest_payment): ?int
+    {
+        if (!$latest_payment || empty($latest_payment->created_at)) {
+            return null;
+        }
+
+        try {
+            return \Carbon\Carbon::parse($latest_payment->created_at)->diffInMinutes(now());
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
     private function call_fastapi_stuck_explanation(string $message, array $context_data): array
     {
         try {
@@ -232,6 +274,7 @@ class ApplicationStuckContextController extends Controller
         }
     }
 
+
     private function build_payment_context($application, $latest_payment, $approval_flow): array
     {
         $application_status = strtolower(trim((string) ($application->status ?? '')));
@@ -243,13 +286,30 @@ class ApplicationStuckContextController extends Controller
         $extra_payment = (float) ($application->extra_payment ?? 0);
 
         $has_grn = !empty($application->GRN_number);
-        
-        $has_approval_flow = $approval_flow->isNotEmpty();
-            
+
+        $latest_payment_status = $latest_payment
+            ? strtolower(trim((string) ($latest_payment->payment_status ?? '')))
+            : null;
+
+        $latest_payment_amount = $latest_payment
+            ? (float) ($latest_payment->payment_amount ?? 0)
+            : 0;
+
+        $gateway_response = $this->decode_gateway_response($latest_payment);
+
+        $gateway_response_status = $gateway_response['status'] ?? null;
+        $gateway_response_grn = $gateway_response['GRN'] ?? null;
+        $gateway_response_amount = isset($gateway_response['amount'])
+            ? (float) $gateway_response['amount']
+            : null;
+
+        $payment_order_age_minutes = $this->payment_order_age_minutes($latest_payment);
+
         $is_zero_fee_application = (
             $total_fee <= 0
             && $effective_fee <= 0
             && $paid_amount <= 0
+            && $extra_payment <= 0
         );
 
         $has_payable_amount = (
@@ -257,22 +317,70 @@ class ApplicationStuckContextController extends Controller
             || $effective_fee > 0
             || $paid_amount > 0
             || $extra_payment > 0
+            || $latest_payment_amount > 0
         );
 
         $payment_required = $has_payable_amount && !$is_zero_fee_application;
         $grn_required = $payment_required;
 
-        $current_state = 'unknown';
-        $payment_meaning = 'Could not determine payment status.';
-        $next_action = 'Please check payment details.';
-        $waiting_on = 'unknown';
-        $is_payment_issue = false;
+        /*
+    |--------------------------------------------------------------------------
+    | Safe amount calculation
+    |--------------------------------------------------------------------------
+    | AI should never calculate this.
+    | AI should only copy amount_to_pay_display if present.
+    */
+
+        $amount_to_pay = null;
+        $amount_source = 'none';
+        $fee_type = 'none';
+        $fee_explanation = 'No payment is required.';
+
+        if ($extra_payment > 0 && $payment_status === 'pending') {
+            $amount_to_pay = $extra_payment;
+            $amount_source = 'extra_payment';
+            $fee_type = 'extra_payment';
+            $fee_explanation = 'This is an extra payment raised by the department after review.';
+        } elseif ($payment_status === 'pending' && $effective_fee > 0) {
+            $amount_to_pay = $effective_fee;
+            $amount_source = 'effective_fee';
+            $fee_type = 'service_fee_first_payment';
+            $fee_explanation = 'This is the service/application fee required for first-time submission.';
+        } elseif ($payment_status === 'pending' && $latest_payment_amount > 0) {
+            $amount_to_pay = $latest_payment_amount;
+            $amount_source = 'latest_payment_order.payment_amount';
+            $fee_type = 'service_fee_first_payment';
+            $fee_explanation = 'This is the amount from the latest payment order.';
+        } elseif ($payment_status === 'pending' && $total_fee > $paid_amount) {
+            $amount_to_pay = max($total_fee - $paid_amount, 0);
+            $amount_source = 'total_fee_minus_paid_amount';
+            $fee_type = 'service_fee_first_payment';
+            $fee_explanation = 'This is the remaining service/application fee.';
+        }
+
+        $amount_to_pay_display = $this->format_rupee($amount_to_pay);
+
+        $gateway_context = [
+            'latest_payment_order_id' => $latest_payment->id ?? null,
+            'latest_order_id' => $latest_payment->order_id ?? null,
+            'latest_payment_status' => $latest_payment_status,
+            'latest_payment_amount' => $latest_payment_amount,
+            'latest_payment_amount_display' => $this->format_rupee($latest_payment_amount),
+            'latest_payment_created_at' => $latest_payment->created_at ?? null,
+            'payment_order_age_minutes' => $payment_order_age_minutes,
+            'updated_by_cron' => $latest_payment->updated_by_cron ?? null,
+            'gateway_response_status' => $gateway_response_status,
+            'gateway_response_grn' => $gateway_response_grn,
+            'gateway_response_amount' => $gateway_response_amount,
+            'gateway_response_amount_display' => $this->format_rupee($gateway_response_amount),
+        ];
 
         /*
-        |--------------------------------------------------------------------------
-        | 1. Draft
-        |--------------------------------------------------------------------------
-        */
+    |--------------------------------------------------------------------------
+    | 1. Draft
+    |--------------------------------------------------------------------------
+    */
+
         if ($application_status === 'draft') {
             return [
                 'payment_required' => false,
@@ -284,57 +392,146 @@ class ApplicationStuckContextController extends Controller
                 'payment_status' => $payment_status,
                 'payment_meaning' => 'Application is still in draft. Payment stage has not started yet.',
                 'next_action' => 'Applicant should complete and submit the application.',
+                'amount_to_pay' => null,
+                'amount_to_pay_display' => null,
+                'amount_source' => 'none',
+                'fee_type' => 'none',
+                'fee_explanation' => 'Payment stage has not started yet.',
                 'total_fee' => $total_fee,
                 'effective_fee' => $effective_fee,
                 'paid_amount' => $paid_amount,
                 'grn_number' => $application->GRN_number,
-                'latest_payment' => $latest_payment,
+                'gateway_context' => $gateway_context,
             ];
         }
 
         /*
-        |--------------------------------------------------------------------------
-        | 2. Zero-fee application
-        |--------------------------------------------------------------------------
-        */
+    |--------------------------------------------------------------------------
+    | 2. Zero-fee application
+    |--------------------------------------------------------------------------
+    */
+
         if ($is_zero_fee_application) {
             if ($payment_status === 'paid') {
-                $current_state = 'zero_fee_paid';
-                $payment_meaning = 'This is a zero-fee application. Payment is marked paid because no online payment is required.';
-                $next_action = 'No payment action is needed.';
-                $waiting_on = 'none';
-                $is_payment_issue = false;
-            } elseif ($payment_status === 'pending') {
-                $current_state = 'zero_fee_payment_status_mismatch';
-                $payment_meaning = 'This application appears to have zero fee, but payment status is still pending.';
-                $next_action = 'Admin should check fee calculation and payment status update.';
-                $waiting_on = 'system';
-                $is_payment_issue = true;
+                return [
+                    'payment_required' => false,
+                    'grn_required' => false,
+                    'is_zero_fee_application' => true,
+                    'is_payment_issue' => false,
+                    'waiting_on' => 'none',
+                    'current_state' => 'zero_fee_paid',
+                    'payment_status' => $payment_status,
+                    'payment_meaning' => 'This is a zero-fee application. Payment is marked paid because no online payment is required.',
+                    'next_action' => 'No payment action is needed.',
+                    'amount_to_pay' => null,
+                    'amount_to_pay_display' => null,
+                    'amount_source' => 'none',
+                    'fee_type' => 'zero_fee',
+                    'fee_explanation' => 'No service fee is required for this application.',
+                    'total_fee' => $total_fee,
+                    'effective_fee' => $effective_fee,
+                    'paid_amount' => $paid_amount,
+                    'grn_number' => $application->GRN_number,
+                    'gateway_context' => $gateway_context,
+                ];
             }
 
             return [
                 'payment_required' => false,
                 'grn_required' => false,
                 'is_zero_fee_application' => true,
-                'is_payment_issue' => $is_payment_issue,
-                'waiting_on' => $waiting_on,
-                'current_state' => $current_state,
+                'is_payment_issue' => true,
+                'waiting_on' => 'system',
+                'current_state' => 'zero_fee_payment_status_mismatch',
                 'payment_status' => $payment_status,
-                'payment_meaning' => $payment_meaning,
-                'next_action' => $next_action,
+                'payment_meaning' => 'This application appears to have zero fee, but payment status is not marked paid.',
+                'next_action' => 'Admin should check fee calculation and payment status update.',
+                'amount_to_pay' => null,
+                'amount_to_pay_display' => null,
+                'amount_source' => 'none',
+                'fee_type' => 'zero_fee',
+                'fee_explanation' => 'No service fee should be required for this application.',
                 'total_fee' => $total_fee,
                 'effective_fee' => $effective_fee,
                 'paid_amount' => $paid_amount,
                 'grn_number' => $application->GRN_number,
-                'latest_payment' => $latest_payment,
+                'gateway_context' => $gateway_context,
             ];
         }
 
         /*
-        |--------------------------------------------------------------------------
-        | 3. Extra payment pending
-        |--------------------------------------------------------------------------
-        */
+    |--------------------------------------------------------------------------
+    | 3. Payment order says success/paid but application still pending
+    |--------------------------------------------------------------------------
+    */
+
+        if (
+            $payment_status === 'pending'
+            && in_array($latest_payment_status, ['success', 'paid'])
+        ) {
+            return [
+                'payment_required' => true,
+                'grn_required' => true,
+                'is_zero_fee_application' => false,
+                'is_payment_issue' => true,
+                'waiting_on' => 'system',
+                'current_state' => 'payment_success_but_application_not_updated',
+                'payment_status' => $payment_status,
+                'payment_meaning' => 'Payment order looks successful, but application payment status is still pending.',
+                'next_action' => 'Admin should check payment callback, PaymentSuccessService, or payment cron update.',
+                'amount_to_pay' => $amount_to_pay,
+                'amount_to_pay_display' => $amount_to_pay_display,
+                'amount_source' => $amount_source,
+                'fee_type' => $fee_type,
+                'fee_explanation' => $fee_explanation,
+                'total_fee' => $total_fee,
+                'effective_fee' => $effective_fee,
+                'paid_amount' => $paid_amount,
+                'grn_number' => $application->GRN_number,
+                'gateway_context' => $gateway_context,
+            ];
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | 4. EGRAS response has GRN but says Pending
+    |--------------------------------------------------------------------------
+    */
+
+        if (
+            $payment_status === 'pending'
+            && !empty($gateway_response_grn)
+            && strtolower((string) $gateway_response_status) === 'pending'
+        ) {
+            return [
+                'payment_required' => true,
+                'grn_required' => true,
+                'is_zero_fee_application' => false,
+                'is_payment_issue' => false,
+                'waiting_on' => 'system',
+                'current_state' => 'gateway_pending_verification',
+                'payment_status' => $payment_status,
+                'payment_meaning' => 'Gateway returned a GRN but status is still pending, so payment verification may still be in progress.',
+                'next_action' => 'If payment was done recently, wait for callback or cron verification. If it remains pending after cron, admin should check gateway/payment cron.',
+                'amount_to_pay' => $amount_to_pay,
+                'amount_to_pay_display' => $amount_to_pay_display,
+                'amount_source' => $amount_source,
+                'fee_type' => $fee_type,
+                'fee_explanation' => $fee_explanation,
+                'total_fee' => $total_fee,
+                'effective_fee' => $effective_fee,
+                'paid_amount' => $paid_amount,
+                'grn_number' => $application->GRN_number,
+                'gateway_context' => $gateway_context,
+            ];
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | 5. Extra payment pending
+    |--------------------------------------------------------------------------
+    */
+
         if ($extra_payment > 0 && $payment_status === 'pending') {
             return [
                 'payment_required' => true,
@@ -346,44 +543,72 @@ class ApplicationStuckContextController extends Controller
                 'payment_status' => $payment_status,
                 'payment_meaning' => 'Extra payment has been raised and is pending.',
                 'next_action' => 'Applicant should complete the extra payment.',
+                'amount_to_pay' => $amount_to_pay,
+                'amount_to_pay_display' => $amount_to_pay_display,
+                'amount_source' => $amount_source,
+                'fee_type' => 'extra_payment',
+                'fee_explanation' => 'This is an extra payment raised by the department after review.',
                 'total_fee' => $total_fee,
                 'effective_fee' => $effective_fee,
                 'extra_payment' => $extra_payment,
                 'paid_amount' => $paid_amount,
                 'grn_number' => $application->GRN_number,
-                'latest_payment' => $latest_payment,
+                'gateway_context' => $gateway_context,
             ];
         }
 
         /*
-        |--------------------------------------------------------------------------
-        | 4. Normal payment pending
-        |--------------------------------------------------------------------------
-        */
+    |--------------------------------------------------------------------------
+    | 6. Normal pending payment
+    |--------------------------------------------------------------------------
+    */
+
         if ($payment_status === 'pending') {
+            $current_state = 'payment_pending';
+            $payment_meaning = 'Application is waiting for payment.';
+            $next_action = 'Applicant should complete the payment.';
+
+            if ($latest_payment && $payment_order_age_minutes !== null) {
+                if ($payment_order_age_minutes < 60) {
+                    $current_state = 'payment_pending_or_under_verification';
+                    $payment_meaning = 'Payment is still pending. If applicant has already paid recently, callback or cron verification may still be pending.';
+                    $next_action = 'If not paid, applicant should complete payment. If already paid recently, wait for verification or cron update.';
+                } else {
+                    $current_state = 'payment_pending_after_verification_window';
+                    $payment_meaning = 'Payment is still pending even after the normal verification window.';
+                    $next_action = 'If applicant has already paid, admin should check payment cron, gateway status, and callback logs.';
+                }
+            }
+
             return [
                 'payment_required' => true,
                 'grn_required' => true,
                 'is_zero_fee_application' => false,
-                'is_payment_issue' => false,
-                'waiting_on' => 'applicant',
-                'current_state' => 'payment_pending',
+                'is_payment_issue' => $current_state === 'payment_pending_after_verification_window',
+                'waiting_on' => $current_state === 'payment_pending_after_verification_window' ? 'system' : 'applicant',
+                'current_state' => $current_state,
                 'payment_status' => $payment_status,
-                'payment_meaning' => 'Application is waiting for payment.',
-                'next_action' => 'Applicant should complete the payment.',
+                'payment_meaning' => $payment_meaning,
+                'next_action' => $next_action,
+                'amount_to_pay' => $amount_to_pay,
+                'amount_to_pay_display' => $amount_to_pay_display,
+                'amount_source' => $amount_source,
+                'fee_type' => $fee_type,
+                'fee_explanation' => $fee_explanation,
                 'total_fee' => $total_fee,
                 'effective_fee' => $effective_fee,
                 'paid_amount' => $paid_amount,
                 'grn_number' => $application->GRN_number,
-                'latest_payment' => $latest_payment,
+                'gateway_context' => $gateway_context,
             ];
         }
 
         /*
-        |--------------------------------------------------------------------------
-        | 5. Paid but status still saved
-        |--------------------------------------------------------------------------
-        */
+    |--------------------------------------------------------------------------
+    | 7. Paid but status still saved
+    |--------------------------------------------------------------------------
+    */
+
         if ($application_status === 'saved' && $payment_status === 'paid') {
             return [
                 'payment_required' => true,
@@ -395,19 +620,25 @@ class ApplicationStuckContextController extends Controller
                 'payment_status' => $payment_status,
                 'payment_meaning' => 'Payment is paid, but application status is still saved.',
                 'next_action' => 'Admin should check payment success callback or PaymentSuccessService.',
+                'amount_to_pay' => null,
+                'amount_to_pay_display' => null,
+                'amount_source' => 'none',
+                'fee_type' => 'service_fee_first_payment',
+                'fee_explanation' => 'Payment appears paid, but application did not move forward.',
                 'total_fee' => $total_fee,
                 'effective_fee' => $effective_fee,
                 'paid_amount' => $paid_amount,
                 'grn_number' => $application->GRN_number,
-                'latest_payment' => $latest_payment,
+                'gateway_context' => $gateway_context,
             ];
         }
 
         /*
-        |--------------------------------------------------------------------------
-        | 6. Paid but GRN missing for payable application
-        |--------------------------------------------------------------------------
-        */
+    |--------------------------------------------------------------------------
+    | 8. Paid but GRN missing
+    |--------------------------------------------------------------------------
+    */
+
         if ($payment_status === 'paid' && !$has_grn && $grn_required) {
             return [
                 'payment_required' => true,
@@ -419,19 +650,25 @@ class ApplicationStuckContextController extends Controller
                 'payment_status' => $payment_status,
                 'payment_meaning' => 'Payment is marked paid, but GRN number is missing.',
                 'next_action' => 'Admin should verify payment writeback or GRN generation.',
+                'amount_to_pay' => null,
+                'amount_to_pay_display' => null,
+                'amount_source' => 'none',
+                'fee_type' => 'service_fee_first_payment',
+                'fee_explanation' => 'Payment is already marked paid.',
                 'total_fee' => $total_fee,
                 'effective_fee' => $effective_fee,
                 'paid_amount' => $paid_amount,
                 'grn_number' => $application->GRN_number,
-                'latest_payment' => $latest_payment,
+                'gateway_context' => $gateway_context,
             ];
         }
 
         /*
-        |--------------------------------------------------------------------------
-        | 7. Paid and verified
-        |--------------------------------------------------------------------------
-        */
+    |--------------------------------------------------------------------------
+    | 9. Payment completed
+    |--------------------------------------------------------------------------
+    */
+
         if ($payment_status === 'paid') {
             return [
                 'payment_required' => true,
@@ -443,19 +680,25 @@ class ApplicationStuckContextController extends Controller
                 'payment_status' => $payment_status,
                 'payment_meaning' => 'Payment is completed.',
                 'next_action' => 'No payment action is needed.',
+                'amount_to_pay' => null,
+                'amount_to_pay_display' => null,
+                'amount_source' => 'none',
+                'fee_type' => 'service_fee_first_payment',
+                'fee_explanation' => 'Payment is already completed.',
                 'total_fee' => $total_fee,
                 'effective_fee' => $effective_fee,
                 'paid_amount' => $paid_amount,
                 'grn_number' => $application->GRN_number,
-                'latest_payment' => $latest_payment,
+                'gateway_context' => $gateway_context,
             ];
         }
 
         /*
-        |--------------------------------------------------------------------------
-        | 8. Failed payment
-        |--------------------------------------------------------------------------
-        */
+    |--------------------------------------------------------------------------
+    | 10. Payment failed
+    |--------------------------------------------------------------------------
+    */
+
         if ($payment_status === 'failed') {
             return [
                 'payment_required' => true,
@@ -467,34 +710,39 @@ class ApplicationStuckContextController extends Controller
                 'payment_status' => $payment_status,
                 'payment_meaning' => 'Payment failed.',
                 'next_action' => 'Applicant should retry payment or contact support.',
+                'amount_to_pay' => $amount_to_pay,
+                'amount_to_pay_display' => $amount_to_pay_display,
+                'amount_source' => $amount_source,
+                'fee_type' => $fee_type,
+                'fee_explanation' => $fee_explanation,
                 'total_fee' => $total_fee,
                 'effective_fee' => $effective_fee,
                 'paid_amount' => $paid_amount,
                 'grn_number' => $application->GRN_number,
-                'latest_payment' => $latest_payment,
+                'gateway_context' => $gateway_context,
             ];
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | 9. Fallback
-        |--------------------------------------------------------------------------
-        */
         return [
             'payment_required' => $payment_required,
             'grn_required' => $grn_required,
             'is_zero_fee_application' => $is_zero_fee_application,
-            'is_payment_issue' => $is_payment_issue,
-            'waiting_on' => $waiting_on,
-            'current_state' => $current_state,
+            'is_payment_issue' => false,
+            'waiting_on' => 'unknown',
+            'current_state' => 'unknown',
             'payment_status' => $payment_status,
-            'payment_meaning' => $payment_meaning,
-            'next_action' => $next_action,
+            'payment_meaning' => 'Could not determine payment status.',
+            'next_action' => 'Please check payment details.',
+            'amount_to_pay' => $amount_to_pay,
+            'amount_to_pay_display' => $amount_to_pay_display,
+            'amount_source' => $amount_source,
+            'fee_type' => $fee_type,
+            'fee_explanation' => $fee_explanation,
             'total_fee' => $total_fee,
             'effective_fee' => $effective_fee,
             'paid_amount' => $paid_amount,
             'grn_number' => $application->GRN_number,
-            'latest_payment' => $latest_payment,
+            'gateway_context' => $gateway_context,
         ];
     }
 
