@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use Carbon\Carbon;
 
 class ApplicationAiContextController extends Controller
 {
@@ -36,7 +37,9 @@ class ApplicationAiContextController extends Controller
         try {
 
             $application_query = UserServiceApplication::with([
-                'service:id,service_title_or_description'
+                'service:id,service_title_or_description,noc_validity,fixed_expiry_date,department_id',
+                'service.renewalCycles',
+                'service.department:id,name',
             ]);
 
             if ($request->application_id) {
@@ -67,6 +70,17 @@ class ApplicationAiContextController extends Controller
                     'NOC_generationDate',
                     'NOC_letter_number',
                     'NOC_letter_date',
+                    'NOC_expiry_date',
+                    'renewal_cycle_id',
+                    'renewal',
+                    'renewal_cycle_id',
+                    'renewalYear',
+                    'NOC_expiry_date',
+                    'PreviousNOCexpiryDate',
+                    'external_valid_till',
+                    'external_noc_number',
+                    'is_third_party',
+                    'previous_application_id',
                 ])
                 ->first();
 
@@ -168,6 +182,19 @@ class ApplicationAiContextController extends Controller
                 recent_assignments: $recent_assignments
             );
 
+            $payment_breakdown_context = $this->build_payment_breakdown_context(
+                application: $application,
+                latest_payment: $latest_payment
+            );
+
+            $validity_renewal_context = $this->build_validity_renewal_context(
+                application: $application
+            );
+
+            $certificate_validity_projection_context = $this->build_certificate_validity_projection_context(
+                application: $application
+            );
+
             $context_data = [
                 'application' => [
                     'id'                 => $application->id,
@@ -181,6 +208,12 @@ class ApplicationAiContextController extends Controller
                     'effective_fee'      => $application->effective_fee,
                     'paid_amount'        => $application->paid_amount,
                     'grn_number'         => $application->GRN_number,
+                    'noc_expiry_date'       => $application->NOC_expiry_date,
+                    'previous_noc_expiry_date' => $application->PreviousNOCexpiryDate,
+                    'noc_generation_date'   => $application->NOC_generationDate,
+                    'external_valid_till'   => $application->external_valid_till,
+                    'external_noc_number'   => $application->external_noc_number,
+                    'is_third_party'        => $application->is_third_party,
                     'created_at'         => $application->created_at,
                     'updated_at'         => $application->updated_at,
                 ],
@@ -191,6 +224,9 @@ class ApplicationAiContextController extends Controller
                 'send_back_context'   => $send_back_context,
                 'certificate_context' => $certificate_context,
                 'timeline_context'    => $timeline_context,
+                'payment_breakdown_context'    => $payment_breakdown_context,
+                'validity_renewal_context' => $validity_renewal_context,
+                'certificate_validity_projection_context' => $certificate_validity_projection_context,
 
                 'latest_assignment'   => $latest_assignment,
                 'recent_assignments'  => $recent_assignments,
@@ -312,8 +348,8 @@ class ApplicationAiContextController extends Controller
 
     private function build_payment_context($application, $latest_payment, $approval_flow): array
     {
-        $application_status = strtolower(trim((string) ($application->status ?? '')));
-        $payment_status = strtolower(trim((string) ($application->payment_status ?? '')));
+        $application_status = $application->status ?? '';
+        $payment_status = $application->payment_status ?? '';
 
         $total_fee = (float) ($application->total_fee ?? 0);
         $effective_fee = (float) ($application->effective_fee ?? 0);
@@ -323,7 +359,7 @@ class ApplicationAiContextController extends Controller
         $has_grn = !empty($application->GRN_number);
 
         $latest_payment_status = $latest_payment
-            ? strtolower(trim((string) ($latest_payment->payment_status ?? '')))
+            ? $latest_payment->payment_status ?? ''
             : null;
 
         $latest_payment_amount = $latest_payment
@@ -791,8 +827,8 @@ class ApplicationAiContextController extends Controller
         $next_action = 'Please check application, payment, and workflow details.';
         $payment_note = null;
 
-        $application_status = strtolower(trim((string) ($application->status ?? '')));
-        $payment_status = strtolower(trim((string) ($application->payment_status ?? '')));
+        $application_status = $application->status ?? '';
+        $payment_status = $application->payment_status ?? '';
 
         $total_fee = (float) ($application->total_fee ?? 0);
         $effective_fee = (float) ($application->effective_fee ?? 0);
@@ -1162,7 +1198,7 @@ class ApplicationAiContextController extends Controller
             ];
         }
 
-        $assignment_status = strtolower(trim((string) ($latest_assignment->status ?? '')));
+        $assignment_status = $latest_assignment->status ?? '';
 
         if ($assignment_status === 'pending' && empty($latest_assignment->action_taken_at)) {
             return [
@@ -1257,7 +1293,7 @@ class ApplicationAiContextController extends Controller
 
     private function build_certificate_context($application): array
     {
-        $application_status = strtolower(trim((string) ($application->status ?? '')));
+        $application_status = $application->status ?? '';
 
         $has_noc_certificate = !empty($application->NOC_certificate);
         $has_rejection_certificate = !empty($application->NOC_rejection_certificate);
@@ -1317,7 +1353,7 @@ class ApplicationAiContextController extends Controller
         ];
 
         foreach ($recent_assignments->reverse()->values() as $assignment) {
-            $status = strtolower(trim((string) ($assignment->status ?? '')));
+            $status = $assignment->status ?? '';
 
             $title = 'Workflow step updated';
 
@@ -1349,6 +1385,592 @@ class ApplicationAiContextController extends Controller
             'events_count' => count($timeline),
             'events' => $timeline,
             'meaning' => 'This timeline shows the recent application creation and workflow assignment events.',
+        ];
+    }
+
+    private function build_payment_breakdown_context($application, $latest_payment): array
+    {
+        $application_total_fee = (float) ($application->total_fee ?? 0);
+        $application_final_fee = (float) ($application->final_fee ?? 0);
+        $application_effective_fee = (float) ($application->effective_fee ?? 0);
+        $application_paid_amount = (float) ($application->paid_amount ?? 0);
+
+        $payment_amount = $latest_payment
+            ? (float) ($latest_payment->payment_amount ?? 0)
+            : 0;
+
+        $establishment_fee_paid = $latest_payment
+            ? (float) ($latest_payment->establishment_fee_paid ?? 0)
+            : 0;
+
+        $operational_fee_paid = $latest_payment
+            ? (float) ($latest_payment->operational_fee_paid ?? 0)
+            : 0;
+
+        $gateway_response = $this->decode_gateway_response($latest_payment);
+
+        $gateway_amount = isset($gateway_response['amount'])
+            ? (float) $gateway_response['amount']
+            : null;
+
+        $components = [];
+
+        if ($application_effective_fee > 0) {
+            $components[] = [
+                'name' => 'Service/Application fee',
+                'amount' => $application_effective_fee,
+                'amount_display' => $this->format_rupee($application_effective_fee),
+                'source' => 'application.effective_fee',
+                'meaning' => 'This is the service/application fee payable for this application.',
+            ];
+        }
+
+        if ($establishment_fee_paid > 0) {
+            $components[] = [
+                'name' => 'Establishment fee',
+                'amount' => $establishment_fee_paid,
+                'amount_display' => $this->format_rupee($establishment_fee_paid),
+                'source' => 'payment_orders.establishment_fee_paid',
+                'meaning' => 'This is the establishment fee included in the payment order.',
+            ];
+        }
+
+        if ($operational_fee_paid > 0) {
+            $components[] = [
+                'name' => 'Operational fee',
+                'amount' => $operational_fee_paid,
+                'amount_display' => $this->format_rupee($operational_fee_paid),
+                'source' => 'payment_orders.operational_fee_paid',
+                'meaning' => 'This is the operational fee included in the payment order.',
+            ];
+        }
+
+        $component_total = collect($components)->sum('amount');
+
+        $difference = $payment_amount - $component_total;
+
+        $has_breakdown = count($components) > 0;
+
+        $is_breakdown_matching = abs($difference) < 0.01;
+
+        $breakdown_note = null;
+
+        if (!$latest_payment) {
+            $breakdown_note = 'No payment order was found, so amount breakdown is not available.';
+        } elseif (!$has_breakdown) {
+            $breakdown_note = 'Payment order exists, but component-wise fee breakup is not available.';
+        } elseif (!$is_breakdown_matching) {
+            $breakdown_note = 'Payment amount and calculated component total do not fully match. Admin should verify fee calculation/source fields.';
+        } else {
+            $breakdown_note = 'Payment amount matches the available component-wise breakup.';
+        }
+
+        return [
+            'has_payment_order' => !empty($latest_payment),
+            'has_breakdown' => $has_breakdown,
+            'payment_order_id' => $latest_payment->id ?? null,
+            'order_id' => $latest_payment->order_id ?? null,
+
+            'payment_amount' => $payment_amount,
+            'payment_amount_display' => $this->format_rupee($payment_amount),
+
+            'gateway_amount' => $gateway_amount,
+            'gateway_amount_display' => $this->format_rupee($gateway_amount),
+
+            'application_total_fee' => $application_total_fee,
+            'application_total_fee_display' => $this->format_rupee($application_total_fee),
+
+            'application_final_fee' => $application_final_fee,
+            'application_final_fee_display' => $this->format_rupee($application_final_fee),
+
+            'application_effective_fee' => $application_effective_fee,
+            'application_effective_fee_display' => $this->format_rupee($application_effective_fee),
+
+            'application_paid_amount' => $application_paid_amount,
+            'application_paid_amount_display' => $this->format_rupee($application_paid_amount),
+
+            'components' => $components,
+
+            'component_total' => $component_total,
+            'component_total_display' => $this->format_rupee($component_total),
+
+            'difference' => $difference,
+            'difference_display' => $this->format_rupee(abs($difference)),
+
+            'is_breakdown_matching' => $is_breakdown_matching,
+            'breakdown_note' => $breakdown_note,
+        ];
+    }
+
+    private function build_validity_renewal_context($application): array
+    {
+        $application_status = strtolower(trim((string) ($application->status ?? '')));
+        $renewal_flag = strtolower(trim((string) ($application->renewal ?? '')));
+
+        $service = $application->service;
+
+        $renewal_cycles = $service && $service->renewalCycles
+            ? $service->renewalCycles
+            : collect();
+
+        $has_renewal_cycles = $renewal_cycles->isNotEmpty();
+
+        $is_renewal_application = $renewal_flag === 'yes';
+        $is_fresh_application = $renewal_flag === 'no';
+
+        /*
+    |--------------------------------------------------------------------------
+    | Service has no renewal configuration
+    |--------------------------------------------------------------------------
+    */
+
+        if (!$has_renewal_cycles) {
+            return [
+                'application_type' => $is_renewal_application ? 'renewal' : 'fresh',
+                'service_renewal_available' => false,
+
+                'current_certificate' => [
+                    'has_expiry_date' => !empty($application->NOC_expiry_date),
+                    'expiry_date' => $application->NOC_expiry_date,
+                    'meaning' => !empty($application->NOC_expiry_date)
+                        ? 'Current certificate expiry date is available.'
+                        : 'Current certificate expiry date is not available.',
+                ],
+
+                'previous_certificate' => null,
+
+                'renewal_window' => [
+                    'can_renew_now' => false,
+                    'active_renewal_cycle' => null,
+                    'next_renewal_cycle' => null,
+                    'renewal_cycles' => [],
+                    'renewal_base_expiry_date' => null,
+                ],
+
+                'current_state' => 'renewal_cycle_not_configured',
+                'meaning' => 'No renewal cycle is configured for this service.',
+                'next_action' => 'No renewal window is available from current service configuration.',
+            ];
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Renewal cycles exist but target days are 0
+    | Your system meaning: no expiry / no renewal window
+    |--------------------------------------------------------------------------
+    */
+
+        $all_cycles_have_zero_target_days = $renewal_cycles->every(function ($cycle) {
+            return (int) ($cycle->renewal_target_days ?? 0) === 0;
+        });
+
+        if ($all_cycles_have_zero_target_days) {
+            return [
+                'application_type' => $is_renewal_application ? 'renewal' : 'fresh',
+                'service_renewal_available' => false,
+
+                'current_certificate' => [
+                    'has_expiry_date' => !empty($application->NOC_expiry_date),
+                    'expiry_date' => $application->NOC_expiry_date,
+                    'meaning' => 'Renewal cycle exists, but target days are 0, so expiry/renewal is not applicable.',
+                ],
+
+                'previous_certificate' => null,
+
+                'renewal_window' => [
+                    'can_renew_now' => false,
+                    'active_renewal_cycle' => null,
+                    'next_renewal_cycle' => null,
+                    'renewal_cycles' => $renewal_cycles->map(function ($cycle) {
+                        return [
+                            'renewal_cycle_id' => $cycle->id,
+                            'renewal_title' => $cycle->renewal_title,
+                            'renewal_window_days' => $cycle->renewal_window_days,
+                            'renewal_target_days' => $cycle->renewal_target_days,
+                            'can_renew' => false,
+                        ];
+                    })->values()->toArray(),
+                    'renewal_base_expiry_date' => null,
+                ],
+
+                'current_state' => 'no_expiry_due_to_zero_target_days',
+                'meaning' => 'Renewal cycle exists, but renewal target days are 0, so expiry/renewal is not applicable.',
+                'next_action' => 'No renewal action is required.',
+            ];
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Renewal application must have previous application
+    |--------------------------------------------------------------------------
+    */
+
+        $previous_application = null;
+
+        if ($is_renewal_application) {
+            if (empty($application->previous_application_id)) {
+                return [
+                    'application_type' => 'renewal',
+                    'service_renewal_available' => true,
+
+                    'current_certificate' => [
+                        'has_expiry_date' => !empty($application->NOC_expiry_date),
+                        'expiry_date' => $application->NOC_expiry_date,
+                        'meaning' => 'Current renewal application expiry date is not available yet.',
+                    ],
+
+                    'previous_certificate' => null,
+
+                    'renewal_window' => [
+                        'can_renew_now' => false,
+                        'active_renewal_cycle' => null,
+                        'next_renewal_cycle' => null,
+                        'renewal_cycles' => [],
+                        'renewal_base_expiry_date' => null,
+                    ],
+
+                    'current_state' => 'renewal_previous_application_missing',
+                    'meaning' => 'This is marked as a renewal application, but previous application ID is missing.',
+                    'next_action' => 'Admin should verify previous_application_id for this renewal application.',
+                ];
+            }
+
+            $previous_application = UserServiceApplication::find($application->previous_application_id);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Current certificate expiry
+    | This answers: "when will this certificate expire?"
+    |--------------------------------------------------------------------------
+    */
+
+        $current_certificate_expiry = !empty($application->NOC_expiry_date)
+            ? $application->NOC_expiry_date
+            : null;
+
+        $current_certificate = [
+            'has_expiry_date' => false,
+            'expiry_date' => null,
+            'is_expired' => null,
+            'days_left' => null,
+            'meaning' => 'Current certificate expiry date is not available.',
+        ];
+
+        if (!empty($current_certificate_expiry)) {
+            try {
+                $current_expiry = \Carbon\Carbon::parse($current_certificate_expiry)->startOfDay();
+                $today = \Carbon\Carbon::today();
+
+                $current_certificate = [
+                    'has_expiry_date' => true,
+                    'expiry_date' => $current_expiry->toDateString(),
+                    'is_expired' => $current_expiry->lt($today),
+                    'days_left' => $today->diffInDays($current_expiry, false),
+                    'meaning' => 'Current certificate expiry date is available.',
+                ];
+            } catch (\Exception $e) {
+                $current_certificate = [
+                    'has_expiry_date' => false,
+                    'expiry_date' => $current_certificate_expiry,
+                    'is_expired' => null,
+                    'days_left' => null,
+                    'meaning' => 'Current certificate expiry date exists but could not be parsed.',
+                ];
+            }
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Previous certificate expiry
+    | This is only supporting info for renewal applications.
+    |--------------------------------------------------------------------------
+    */
+
+        $previous_certificate = null;
+
+        if ($is_renewal_application) {
+            $previous_expiry_date = null;
+
+            if ($previous_application && !empty($previous_application->NOC_expiry_date)) {
+                $previous_expiry_date = $previous_application->NOC_expiry_date;
+            } elseif (!empty($application->PreviousNOCexpiryDate)) {
+                $previous_expiry_date = $application->PreviousNOCexpiryDate;
+            }
+
+            if (!empty($previous_expiry_date)) {
+                try {
+                    $previous_expiry = \Carbon\Carbon::parse($previous_expiry_date)->startOfDay();
+                    $today = \Carbon\Carbon::today();
+
+                    $previous_certificate = [
+                        'previous_application_id' => $application->previous_application_id,
+                        'has_expiry_date' => true,
+                        'expiry_date' => $previous_expiry->toDateString(),
+                        'is_expired' => $previous_expiry->lt($today),
+                        'days_left' => $today->diffInDays($previous_expiry, false),
+                        'meaning' => 'This is the previous certificate expiry date used for renewal eligibility.',
+                    ];
+                } catch (\Exception $e) {
+                    $previous_certificate = [
+                        'previous_application_id' => $application->previous_application_id,
+                        'has_expiry_date' => false,
+                        'expiry_date' => $previous_expiry_date,
+                        'is_expired' => null,
+                        'days_left' => null,
+                        'meaning' => 'Previous certificate expiry date exists but could not be parsed.',
+                    ];
+                }
+            }
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Renewal window
+    | Uses your existing renewal logic.
+    | Important: expiry_date here is renewal base expiry date, not always current certificate expiry.
+    |--------------------------------------------------------------------------
+    */
+
+        $renewal_details = $this->get_renewal_details($application);
+
+        $renewal_base_expiry_date = $renewal_details['expiry_date'] ?? null;
+        $renewal_data = $renewal_details['renewal_cycles'] ?? [];
+
+        $active_cycle = collect($renewal_data)->firstWhere('can_renew', true);
+
+        $today = \Carbon\Carbon::today();
+
+        $next_cycle = collect($renewal_data)
+            ->filter(function ($cycle) use ($today) {
+                if (empty($cycle['renewal_start_date'])) {
+                    return false;
+                }
+
+                return \Carbon\Carbon::parse($cycle['renewal_start_date'])->gte($today);
+            })
+            ->sortBy('renewal_start_date')
+            ->first();
+
+        /*
+    |--------------------------------------------------------------------------
+    | Decide final context state
+    |--------------------------------------------------------------------------
+    */
+
+        if ($is_renewal_application && !$current_certificate['has_expiry_date']) {
+            $current_state = 'renewal_application_certificate_not_issued_yet';
+            $meaning = 'This is a renewal application, but the new certificate expiry date is not available yet.';
+            $next_action = 'Wait until the renewal application is approved and the new certificate is generated.';
+        } elseif ($current_certificate['has_expiry_date'] && $current_certificate['is_expired']) {
+            $current_state = 'current_certificate_expired';
+            $meaning = 'Current certificate has expired.';
+            $next_action = 'Applicant should apply for renewal if renewal window is available.';
+        } elseif ($current_certificate['has_expiry_date']) {
+            $current_state = 'current_certificate_valid';
+            $meaning = 'Current certificate is valid.';
+            $next_action = 'No renewal action is needed unless renewal window is open.';
+        } elseif (!empty($active_cycle)) {
+            $current_state = 'renewable_now';
+            $meaning = 'Application is currently eligible for renewal.';
+            $next_action = 'Applicant can apply for renewal within the active renewal window.';
+        } else {
+            $current_state = 'validity_date_unavailable';
+            $meaning = 'Current certificate expiry date is not available in the current data.';
+            $next_action = 'Applicant should check the certificate or contact support if validity date is required.';
+        }
+
+        return [
+            'application_type' => $is_renewal_application ? 'renewal' : ($is_fresh_application ? 'fresh' : 'unknown'),
+            'service_renewal_available' => true,
+
+            'current_certificate' => $current_certificate,
+            'previous_certificate' => $previous_certificate,
+
+            'renewal_window' => [
+                'can_renew_now' => !empty($active_cycle),
+                'active_renewal_cycle' => $active_cycle ?: null,
+                'next_renewal_cycle' => $next_cycle ?: null,
+                'renewal_cycles' => $renewal_data,
+                'renewal_base_expiry_date' => $renewal_base_expiry_date,
+                'meaning' => 'Renewal window is calculated from renewal cycle configuration.',
+            ],
+
+            'application_status' => $application_status,
+            'current_state' => $current_state,
+            'meaning' => $meaning,
+            'next_action' => $next_action,
+        ];
+    }
+    private function get_renewal_details($application)
+    {
+        $service = $application->service;
+
+        if (!empty($service->noc_validity) && !empty($application->NOC_expiry_date)) {
+            $expiry_date = Carbon::parse($application->NOC_expiry_date);
+        } elseif (!empty($application->previous_application_id)) {
+            $previous_app = UserServiceApplication::find($application->previous_application_id);
+
+            if ($previous_app && !empty($previous_app->NOC_expiry_date)) {
+                $expiry_date = Carbon::parse($previous_app->NOC_expiry_date);
+            } else {
+                $expiry_date = null;
+            }
+        } elseif (!empty($service->fixed_expiry_date)) {
+            $expiry_date = Carbon::parse($service->fixed_expiry_date);
+        } else {
+            $expiry_date = null;
+        }
+
+        $today = Carbon::today();
+        $renewal_data = [];
+        $renewal_cycles = $service->renewalCycles;
+
+        foreach ($renewal_cycles as $cycle) {
+
+            $renewal_start = null;
+            $renewal_end = null;
+
+            if (!empty($cycle->fixed_renewal_start_date) && !empty($cycle->fixed_renewal_end_date)) {
+                $renewal_start = Carbon::parse($cycle->fixed_renewal_start_date);
+                $renewal_end   = Carbon::parse($cycle->fixed_renewal_end_date);
+            } else {
+
+                if (!empty($cycle->renewal_window_days) && $expiry_date) {
+                    $window_days = (int)$cycle->renewal_window_days;
+
+                    if ($window_days >= 0) {
+                        $renewal_start = $expiry_date->copy()->subDays($window_days);
+                        if ($renewal_end === null) {
+                            $renewal_end = $expiry_date->copy();
+                        }
+                    } else {
+                        $renewal_start = $expiry_date->copy()->addDays(abs($window_days));
+                        if ($renewal_end === null) {
+                            $renewal_end = $expiry_date->copy();
+                        }
+                    }
+                }
+
+                if (!empty($cycle->renewal_target_days) && $expiry_date) {
+                    $target_days = (int)$cycle->renewal_target_days;
+
+                    if ($target_days >= 0) {
+                        if ($renewal_start === null) {
+                            $renewal_start = $expiry_date->copy();
+                        }
+                        $renewal_end = $expiry_date->copy()->addDays($target_days);
+                    } else {
+                        if ($renewal_start === null) {
+                            $renewal_start = $expiry_date->copy();
+                        }
+                        $renewal_end = $expiry_date->copy()->subDays(abs($target_days));
+                    }
+                }
+            }
+            $can_renew = false;
+
+            if ($renewal_start && $renewal_end) {
+                if ($today->between($renewal_start, $renewal_end)) {
+                    $can_renew = true;
+                }
+            }
+
+            $renewal_data[] = [
+                'renewal_cycle_id'   => $cycle->id,
+                'renewal_title'      => $cycle->renewal_title,
+                'can_renew'          => $can_renew,
+                'renewal_start_date' => optional($renewal_start)->toDateString(),
+                'renewal_end_date'   => optional($renewal_end)->toDateString(),
+                'post_days'          => $cycle->post_days,
+            ];
+        }
+
+        return [
+            'expiry_date'    => optional($expiry_date)->toDateString(),
+            'renewal_cycles' => $renewal_data,
+        ];
+    }
+
+    private function build_certificate_validity_projection_context($application): array
+    {
+        $renewal_details = $this->get_renewal_details($application);
+
+        $renewal_cycles = collect($renewal_details['renewal_cycles'] ?? []);
+        $active_cycle = $renewal_cycles->firstWhere('can_renew', true);
+
+        $renewal_flag = strtolower(trim((string) ($application->renewal ?? '')));
+        $is_renewal_application = $renewal_flag === 'yes';
+
+        if ($is_renewal_application && $active_cycle) {
+
+            if ($is_renewal_application && $active_cycle) {
+                $certificate_valid_till = $active_cycle['renewal_end_date'] ?? null;
+                $generation_date = \Carbon\Carbon::today();
+
+                $validity_days_if_generated_today = null;
+                $validity_total_cycle_days = null;
+
+                if (!empty($certificate_valid_till)) {
+                    $valid_till_date = \Carbon\Carbon::parse($certificate_valid_till)->startOfDay();
+
+                    // Days from today/generation date till certificate expiry
+                    $validity_days_if_generated_today = $generation_date->diffInDays($valid_till_date, false);
+
+                    // Full renewal cycle validity days.
+                    // For renewal application, base expiry is previous certificate expiry.
+                    if (!empty($renewal_details['expiry_date'])) {
+                        $base_expiry_date = \Carbon\Carbon::parse($renewal_details['expiry_date'])->startOfDay();
+                        $validity_total_cycle_days = $base_expiry_date->diffInDays($valid_till_date, false);
+                    }
+                }
+
+                return [
+                    'can_project_validity' => true,
+                    'projection_type' => 'renewal_cycle_based',
+
+                    'certificate_valid_from_rule' => 'certificate_generation_date',
+                    'assumed_generation_date' => $generation_date->toDateString(),
+
+                    'certificate_valid_till' => $certificate_valid_till,
+                    'certificate_valid_till_source' => 'active_renewal_cycle.renewal_end_date',
+
+                    'validity_days_if_generated_today' => $validity_days_if_generated_today,
+                    'validity_total_cycle_days' => $validity_total_cycle_days,
+
+                    'active_renewal_cycle' => $active_cycle,
+                    'base_previous_expiry_date' => $renewal_details['expiry_date'] ?? null,
+
+                    'meaning' => 'For this renewal application, the new certificate validity is based on the active renewal cycle.',
+                    'example_answer' => 'If the certificate is generated today, it will remain valid until the renewal cycle end date.',
+                ];
+            }
+        }
+
+        if (!empty($application->NOC_expiry_date)) {
+            return [
+                'can_project_validity' => true,
+                'projection_type' => 'existing_certificate_expiry',
+                'certificate_valid_from_rule' => 'already_generated_certificate',
+                'certificate_valid_till' => $application->NOC_expiry_date,
+                'certificate_valid_till_source' => 'application.NOC_expiry_date',
+                'active_renewal_cycle' => $active_cycle ?: null,
+                'base_previous_expiry_date' => $renewal_details['expiry_date'] ?? null,
+                'meaning' => 'Certificate expiry date is already available.',
+                'example_answer' => 'The certificate is valid till the available NOC expiry date.',
+            ];
+        }
+
+        return [
+            'can_project_validity' => false,
+            'projection_type' => 'not_available',
+            'certificate_valid_from_rule' => null,
+            'certificate_valid_till' => null,
+            'certificate_valid_till_source' => null,
+            'active_renewal_cycle' => $active_cycle ?: null,
+            'base_previous_expiry_date' => $renewal_details['expiry_date'] ?? null,
+            'meaning' => 'Certificate validity projection is not available from current data.',
+            'example_answer' => null,
         ];
     }
 }

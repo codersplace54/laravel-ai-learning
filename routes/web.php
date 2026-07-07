@@ -4,10 +4,18 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Service\PaymentController;
 use App\Http\Controllers\Admin\ApplicationDataCorrectionController;
+use App\Http\Controllers\Ai\AiChatController;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+Route::get('/ai-chat-test', function () {
+    return view('ai-chat-test');
+});
+
+Route::get('/ai/chat/options', [AiChatController::class, 'options']);
+Route::post('/ai/chat', [AiChatController::class, 'chat']);
 
 Route::post('/user/payment-callback', [PaymentController::class, 'payment_callback']);
 
