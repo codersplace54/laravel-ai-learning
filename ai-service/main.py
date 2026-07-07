@@ -4,11 +4,13 @@ import shutil
 from fastapi import FastAPI, Header, HTTPException, UploadFile, File, Request
 
 from config import check_config
-from schemas import AskRequest, ApplicationStuckRequest
+from schemas import AskRequest, ApplicationStuckRequest, ChatPlanRequest, ChatAnswerRequest
 from services.rag_service import process_document, answer_question
 from services.vector_service import clear_vector_db
 from services.application_stuck_ai_service import investigate_application_stuck_with_rag
 from services.application_stuck_explanation_service import explain_application_stuck
+from services.chat_planner_service import plan_chat_message
+from services.chat_answer_service import answer_from_context
 
 check_config()
 
@@ -108,3 +110,21 @@ async def application_stuck_explain(
         message=body.get("message"),
         context=body.get("context", {})
     )
+
+@app.post("/api/ai/chat/plan")
+def chat_plan(
+    request_data: ChatPlanRequest,
+    x_ai_secret: str | None = Header(default=None),
+):
+
+    return plan_chat_message(request_data)
+
+
+@app.post("/api/ai/chat/answer")
+def chat_answer(
+    request_data: ChatAnswerRequest,
+    x_ai_secret: str | None = Header(default=None),
+):
+    verify_secret(x_ai_secret)
+
+    return answer_from_context(request_data)

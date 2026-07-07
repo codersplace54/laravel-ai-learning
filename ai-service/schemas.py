@@ -74,3 +74,14 @@ class ApplicationStuckResponse(BaseModel):
     next_checks: List[str]
     can_auto_fix: bool
     confidence: float
+
+class ChatPlanRequest(BaseModel):
+    message: str
+    active_application_id: Optional[int] = None
+    active_service_id: Optional[int] = None
+    recent_messages: List[Dict[str, Any]] = []
+
+class ChatAnswerRequest(BaseModel):
+    message: str
+    data_scope: str
+    context: Dict[str, Any]

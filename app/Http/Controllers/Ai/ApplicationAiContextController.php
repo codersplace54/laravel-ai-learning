@@ -308,7 +308,7 @@ class ApplicationAiContextController extends Controller
                 ->withHeaders([
                     'Accept'       => 'application/json',
                     'Content-Type' => 'application/json',
-                    'X-AI-SECRET'  => config('services.fastapi_ai.secret'),
+                    'X-AI-SECRET'  => config('ai.secret'),
                 ])
                 ->post($base_url . '/api/ai/application-chat', [
                     'message' => $message,
