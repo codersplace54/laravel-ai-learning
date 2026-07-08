@@ -69,22 +69,28 @@ def plan_chat_message(request_data: ChatPlanRequest) -> dict:
         "recent_messages": request_data.recent_messages,
     }
 
-    completion = groq_client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": CHAT_PLANNER_PROMPT,
-            },
-            {
-                "role": "user",
-                "content": json.dumps(payload, default=str),
-            },
-        ],
-        temperature=0,
-        response_format={"type": "json_object"},
-        max_completion_tokens=500,
-    )
+    try:
+        completion = groq_client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": CHAT_PLANNER_PROMPT,
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(payload, default=str),
+                },
+            ],
+            temperature=0,
+            response_format={"type": "json_object"},
+            max_completion_tokens=500,
+        )
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "rate_limit" in error_msg or "429" in error_msg:
+            raise HTTPException(status_code=429, detail="AI service rate limit reached. Please wait a moment.")
+        raise HTTPException(status_code=503, detail="AI service unavailable. Please try again.")
 
     text = completion.choices[0].message.content
 

@@ -36,13 +36,15 @@ def explain_application_stuck(message:str, context: dict):
 User question:
 {message}
 
-Laravel calculated context:
+Application context (Laravel computed):
 {json.dumps(context, default=str)}
 
 RAG document context:
 {rag_context}
 
-Now explain the application status.
+Answer ONLY the user's exact question from the context above.
+Do not summarize the full application unless asked.
+If the data needed to answer is missing, say it is not available.
 Return JSON only.
 """
     try:

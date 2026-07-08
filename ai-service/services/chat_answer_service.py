@@ -39,22 +39,28 @@ def answer_from_context(request_data) -> dict:
         "context": request_data.context,
     }
 
-    completion = groq_client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": CHAT_ANSWER_PROMPT,
-            },
-            {
-                "role": "user",
-                "content": json.dumps(payload, default=str),
-            },
-        ],
-        temperature=0.2,
-        response_format={"type": "json_object"},
-        max_completion_tokens=700,
-    )
+    try:
+        completion = groq_client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": CHAT_ANSWER_PROMPT,
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(payload, default=str),
+                },
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            max_completion_tokens=700,
+        )
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "rate_limit" in error_msg or "429" in error_msg:
+            raise HTTPException(status_code=429, detail="AI service rate limit reached. Please wait a moment.")
+        raise HTTPException(status_code=503, detail="AI service unavailable. Please try again.")
 
     text = completion.choices[0].message.content
 

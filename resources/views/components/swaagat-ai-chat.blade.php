@@ -45,67 +45,6 @@
                 </button>
             </div>
 
-            <!-- Mode Pills -->
-            <div class="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-white/10 p-1">
-                <button
-                    @click="setMode('auto')"
-                    :class="mode === 'auto' ? 'bg-white text-indigo-700 shadow' : 'text-white/80 hover:bg-white/10'"
-                    class="rounded-xl px-3 py-2 text-xs font-semibold transition">
-                    Auto
-                </button>
-
-                <button
-                    @click="setMode('application')"
-                    :class="mode === 'application' ? 'bg-white text-indigo-700 shadow' : 'text-white/80 hover:bg-white/10'"
-                    class="rounded-xl px-3 py-2 text-xs font-semibold transition">
-                    Application
-                </button>
-
-                <button
-                    @click="setMode('service')"
-                    :class="mode === 'service' ? 'bg-white text-indigo-700 shadow' : 'text-white/80 hover:bg-white/10'"
-                    class="rounded-xl px-3 py-2 text-xs font-semibold transition">
-                    Service
-                </button>
-            </div>
-        </div>
-
-        <!-- Context Selector -->
-        <div class="border-b border-slate-100 bg-slate-50 p-3">
-            <template x-if="mode === 'auto'">
-                <div class="rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
-                    <div class="font-semibold text-slate-800">Auto mode</div>
-                    <div class="mt-1">Ask anything. If I need an application/service, I’ll show options.</div>
-                </div>
-            </template>
-
-            <template x-if="mode === 'application'">
-                <div>
-                    <label class="mb-1 block text-xs font-semibold text-slate-600">Select application</label>
-                    <select
-                        x-model="selectedApplicationId"
-                        class="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
-                        <option value="">Choose application</option>
-                        <template x-for="app in applications" :key="app.id">
-                            <option :value="app.id" x-text="`${app.application_number || app.applicationId || app.id} — ${app.service_name || 'Service'}`"></option>
-                        </template>
-                    </select>
-                </div>
-            </template>
-
-            <template x-if="mode === 'service'">
-                <div>
-                    <label class="mb-1 block text-xs font-semibold text-slate-600">Select service</label>
-                    <select
-                        x-model="selectedServiceId"
-                        class="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
-                        <option value="">Choose service</option>
-                        <template x-for="service in services" :key="service.id">
-                            <option :value="service.id" x-text="service.service_name || service.service_title_or_description"></option>
-                        </template>
-                    </select>
-                </div>
-            </template>
         </div>
 
         <!-- Messages -->
@@ -226,7 +165,6 @@
             isOpen: false,
             isLoading: false,
 
-            mode: 'auto',
             input: '',
 
             sessionId: null,
@@ -265,11 +203,6 @@
             openChat() {
                 this.isOpen = true;
                 this.$nextTick(() => this.scrollBottom());
-            },
-
-            setMode(mode) {
-                this.mode = mode;
-                this.selection.required = false;
             },
 
             async loadOptions() {
@@ -325,18 +258,11 @@
                 }
             },
 
-            buildPayload(message) {
+            buildPayload(message, extra = {}) {
                 return {
                     session_id: this.sessionId,
-
                     message: message,
-                    mode: this.mode,
-
-                    application_id: this.selectedApplicationId || null,
-                    service_id: this.selectedServiceId || null,
-
-                    active_application_id: this.selectedApplicationId || null,
-                    active_service_id: this.selectedServiceId || null,
+                    ...extra
                 };
             },
 
@@ -356,7 +282,7 @@
                 await this.callAi(message);
             },
 
-            async callAi(message) {
+            async callAi(message, extra = {}) {
                 this.isLoading = true;
 
                 try {
@@ -368,12 +294,20 @@
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
                         },
                         credentials: 'same-origin',
-                        body: JSON.stringify(this.buildPayload(message))
+                        body: JSON.stringify(this.buildPayload(message, extra))
                     });
 
-                    const result = await response.json();
+                    let result;
+                    try {
+                        result = await response.json();
+                    } catch (parseError) {
+                        this.addMessage('assistant', response.status === 429
+                            ? 'AI service is busy. Please wait a moment and try again.'
+                            : 'AI service returned an unexpected error. Please try again.');
+                        return;
+                    }
 
-                    if (!result.status) {
+                    if (!response.ok || !result.status) {
                         this.addMessage('assistant', result.message || 'Sorry, I could not process this request.');
                         return;
                     }
@@ -403,7 +337,7 @@
                     this.addMessage('assistant', answer, meta);
 
                 } catch (e) {
-                    this.addMessage('assistant', 'Could not connect to AI service. Please try again.');
+                    this.addMessage('assistant', 'Could not reach the server. Please check your connection and try again.');
                 } finally {
                     this.isLoading = false;
                 }
@@ -430,25 +364,24 @@
             },
 
             async selectOption(option) {
-                if (this.selection.type === 'service') {
-                    this.selectedServiceId = option.id;
-                    this.mode = 'service';
-                } else {
-                    this.selectedApplicationId = option.id;
-                    this.mode = 'application';
-                }
-
-                let question = this.lastUserQuestion || 'Continue';
-
-                if (this.selection.type === 'service') {
-                    question = 'Which documents are required for this selected service?';
-                }
-
+                const selectionType = this.selection.type;
                 this.selection.required = false;
 
                 this.addMessage('user', `Selected: ${option.title}`);
 
-                await this.callAi(question);
+                if (selectionType === 'application') {
+                    await this.callAi('Continue with this selected application', {
+                        application_id: option.id
+                    });
+                    return;
+                }
+
+                if (selectionType === 'service') {
+                    await this.callAi('Continue with this selected service', {
+                        service_id: option.id
+                    });
+                    return;
+                }
             }
         }
     }
