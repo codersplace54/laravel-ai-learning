@@ -191,9 +191,9 @@
             quickQuestions: [
                 'Where is my application stuck?',
                 'What is my payment status?',
-                'Which documents are required?',
                 'Is my certificate generated?',
-                'When can I renew?'
+                'Show the details of my application.',
+                'Documents required for Professional tax service?',
             ],
 
             init() {
@@ -207,7 +207,7 @@
 
             async loadOptions() {
                 try {
-                    const response = await fetch('/ai/chat/options', {
+                    const response = await fetch('/api/ai/chat/options', {
                         headers: {
                             'Accept': 'application/json'
                         },
@@ -286,7 +286,7 @@
                 this.isLoading = true;
 
                 try {
-                    const response = await fetch('/ai/chat', {
+                    const response = await fetch('/api/ai/chat', {
                         method: 'POST',
                         headers: {
                             'Accept': 'application/json',

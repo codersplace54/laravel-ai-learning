@@ -20,7 +20,7 @@ class AiChatController extends Controller
 {
     public function options()
     {
-        $user = User::find(9113);
+        $user = User::find(8247);
 
         if (!$user) {
             return response()->json([
@@ -89,8 +89,7 @@ class AiChatController extends Controller
             'service_id' => 'nullable|integer',
         ]);
 
-        // TODO: switch to Auth::user() in production
-        $user = User::find(16066);
+        $user = User::find(8247);
 
         if (!$user) {
             return response()->json([
@@ -100,7 +99,6 @@ class AiChatController extends Controller
         }
 
         $message = trim($request->message);
-
         $session = $this->get_or_create_session($request, $user->id);
 
         $this->save_chat_message(
@@ -109,104 +107,115 @@ class AiChatController extends Controller
             message: $message
         );
 
-        // 1. explicit selection from chat UI — always wins
         if ($request->filled('application_id')) {
-            $this->clear_session_meta($session, 'awaiting');
+            $pending_intent = $this->get_session_meta($session, 'pending_intent');
+            $pending_message = $this->get_session_meta($session, 'pending_message');
 
-            return $this->ask_about_application(
+            $this->clear_pending_context($session);
+
+            $intent = $pending_intent ?: $this->detect_ai_intent($pending_message ?: $message);
+            $answer_message = $pending_message ?: $this->intent_default_application_question($intent);
+
+            return $this->answer_application_intent(
                 request: $request,
                 session: $session,
                 application_id: (int) $request->application_id,
-                message: $message
+                intent: $intent,
+                message: $answer_message
             );
         }
 
         if ($request->filled('service_id')) {
-            $this->clear_session_meta($session, 'awaiting');
+            $pending_message = $this->get_session_meta($session, 'pending_message');
+
+            $this->clear_pending_context($session);
 
             return $this->ask_about_service(
                 session: $session,
                 service_id: (int) $request->service_id,
-                message: 'Continue with this selected service'
+                message: $pending_message ?: 'Which documents are required for this service?'
             );
         }
 
-        // 2. application number typed in message e.g. SPC-106-009676
-        $applicationFromMessage = $this->resolve_application_from_message($message, $user->id);
+        $typed_application_number = $this->extract_application_number_from_message($message);
 
-        if ($applicationFromMessage) {
-            $this->clear_session_meta($session, 'awaiting');
+        if ($typed_application_number) {
+            $application = $this->resolve_application_from_message($message, $user->id);
 
-            return $this->ask_about_application(
+            $this->clear_pending_context($session);
+
+            if (!$application) {
+                return $this->direct_answer(
+                    session: $session,
+                    answer: 'I could not find this application in your account. Please check the application number or select it from your application list.',
+                    answer_type: 'application',
+                    suggested_questions: ['Show my applications']
+                );
+            }
+
+            $intent = $this->detect_ai_intent($message);
+
+            return $this->answer_application_intent(
                 request: $request,
                 session: $session,
-                application_id: (int) $applicationFromMessage->id,
+                application_id: (int) $application->id,
+                intent: $intent,
                 message: $message
             );
         }
 
-        // 3. global commands — must run before awaiting-service-name check
-        if ($this->is_application_list_question($message)) {
-            $this->clear_session_meta($session, 'awaiting');
+        $intent = $this->detect_ai_intent($message);
 
-            return $this->answer_application_list($session);
+        if ($intent === 'APPLICATION_LIST') {
+            $this->clear_pending_context($session);
+
+            return $this->answer_application_list(
+                session: $session,
+                filter_status: $this->detect_application_list_filter($message)
+            );
         }
 
-        if ($this->is_account_question($message)) {
-            $this->clear_session_meta($session, 'awaiting');
+        if ($intent === 'ACCOUNT_DATA') {
+            $this->clear_pending_context($session);
 
             return $this->answer_account_question($session, $message);
         }
 
-        if ($this->is_greeting($message)) {
-            $this->clear_session_meta($session, 'awaiting');
+        if ($intent === 'GENERAL_HELP') {
+            $this->clear_pending_context($session);
 
-            return $this->direct_answer(
-                session: $session,
-                answer: 'Hi! I can help with your applications, payments, documents, certificates, renewal, and timelines.',
-                answer_type: 'general',
-                suggested_questions: [
-                    'Show my applications',
-                    'Which documents are required?',
-                    'When can I renew?',
-                ]
-            );
+            return $this->answer_general_help_question($session, $message);
         }
 
-        if ($this->is_capability_question($message)) {
-            $this->clear_session_meta($session, 'awaiting');
-
-            return $this->direct_answer(
-                session: $session,
-                answer: 'I can help you check application status, payment status, required documents, certificate/NOC details, renewal information, send-back remarks, and application timeline.',
-                answer_type: 'general',
-                suggested_questions: [
-                    'Show my applications',
-                    'Which documents are required?',
-                    'When can I renew?',
-                ]
-            );
-        }
-
-        // 4. application-specific questions (status, payment, renewal, etc.)
-        if ($this->is_application_question($message)) {
+        if ($this->intent_requires_application($intent)) {
             $this->clear_session_meta($session, 'awaiting');
 
             if ($session->active_application_id) {
-                return $this->ask_about_application(
+                return $this->answer_application_intent(
                     request: $request,
                     session: $session,
                     application_id: (int) $session->active_application_id,
+                    intent: $intent,
                     message: $message
                 );
             }
 
+            $this->set_session_meta($session, 'awaiting', 'application_selection');
+            $this->set_session_meta($session, 'pending_intent', $intent);
+            $this->set_session_meta($session, 'pending_message', $message);
+
             return $this->application_selection_response($session);
         }
 
-        // 5. document group buttons (show required / optional / conditional)
-        if ($this->is_service_group_command($message)) {
-            $this->clear_session_meta($session, 'awaiting');
+        if ($this->intent_requires_service($intent)) {
+            $service_query = $this->extract_service_query($message);
+
+            if ($service_query) {
+                $this->set_session_meta($session, 'pending_intent', $intent);
+                $this->set_session_meta($session, 'pending_message', $message);
+
+                return $this->handle_service_query($session, $service_query);
+            }
 
             if ($session->active_service_id) {
                 return $this->ask_about_service(
@@ -216,7 +225,22 @@ class AiChatController extends Controller
                 );
             }
 
+            $service_id = $this->get_active_application_service_id($session);
+
+            if ($service_id) {
+                $session->active_service_id = $service_id;
+                $session->save();
+
+                return $this->ask_about_service(
+                    session: $session,
+                    service_id: (int) $service_id,
+                    message: $message
+                );
+            }
+
             $this->set_session_meta($session, 'awaiting', 'service_name');
+            $this->set_session_meta($session, 'pending_intent', $intent);
+            $this->set_session_meta($session, 'pending_message', $message);
 
             return $this->direct_answer(
                 session: $session,
@@ -226,72 +250,14 @@ class AiChatController extends Controller
             );
         }
 
-        // 6. user is replying with a service name after being asked
         if ($this->get_session_meta($session, 'awaiting') === 'service_name') {
             return $this->handle_service_query($session, $message);
         }
 
-        // 7. document question with or without service name in message
-        if ($this->is_service_document_question($message)) {
-            return $this->handle_service_document_question($session, $message);
-        }
-
-        // 8. AI planner fallback — only runs when nothing above matched
-        $planner = $this->call_ai_planner($session, $message);
-        $scope = $planner['data_scope'] ?? 'UNKNOWN';
-
-        if ($scope === 'RATE_LIMITED') {
-            return $this->direct_answer(
-                session: $session,
-                answer: 'AI service is busy right now. Please wait a moment and try again.',
-                answer_type: 'general',
-                suggested_questions: []
-            );
-        }
-
-        if ($scope === 'APPLICATION_LIST') {
-            $this->clear_session_meta($session, 'awaiting');
-
-            return $this->answer_application_list($session);
-        }
-
-        if ($scope === 'ACCOUNT_DATA') {
-            $this->clear_session_meta($session, 'awaiting');
-
-            return $this->answer_account_question($session, $message);
-        }
-
-        if ($scope === 'APPLICATION_DATA') {
-            $this->clear_session_meta($session, 'awaiting');
-
-            if ($session->active_application_id) {
-                return $this->ask_about_application(
-                    request: $request,
-                    session: $session,
-                    application_id: (int) $session->active_application_id,
-                    message: $message
-                );
-            }
-
-            return $this->application_selection_response($session);
-        }
-
-        if (in_array($scope, ['SERVICE_DATA', 'SERVICE_SEARCH', 'RAG_KNOWLEDGE'])) {
-            return $this->handle_service_document_question($session, $message);
-        }
-
-        // 9. nothing matched
-        return $this->direct_answer(
-            session: $session,
-            answer: 'Please ask about your application, payment, renewal, certificate, or service documents.',
-            answer_type: 'unknown',
-            suggested_questions: [
-                'Show my applications',
-                'Which documents are required?',
-                'When can I renew?',
-            ]
-        );
+        return $this->answer_general_help_question($session, $message);
     }
+
+
 
     private function get_or_create_session(Request $request, int $user_id): AiChatSession
     {
@@ -424,10 +390,11 @@ class AiChatController extends Controller
                 'active_application_id' => $session->active_application_id,
                 'active_service_id' => $session->active_service_id,
                 'suggested_questions' => [
+                    'What is my application status?',
                     'What should I do next?',
                     'What is my payment status?',
-                    'Which documents are required?',
                     'Is my certificate generated?',
+                    'Show the details of my application.',
                 ],
             ],
         ]);
@@ -826,24 +793,6 @@ class AiChatController extends Controller
         ]);
     }
 
-    private function service_selection_response(AiChatSession $session)
-    {
-        $this->set_session_meta($session, 'awaiting', 'service_name');
-
-        return response()->json([
-            'status' => true,
-            'data' => [
-                'session_id' => $session->id,
-                'answer' => 'Please type the service name. Example: documents for professional tax.',
-                'short_status' => null,
-                'answer_type' => 'service',
-                'active_application_id' => $session->active_application_id,
-                'active_service_id' => $session->active_service_id,
-                'suggested_questions' => [],
-            ],
-        ]);
-    }
-
     private function call_ai_planner(AiChatSession $session, string $message): array
     {
         try {
@@ -892,7 +841,7 @@ class AiChatController extends Controller
 
     private function answer_account_question(AiChatSession $session, string $message)
     {
-        $user = Auth::user();
+        $user = User::find(8247);
 
         $context = [
             'account_context' => [
@@ -932,65 +881,6 @@ class AiChatController extends Controller
                     'Show my applications',
                     'What is my registered mobile?',
                     'What is my account email?',
-                ],
-            ],
-        ]);
-    }
-
-    private function answer_application_list(AiChatSession $session)
-    {
-        $applications = UserServiceApplication::with([
-            'service:id,service_title_or_description'
-        ])
-            ->where('user_id', $session->user_id)
-            ->orderByDesc('id')
-            ->limit(10)
-            ->get([
-                'id',
-                'applicationId',
-                'service_id',
-                'status',
-                'payment_status',
-                'created_at',
-            ]);
-
-        if ($applications->isEmpty()) {
-            return $this->direct_answer(
-                session: $session,
-                answer: 'I could not find any applications in your account.',
-                answer_type: 'application_list'
-            );
-        }
-
-        $lines = $applications->map(function ($app, $index) {
-            $number = $app->applicationId ?: ('Application #' . $app->id);
-            $service = $app->service->service_title_or_description ?? 'Service';
-            $status = $app->status ?? 'unknown';
-
-            return ($index + 1) . ". {$number} — {$service} — {$status}";
-        })->implode("\n");
-
-        $answer = "Here are your recent applications:\n" . $lines;
-
-        $this->save_chat_message(
-            session: $session,
-            role: 'assistant',
-            message: $answer,
-            answer_type: 'application_list'
-        );
-
-        return response()->json([
-            'status' => true,
-            'data' => [
-                'session_id' => $session->id,
-                'answer' => $answer,
-                'short_status' => 'Recent applications',
-                'answer_type' => 'application_list',
-                'active_application_id' => $session->active_application_id,
-                'active_service_id' => $session->active_service_id,
-                'suggested_questions' => [
-                    'Where is my application stuck?',
-                    'What is my payment status?',
                 ],
             ],
         ]);
@@ -1151,11 +1041,6 @@ class AiChatController extends Controller
         return $best_score >= 15 ? $best : null;
     }
 
-    private function message_matches_document_label(string $message, array $doc_context): bool
-    {
-        return $this->find_matching_document($message, $doc_context) !== null;
-    }
-
     private function normalize_match_text(string $text): string
     {
         $text = Str::lower($text);
@@ -1222,102 +1107,6 @@ class AiChatController extends Controller
         }
 
         return $suggestions;
-    }
-
-    private function extract_application_number_from_message(string $message): ?string
-    {
-        preg_match('/\bSPC-[A-Z0-9]+-[A-Z0-9]+\b/i', $message, $matches);
-
-        return $matches[0] ?? null;
-    }
-
-    private function resolve_application_from_message(string $message, int $user_id): ?UserServiceApplication
-    {
-        $application_number = $this->extract_application_number_from_message($message);
-
-        if (!$application_number) {
-            return null;
-        }
-
-        return UserServiceApplication::where('user_id', $user_id)
-            ->where(function ($query) use ($application_number) {
-                $query->where('applicationId', $application_number)
-                    ->orWhere('applicationId', strtoupper($application_number))
-                    ->orWhere('applicationId', strtolower($application_number));
-            })
-            ->first();
-    }
-
-    private function is_service_document_message(string $message): bool
-    {
-        $text = Str::lower(trim($message));
-
-        if (Str::startsWith($text, 'for ')) {
-            return true;
-        }
-
-        return Str::contains($text, [
-            'document',
-            'documents',
-            'doc',
-            'docs',
-            'upload',
-            'file',
-            'files',
-        ]);
-    }
-
-    private function normalize_service_search_text(string $text): string
-    {
-        $text = Str::lower($text);
-
-        $text = preg_replace('/[^a-z0-9]+/i', ' ', $text);
-
-        return trim(preg_replace('/\s+/', ' ', $text));
-    }
-
-    private function clean_service_search_query(string $text): ?string
-    {
-        $text = $this->normalize_service_search_text($text);
-
-        $text = preg_replace('/\b(what|which|do|does|i|we|need|needed|required|require|documents?|docs?|files?|upload|submit|for|this|that|service|please|tell|me|about|is|are|the|a|an)\b/i', ' ', $text);
-
-        $text = trim(preg_replace('/\s+/', ' ', $text));
-
-        return strlen($text) >= 3 ? $text : null;
-    }
-
-    private function get_session_meta(AiChatSession $session, string $key, $default = null)
-    {
-        $meta = $session->meta ?: [];
-        return $meta[$key] ?? $default;
-    }
-
-    private function set_session_meta(AiChatSession $session, string $key, $value): void
-    {
-        $meta = $session->meta ?: [];
-        $meta[$key] = $value;
-        $session->meta = $meta;
-        $session->save();
-    }
-
-    private function clear_session_meta(AiChatSession $session, string $key): void
-    {
-        $meta = $session->meta ?: [];
-        unset($meta[$key]);
-        $session->meta = $meta;
-        $session->save();
-    }
-
-    private function extract_explicit_service_query(string $message): ?string
-    {
-        $text = $this->normalize_search_text($message);
-
-        if (preg_match('/\bfor\s+(.+)$/i', $text, $m)) {
-            return $this->clean_search_query($m[1]);
-        }
-
-        return null;
     }
 
     private function clean_search_query(string $text): ?string
@@ -1488,75 +1277,6 @@ class AiChatController extends Controller
         ];
     }
 
-    private function is_greeting(string $message): bool
-    {
-        return in_array(Str::lower(trim($message)), ['hi', 'hii', 'hello', 'hey', 'namaste']);
-    }
-
-    private function is_account_question(string $message): bool
-    {
-        return Str::contains(Str::lower($message), [
-            'my username',
-            'my user name',
-            'my email',
-            'my mobile',
-            'my account',
-            'who am i',
-        ]);
-    }
-
-    private function is_capability_question(string $message): bool
-    {
-        $text = Str::lower($message);
-
-        return Str::contains($text, [
-            'what can you do',
-            'what can you help',
-            'what things',
-            'help me with',
-        ]);
-    }
-
-    private function is_application_list_question(string $message): bool
-    {
-        return Str::contains(Str::lower($message), [
-            'my applications',
-            'application list',
-            'show applications',
-            'show my application',
-            'list applications',
-            'another application',
-        ]);
-    }
-
-    private function is_application_question(string $message): bool
-    {
-        return Str::contains(Str::lower($message), [
-            'renew',
-            'renewal',
-            'validity',
-            'expire',
-            'expiry',
-            'status',
-            'payment',
-            'paid',
-            'fee',
-            'grn',
-            'certificate',
-            'noc',
-            'created',
-            'submitted',
-            'approved',
-            'stuck',
-            'pending',
-            'send back',
-            'sent back',
-            'remarks',
-            'timeline',
-            'application',
-        ]);
-    }
-
     private function is_service_document_question(string $message): bool
     {
         return Str::contains(Str::lower($message), [
@@ -1570,34 +1290,6 @@ class AiChatController extends Controller
             'required documents',
             'which documents',
         ]);
-    }
-
-    private function handle_service_document_question(AiChatSession $session, string $message)
-    {
-        $serviceQuery = $this->extract_service_query($message);
-
-        // service name found inside the message e.g. "documents for professional tax"
-        if ($serviceQuery) {
-            return $this->handle_service_query($session, $serviceQuery);
-        }
-
-        // no active service — ask user to type one
-        if (!$session->active_service_id) {
-            $this->set_session_meta($session, 'awaiting', 'service_name');
-
-            return $this->direct_answer(
-                session: $session,
-                answer: 'Please type the service name. Example: professional tax, partnership firm, water connection.',
-                answer_type: 'service',
-                suggested_questions: []
-            );
-        }
-
-        return $this->ask_about_service(
-            session: $session,
-            service_id: (int) $session->active_service_id,
-            message: $message
-        );
     }
 
     private function handle_service_query(AiChatSession $session, string $query)
@@ -1646,18 +1338,448 @@ class AiChatController extends Controller
         );
     }
 
+    private function is_full_document_list_question(string $message): bool
+    {
+        $text = Str::lower(trim($message));
+
+        if (Str::contains($text, [
+            'continue with this selected service',
+            'documents for',
+            'document for',
+            'docs for',
+            'which documents',
+            'what documents',
+            'all documents',
+            'documents required',
+            'required documents',
+            'documents i need',
+            'documents need',
+            'document list',
+        ])) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function detect_ai_intent(string $message): string
+    {
+        $text = Str::lower(trim($message));
+
+        if ($this->is_application_list_question($message)) {
+            return 'APPLICATION_LIST';
+        }
+
+        if ($this->is_account_question($message)) {
+            return 'ACCOUNT_DATA';
+        }
+
+        if ($this->is_capability_question($message) || $this->is_greeting($message)) {
+            return 'GENERAL_HELP';
+        }
+
+        if (Str::contains($text, [
+            'how do i apply',
+            'how to apply',
+            'application process',
+            'what is the process',
+            'what happens after',
+            'contact support',
+            'how can i contact',
+            'why is my application taking so long',
+            'how do i track',
+            'how do i download',
+            'how do i update',
+        ])) {
+            return 'GENERAL_HELP';
+        }
+
+        if (Str::contains($text, [
+            'payment',
+            'paid',
+            'pay',
+            'fee',
+            'amount',
+            'retry the payment',
+            'payment fail',
+            'payment failed',
+            'payment pending',
+            'how much',
+        ])) {
+            return 'PAYMENT_STATUS';
+        }
+
+        if (Str::contains($text, [
+            'sent back',
+            'send back',
+            'send-back',
+            'defect',
+            'defects',
+            'remarks',
+            'correction',
+            'corrections',
+            'resubmit',
+            'what should i do next',
+            'what do i need to do',
+        ])) {
+            return 'SEND_BACK_REASON';
+        }
+
+        if (Str::contains($text, [
+            'timeline',
+            'actions taken',
+            'action taken',
+            'when was my application submitted',
+            'when did i submit',
+            'who is currently handling',
+            'currently handling',
+            'which office',
+            'processing my application',
+        ])) {
+            return 'APPLICATION_TIMELINE';
+        }
+
+        if (Str::contains($text, [
+            'certificate',
+            'noc',
+            'download certificate',
+            'issued',
+            'issue date',
+            'expire',
+            'expiry',
+            'valid till',
+            'validity',
+        ])) {
+            return 'CERTIFICATE_STATUS';
+        }
+
+        if (Str::contains($text, [
+            'renew',
+            'renewal',
+            'eligible for renewal',
+            'renewal process',
+        ])) {
+            return 'RENEWAL_STATUS';
+        }
+
+        if (Str::contains($text, [
+            'which documents are required for this service',
+            'documents required for this service',
+            'service documents',
+            'documents for',
+            'document for',
+            'required documents for',
+        ])) {
+            return 'SERVICE_DOCUMENTS';
+        }
+
+        if (Str::contains($text, [
+            'documents verified',
+            'document verified',
+            'documents missing',
+            'document missing',
+            'upload more documents',
+            're-upload',
+            'reupload',
+            'document rejected',
+            'which document was rejected',
+        ])) {
+            return 'APPLICATION_DOCUMENT_STATUS';
+        }
+
+        if (Str::contains($text, [
+            'status',
+            'stuck',
+            'pending',
+            'approved',
+            'rejected',
+            'under review',
+            'processed',
+            'completed',
+            'latest update',
+            'application details',
+            'details of my application',
+            'what service did i apply',
+            'application number',
+        ])) {
+            return 'APPLICATION_STATUS';
+        }
+
+        return 'GENERAL_HELP';
+    }
+
+    private function intent_requires_application(?string $intent): bool
+    {
+        return in_array($intent, [
+            'APPLICATION_STATUS',
+            'PAYMENT_STATUS',
+            'CERTIFICATE_STATUS',
+            'RENEWAL_STATUS',
+            'SEND_BACK_REASON',
+            'APPLICATION_TIMELINE',
+            'APPLICATION_DOCUMENT_STATUS',
+        ], true);
+    }
+
+    private function intent_requires_service(?string $intent): bool
+    {
+        return in_array($intent, [
+            'SERVICE_DOCUMENTS',
+        ], true);
+    }
+
+    private function intent_default_application_question(?string $intent): string
+    {
+        return match ($intent) {
+            'PAYMENT_STATUS' => 'What is the payment status of this application?',
+            'CERTIFICATE_STATUS' => 'What is the certificate or NOC status of this application?',
+            'RENEWAL_STATUS' => 'Can this application or certificate be renewed?',
+            'SEND_BACK_REASON' => 'Why was this application sent back and what should I do next?',
+            'APPLICATION_TIMELINE' => 'Show the timeline and latest update of this application.',
+            'APPLICATION_DOCUMENT_STATUS' => 'Are there any missing, rejected, or pending documents for this application?',
+            default => 'What is the current status of this application?',
+        };
+    }
+
+    private function answer_application_intent(
+        Request $request,
+        AiChatSession $session,
+        int $application_id,
+        ?string $intent,
+        string $message
+    ) {
+        return $this->ask_about_application(
+            request: $request,
+            session: $session,
+            application_id: $application_id,
+            message: $message
+        );
+    }
+
+    private function is_greeting(string $message): bool
+    {
+        return in_array(Str::lower(trim($message)), [
+            'hi',
+            'hii',
+            'hello',
+            'hey',
+            'namaste',
+        ], true);
+    }
+
+    private function is_capability_question(string $message): bool
+    {
+        $text = Str::lower($message);
+
+        return Str::contains($text, [
+            'what can you answer',
+            'what can you do',
+            'how can you help',
+            'what you can answer',
+            'what can i ask',
+            'help me',
+        ]);
+    }
+
+    private function is_account_question(string $message): bool
+    {
+        $text = Str::lower($message);
+
+        return Str::contains($text, [
+            'my username',
+            'my user name',
+            'my email',
+            'my mobile',
+            'my account',
+            'who am i',
+        ]);
+    }
+
+    private function is_application_list_question(string $message): bool
+    {
+        $text = Str::lower($message);
+
+        return Str::contains($text, [
+            'my applications',
+            'my application list',
+            'application list',
+            'show applications',
+            'show my application',
+            'show my applications',
+            'show my recent applications',
+            'recent applications',
+            'list applications',
+            'list my applications',
+            'other application',
+            'other applications',
+            'applications by me',
+            'application by me',
+            'all applications',
+            'all my applications',
+            'which applications are pending',
+            'which applications are approved',
+            'which applications are rejected',
+            'which applications are under review',
+        ]);
+    }
+
+    private function detect_application_list_filter(string $message): ?string
+    {
+        $text = Str::lower($message);
+
+        if (Str::contains($text, ['pending'])) {
+            return 'pending';
+        }
+
+        if (Str::contains($text, ['approved', 'completed', 'noc issued', 'certificate issued'])) {
+            return 'approved';
+        }
+
+        if (Str::contains($text, ['rejected', 'refused'])) {
+            return 'rejected';
+        }
+
+        if (Str::contains($text, ['under review', 'processing', 'in process'])) {
+            return 'under_review';
+        }
+
+        return null;
+    }
+
+    private function answer_application_list(AiChatSession $session, ?string $filter_status = null)
+    {
+        $this->clear_pending_context($session);
+
+        $applications = UserServiceApplication::query()
+            ->where('user_id', $session->user_id)
+            ->latest('id')
+            ->limit(100)
+            ->get();
+
+        if ($filter_status) {
+            $applications = $applications
+                ->filter(fn($application) => $this->application_matches_filter($application, $filter_status))
+                ->values();
+        }
+
+        if ($applications->isEmpty()) {
+            return $this->direct_answer(
+                session: $session,
+                answer: $filter_status
+                    ? 'I could not find any matching applications in your account.'
+                    : 'I could not find any applications in your account.',
+                answer_type: 'application',
+                suggested_questions: []
+            );
+        }
+
+        $options = $applications->take(10)->map(function ($application) {
+            $application_number = $this->get_application_display_number($application);
+            $service_name = $this->get_application_service_name($application);
+            $status = $this->get_application_status_text($application);
+
+            return [
+                'id' => $application->id,
+                'title' => $application_number,
+                'subtitle' => $service_name . ' - ' . $status,
+            ];
+        })->values()->toArray();
+
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'session_id' => $session->id,
+                'requires_selection' => true,
+                'selection_type' => 'application',
+                'message' => 'Here are your recent applications. Please select one.',
+                'active_application_id' => $session->active_application_id,
+                'active_service_id' => $session->active_service_id,
+                'options' => $options,
+                'suggested_questions' => [],
+            ],
+        ]);
+    }
+
+    private function application_matches_filter($application, string $filter_status): bool
+    {
+        $status = Str::lower($this->get_application_status_text($application));
+
+        return match ($filter_status) {
+            'pending' => Str::contains($status, ['pending', 'send_back', 'sent back']),
+            'approved' => Str::contains($status, ['approved', 'completed', 'noc_issued', 'certificate']),
+            'rejected' => Str::contains($status, ['rejected', 'refused']),
+            'under_review' => Str::contains($status, ['review', 'process', 'submitted']),
+            default => true,
+        };
+    }
+
+    private function get_application_display_number($application): string
+    {
+        return (string) (
+            $application->applicationId
+            ?? $application->application_id
+            ?? $application->application_number
+            ?? $application->application_no
+            ?? $application->application_reference_no
+            ?? 'Application #' . $application->id
+        );
+    }
+
+    private function get_application_service_name($application): string
+    {
+        return (string) (
+            $application->service->service_title_or_description
+            ?? $application->service_title_or_description
+            ?? $application->service_name
+            ?? 'Application'
+        );
+    }
+
+    private function get_application_status_text($application): string
+    {
+        return (string) (
+            $application->application_status
+            ?? $application->status
+            ?? $application->current_status
+            ?? 'status not available'
+        );
+    }
+
+    private function extract_application_number_from_message(string $message): ?string
+    {
+        if (preg_match('/\b[A-Z]{2,5}(?:-[A-Z0-9]+){1,5}\b/i', $message, $match)) {
+            return strtoupper(trim($match[0]));
+        }
+
+        return null;
+    }
+
+    private function resolve_application_from_message(string $message, int $user_id)
+    {
+        $application_number = $this->extract_application_number_from_message($message);
+
+        if (!$application_number) {
+            return null;
+        }
+
+        $normalized_number = strtoupper(str_replace([' ', '_'], ['', '-'], $application_number));
+
+        return UserServiceApplication::query()
+            ->where('user_id', $user_id)
+            ->where(function ($query) use ($normalized_number) {
+                $query->whereRaw("REPLACE(UPPER(`applicationID`), ' ', '') = ?", [$normalized_number])
+                    ->orWhereRaw("UPPER(`applicationID`) LIKE ?", ['%' . $normalized_number . '%']);
+            })
+            ->latest('id')
+            ->first();
+    }
+
     private function extract_service_query(string $message): ?string
     {
         $text = $this->normalize_search_text($message);
 
-        if (preg_match('/\bfor\s+(.+)$/i', $text, $m)) {
-            return $this->clean_service_query($m[1]);
-        }
-
-        $clean = $this->clean_service_query($text);
-
-        if ($this->is_service_document_question($message) && $clean) {
-            return $clean;
+        if (preg_match('/\bfor\s+(.+)$/i', $text, $match)) {
+            return $this->clean_service_query($match[1]);
         }
 
         return null;
@@ -1675,7 +1797,7 @@ class AiChatController extends Controller
     {
         $text = $this->normalize_search_text($text);
 
-        $stopWords = [
+        $stop_words = [
             'what',
             'which',
             'do',
@@ -1718,47 +1840,82 @@ class AiChatController extends Controller
 
         $tokens = collect(explode(' ', $text))
             ->filter(fn($token) => strlen($token) >= 3)
-            ->reject(fn($token) => in_array($token, $stopWords))
+            ->reject(fn($token) => in_array($token, $stop_words, true))
             ->values();
 
         return $tokens->isEmpty() ? null : $tokens->implode(' ');
     }
 
-    private function is_service_group_command(string $message): bool
+    private function get_active_application_service_id(AiChatSession $session): ?int
     {
-        $text = Str::lower(trim($message));
-
-        return in_array($text, [
-            'show required documents',
-            'show optional documents',
-            'show conditional documents',
-            'required documents',
-            'optional documents',
-            'conditional documents',
-        ]);
-    }
-
-    private function is_full_document_list_question(string $message): bool
-    {
-        $text = Str::lower(trim($message));
-
-        if (Str::contains($text, [
-            'continue with this selected service',
-            'documents for',
-            'document for',
-            'docs for',
-            'which documents',
-            'what documents',
-            'all documents',
-            'documents required',
-            'required documents',
-            'documents i need',
-            'documents need',
-            'document list',
-        ])) {
-            return true;
+        if (!$session->active_application_id) {
+            return null;
         }
 
-        return false;
+        $application = UserServiceApplication::query()
+            ->where('id', $session->active_application_id)
+            ->where('user_id', $session->user_id)
+            ->first();
+
+        if (!$application || empty($application->service_id)) {
+            return null;
+        }
+
+        return (int) $application->service_id;
+    }
+
+    private function answer_general_help_question(AiChatSession $session, string $message)
+    {
+        return $this->direct_answer(
+            session: $session,
+            answer: 'I can help with application status, payment, documents, certificate/NOC, renewal, send-back remarks, timelines, and general process questions.',
+            answer_type: 'general',
+            suggested_questions: [
+                'Show my applications',
+                'Where is my application stuck?',
+                'Which documents are required for this service?',
+                'How do I download my certificate?',
+            ]
+        );
+    }
+
+    private function get_session_meta(AiChatSession $session, string $key, $default = null)
+    {
+        $meta = $session->meta ?: [];
+
+        return $meta[$key] ?? $default;
+    }
+
+    private function set_session_meta(AiChatSession $session, string $key, $value): void
+    {
+        $meta = $session->meta ?: [];
+        $meta[$key] = $value;
+
+        $session->meta = $meta;
+        $session->save();
+    }
+
+    private function clear_session_meta(AiChatSession $session, string $key): void
+    {
+        $meta = $session->meta ?: [];
+        unset($meta[$key]);
+
+        $session->meta = $meta;
+        $session->save();
+    }
+
+    private function clear_pending_context(AiChatSession $session): void
+    {
+        $meta = $session->meta ?: [];
+
+        unset(
+            $meta['awaiting'],
+            $meta['pending_intent'],
+            $meta['pending_message'],
+            $meta['pending_application_question']
+        );
+
+        $session->meta = $meta;
+        $session->save();
     }
 }
