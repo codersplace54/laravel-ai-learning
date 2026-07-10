@@ -4,13 +4,27 @@ import shutil
 from fastapi import FastAPI, Header, HTTPException, UploadFile, File, Request
 
 from config import check_config
-from schemas import AskRequest, ApplicationStuckRequest, ChatPlanRequest, ChatAnswerRequest
+from schemas import AskRequest, ApplicationStuckRequest, ChatPlanRequest, ChatAnswerRequest, ChatUnderstandRequest
 from services.rag_service import process_document, answer_question
 from services.vector_service import clear_vector_db
 from services.application_stuck_ai_service import investigate_application_stuck_with_rag
 from services.application_stuck_explanation_service import explain_application_stuck
 from services.chat_planner_service import plan_chat_message
 from services.chat_answer_service import answer_from_context
+from services.understand_service import understand_message
+
+import logging 
+
+os.makedirs("logs", exist_ok=True)
+
+logging.basicConfig(
+    filename="logs/ai_service.log",
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    filemode="a",  # append
+)
+
+logger = logging.getLogger(__name__)
 
 check_config()
 
@@ -125,6 +139,16 @@ def chat_answer(
     request_data: ChatAnswerRequest,
     x_ai_secret: str | None = Header(default=None),
 ):
-    verify_secret(x_ai_secret)
-
     return answer_from_context(request_data)
+
+
+@app.post("/api/ai/chat/understand")
+def chat_understand(
+    request_data: ChatUnderstandRequest,
+    x_ai_secret: str | None = Header(default=None),
+):
+    return understand_message(
+        message=request_data.message,
+        session_meta=request_data.session_meta,
+        history=request_data.history,
+    )

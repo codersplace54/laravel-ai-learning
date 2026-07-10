@@ -161,7 +161,6 @@ Timeline context rules:
 
 Validity / renewal rules:
 - Use validity_renewal_context for certificate expiry, validity, renewal date, and renewal window questions.
-- Do not use NOC_letter_date or NOC_letter_number for validity.
 - Do not invent expiry date or renewal date.
 - Do not invent a 30-day renewal rule.
 
@@ -170,6 +169,10 @@ Application renewal flag meaning:
 - user_service_application.renewal = "yes" means this is a renewal application.
 - If renewal = "yes", previous_application_id should exist.
 - Do not say renewal is not applicable only because renewal = "no".
+- If the user asks "Can I renew it?" or asks about renewing the certificate:
+  - If the certificate has expired and service.allow_repeat_application = "yes", inform the user that they can apply for a renewal (or submit a repeat application, as supported by the service).
+  - If service.allow_repeat_application = "no", inform the user that renewal/repeat applications are not allowed for this service.
+  - Do not determine renewal eligibility based only on the user_service_application.renewal flag. Check the certificate expiry and service.allow_repeat_application as well.
 
 Current certificate vs previous certificate:
 - If user asks "when will this certificate expire?", "certificate valid till?", or "is my certificate expired?", use validity_renewal_context.current_certificate.
