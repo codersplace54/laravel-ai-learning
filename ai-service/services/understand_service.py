@@ -138,6 +138,43 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
     kind = clean_enum(data.get("message_kind"), ALLOWED_KINDS, "unclear")
 
     query_focus = safe_string(data.get("query_focus")) or "general"
+
+    allowed_answer_modes = {
+        "fact",
+        "list",
+        "count",
+        "all_match",
+        "aggregate",
+        "comparison",
+        "process",
+        "explain_previous",
+    }
+
+    answer_mode = safe_string(data.get("answer_mode")) or "fact"
+
+    if answer_mode not in allowed_answer_modes:
+        answer_mode = "fact"
+
+        allowed_scopes = {
+        "all_records",
+        "previous_result",
+        "active_application",
+        "active_service",
+    }
+
+    scope = safe_string(data.get("scope")) or "all_records"
+
+    if scope not in allowed_scopes:
+        scope = "all_records"
+
+
+    resolved_question = (
+        safe_string(data.get("resolved_question"))
+        or safe_string(data.get("user_goal"))
+        or message
+    )
+    metric = safe_string(data.get("metric")) or None
+
     user_goal = safe_string(data.get("user_goal"))
     language = clean_language(data.get("language"))
 
@@ -178,6 +215,7 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
         selection_type = None
         required_slots = []
         missing_slots = []
+
         if not references:
             references = ["none"]
 
@@ -208,15 +246,18 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
             missing_slots = ["service"]
 
     # Clarification should not claim private data need.
-    if route in ["greeting", "capabilities", "clarification", "exit", "unknown"]:
-        if route != "account":
-            data["needs_private_data"] = False
+    if route in ["greeting", "capabilities", "exit", "unknown"]:
+        needs_private_data = False
 
     return {
         "language": language,
         "message_kind": kind,
         "route": route,
         "query_focus": query_focus,
+        "answer_mode": answer_mode,
+        "resolved_question": resolved_question,
+        "scope": scope,
+        "metric": metric,
         "capability_family": family,
         "user_goal": user_goal,
         "needs_private_data": bool(data.get("needs_private_data", False)),
@@ -236,13 +277,16 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
         "reason": safe_string(data.get("reason")) or "classified by semantic planner",
     }
 
-
 def fallback_understanding(message: str, reason: str = "fallback") -> Dict[str, Any]:
     return {
         "language": "mixed",
         "message_kind": "unclear",
         "route": "clarification",
         "query_focus": "clarification",
+        "answer_mode": "fact",
+        "resolved_question": message,
+        "scope": "all_records",
+        "metric": None,
         "capability_family": "unknown",
         "user_goal": "clarify user question",
         "needs_private_data": False,

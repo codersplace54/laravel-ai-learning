@@ -125,6 +125,15 @@ class ChatAnswerService
             'next_action'  => $data['next_action'] ?? null,
             'answer_type'  => $data['answer_type'] ?? strtolower($default_type),
             'confidence'   => (float) ($data['confidence'] ?? 0.7),
+            'answer_mode' => $data['answer_mode'] ?? 'fact',
+
+            'resolved_question' => $data['resolved_question']
+                ?? $data['user_goal']
+                ?? '',
+
+            'scope' => $data['scope'] ?? 'all_records',
+
+            'metric' => $data['metric'] ?? null,
         ];
     }
 
@@ -141,6 +150,10 @@ class ChatAnswerService
             'answer_type'  => 'fallback',
             'confidence'   => 0.0,
             'reason'       => $reason,
+            'answer_mode'       => 'fact',
+            'resolved_question' => $message ?? '',
+            'scope'             => 'all_records',
+            'metric'            => null,
         ];
     }
 }

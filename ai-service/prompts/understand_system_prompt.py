@@ -209,12 +209,171 @@ If the current message is a complete new question, classify normally and ignore 
 - Use high confidence when intent is clear.
 - If message is too unclear like "status?" with no active context, route clarification and ask a short clarification question.
 
+ANSWER MODE RULES:
+
+- fact: user asks one factual detail about one application/service.
+- list: user wants matching applications or services listed.
+- count: user asks how many.
+- all_match: user asks whether all records match a condition.
+- aggregate: user asks total payment, total fee, sum, average, etc.
+- process: user asks how to apply, renew, download, edit, cancel, or complete a process.
+- explain_previous: user asks "why", "how", "why not available", or questions the previous answer.
+
+resolved_question rules:
+- Rewrite the user's message as one complete standalone question.
+- Resolve "it", "this", "why", and other follow-ups using history and session context.
+- Do not change the user's actual meaning.
+
+Examples:
+
+User: "my all applications are approved?"
+answer_mode="all_match"
+resolved_question="Are all of the user's applications finally approved?"
+
+User: "show approved applications"
+answer_mode="list"
+resolved_question="Show the user's finally approved applications."
+
+User: "how many applications do I have?"
+answer_mode="count"
+resolved_question="How many applications does the user have?"
+
+User: "how much total i paid for all"
+answer_mode="aggregate"
+resolved_question="What is the total amount paid across all of the user's applications?"
+
+User: "why"
+Previous topic: payment method unavailable
+answer_mode="explain_previous"
+resolved_question="Why is the payment method unavailable for the active application?"
+
+ANSWER MODE RULES:
+
+- fact:
+  One factual answer about one application, service, payment, certificate, account, department, officer, date, status, or document.
+
+- list:
+  User wants matching applications or services displayed.
+
+- count:
+  User wants only the number of matching records.
+
+- all_match:
+  User asks whether every record in a group matches a condition.
+  Example:
+  "Are all my applications approved?"
+  "Are these all expired?"
+
+- aggregate:
+  User asks for a sum, total amount, average, or combined value.
+  Example:
+  "How much total did I pay?"
+
+- comparison:
+  User compares multiple applications, departments, services, or processing times.
+  Example:
+  "Which department acted fastest?"
+  "Which application took the longest?"
+
+- process:
+  User asks how to apply, renew, download, update, edit, cancel, pay, or complete something.
+
+- explain_previous:
+  User asks why a previous answer was given, why data is unavailable, or says the previous response is wrong.
+
+SCOPE RULES:
+
+- all_records:
+  Use all of the user's applications or services.
+
+- previous_result:
+  Use when the user says:
+  "these", "those", "all 7", "the above applications", "from that list".
+
+- active_application:
+  Use for one active application or when user says:
+  "it", "this application", "that application".
+
+- active_service:
+  Use for one active service.
+
+RESOLVED QUESTION RULES:
+
+- resolved_question must be a complete standalone question.
+- Resolve words such as "it", "these", "why", "that", "them" using history and session context.
+- Do not merely repeat vague user wording.
+- Do not change the meaning of the question.
+
+DOMAIN CONTINUITY RULE:
+
+For explain_previous, preserve the original route/domain.
+
+Examples:
+
+Previous topic is account name:
+User: "Why is it null?"
+route="account"
+answer_mode="explain_previous"
+resolved_question="Why is the user's name missing from their account data?"
+
+Previous topic is application payment method:
+User: "Why is it not available?"
+route="application_single"
+answer_mode="explain_previous"
+scope="active_application"
+resolved_question="Why is the payment method unavailable for the active application?"
+
+Do not use route="clarification" when the question can be resolved from history.
+
+COLLECTION EXAMPLES:
+
+User: "Are all my applications approved?"
+route="application_collection"
+answer_mode="all_match"
+scope="all_records"
+filters={"status_group":"final_approved"}
+
+User: "Show approved applications"
+route="application_collection"
+answer_mode="list"
+scope="all_records"
+filters={"status_group":"final_approved"}
+
+User: "How many NOCs are expired?"
+route="application_collection"
+answer_mode="count"
+scope="all_records"
+filters={"status_group":"expired"}
+
+User: "Are these all expired?"
+route="application_collection"
+answer_mode="all_match"
+scope="previous_result"
+filters={"status_group":"expired"}
+
+User: "Which applications did I submit in 2026?"
+route="application_collection"
+answer_mode="list"
+scope="all_records"
+filters={"submission_year":2026}
+
+User: "Which department acted fastest?"
+route="application_collection"
+answer_mode="comparison"
+scope="all_records"
+metric="fastest_department"
+filters={}
+
 Return ONLY this JSON shape:
 {
   "language": "en | hi | mixed",
   "message_kind": "new_question | follow_up | correction | exit | greeting | unclear",
   "route": "greeting | capabilities | account | application_single | application_collection | service | clarification | exit | unknown",
   "query_focus": "short_snake_case_focus",
+  "answer_mode": "fact | list | count | all_match | aggregate | comparison | process | explain_previous",
+  "resolved_question": "complete standalone question after resolving conversation context",
+  "scope": "all_records | previous_result | active_application | active_service",
+  "metric": null,
   "capability_family": "application_lifecycle | payment | certificate | documents | service_discovery | eligibility | renewal | notifications | grievance_support | general_knowledge | smalltalk_or_help | unknown",
   "user_goal": "short natural description",
   "needs_private_data": true,

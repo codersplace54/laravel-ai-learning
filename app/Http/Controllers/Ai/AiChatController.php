@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Throwable;
+use Carbon\Carbon;
 
 class AiChatController extends Controller
 {
@@ -184,6 +185,14 @@ class AiChatController extends Controller
         return [
             'route' => $route,
             'query_focus' => $focus,
+            'answer_mode' => $u['answer_mode'] ?? 'fact',
+
+            'resolved_question' => $u['resolved_question']
+                ?? $u['user_goal']
+                ?? '',
+            'scope' => $u['scope'] ?? 'all_records',
+
+            'metric' => $u['metric'] ?? null,
             'user_goal' => $u['user_goal'] ?? '',
             'message_kind' => $kind,
             'capability_family' => $family,
@@ -367,11 +376,6 @@ class AiChatController extends Controller
 
         $this->set_active_application($session, $application_id, $app_number, $service_id, $plan['query_focus'] ?? 'application');
 
-        Log::info('Payment Context', [
-            'payment_context' => data_get($context, 'payment_context'),
-            'payment_breakdown_context' => data_get($context, 'payment_breakdown_context'),
-            'application_status' => data_get($context, 'application.status'),
-        ]);
         $ai = $this->safe_application_answer($message, $context, $plan);
 
         return $this->reply(

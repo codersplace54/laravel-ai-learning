@@ -135,6 +135,11 @@ class ChatUnderstandService
             'message_kind'           => $kind,
             'route'                  => $route,
             'query_focus'            => $data['query_focus'] ?? 'general',
+            'answer_mode' => $data['answer_mode'] ?? 'fact',
+
+            'resolved_question' => $data['resolved_question']
+                ?? $data['user_goal']
+                ?? '',
             'capability_family'      => $family,
             'user_goal'              => $data['user_goal'] ?? '',
 
@@ -168,7 +173,8 @@ class ChatUnderstandService
             'query_focus'            => 'clarification',
             'capability_family'      => 'unknown',
             'user_goal'              => 'clarify user question',
-
+            'answer_mode'      => 'fact',
+            'resolved_question'=> '',
             'needs_private_data'     => false,
             'needs_static_knowledge' => false,
             'needs_selection'        => false,
