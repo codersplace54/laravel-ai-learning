@@ -1,158 +1,344 @@
 import json
+import logging
+from typing import Any, Dict, List
+from prompts.understand_system_prompt import UNDERSTAND_SYSTEM_PROMPT
 from fastapi import HTTPException
+
 from config import GROQ_MODEL
 from services.groq_service import groq_client
-import logging
 
 logger = logging.getLogger(__name__)
 
-UNDERSTAND_SYSTEM_PROMPT = """
-You are the semantic understanding layer for SWAAGAT — a government portal AI assistant for Tripura, India.
+ALLOWED_ROUTES = [
+    "greeting",
+    "capabilities",
+    "account",
+    "application_single",
+    "application_collection",
+    "service",
+    "clarification",
+    "exit",
+    "unknown",
+]
 
-Your ONLY job is to understand the user's message and return a structured JSON classification.
-Do NOT answer the user. Do NOT invent DB facts. Do NOT guess application status.
+ALLOWED_FAMILIES = [
+    "application_lifecycle",
+    "payment",
+    "certificate",
+    "documents",
+    "service_discovery",
+    "eligibility",
+    "renewal",
+    "notifications",
+    "grievance_support",
+    "general_knowledge",
+    "smalltalk_or_help",
+    "unknown",
+]
 
-Use the conversation history and session meta to understand:
-- follow-up questions (e.g. "what should I do next?" after discussing an application)
-- corrections (e.g. "sorry I meant professional tax")
-- context switches (e.g. asking about certificate after discussing payment)
-- pronoun references (it, this, that, those → resolve from entity_stack or active context)
-- incomplete questions (e.g. "status?" → application status)
-- conversation exit (e.g. "thanks, that's all", "ok bye")
-- pending question continuation (user selects an option to answer a previous pending question)
+ALLOWED_KINDS = [
+    "new_question",
+    "follow_up",
+    "correction",
+    "exit",
+    "greeting",
+    "unclear",
+]
 
-Capability families:
-- application_lifecycle: application status, stuck, progress, approval, rejection, send-back, timeline, next action
-  ALSO includes: listing applications, counting applications, filtering applications by status
-  Examples: "show my applications", "how many applications do I have", "list noc issued applications",
-            "applications with payment pending", "how much application i have", "give me application list"
-- payment: payment status, fee, amount, GRN, retry payment
-- certificate: NOC, certificate download, expiry, validity, letter number
-- documents: document requirements for a service, upload, file list
-- service_discovery: find a service, service info, eligibility, fees, processing time, departments
-- eligibility: who can apply, eligibility criteria
-- renewal: renewal eligibility, renewal process, renewal fee
-- notifications: notifications, alerts, updates
-- grievance_support: complaint, grievance, support, contact
-- general_knowledge: policy, SOP, rules, regulations, FAQ, process explanation
-- smalltalk_or_help: greeting, bot capabilities, casual, account questions (username, email, mobile)
-- unknown: cannot determine
+ALLOWED_ENTITY_TYPES = [
+    "application",
+    "service",
+    "department",
+    "certificate",
+    "scheme",
+    "payment",
+    "unknown",
+]
 
-Rules:
-- Understand spelling mistakes and natural wording (e.g. "sertificate", "applcation", "paymnt")
-- Understand Roman Hindi/Hinglish (e.g. "mera application kahan hai", "status batao")
-- If active_application_id is in session_meta, "this application", "it", "my application" refers to it
-- If active_service_id is in session_meta, "this service", "it" refers to it
-- If entity_stack has entries, resolve pronouns from the top of the stack
-- If pending_plan exists in session_meta and user just selected an option, this is a pending_plan continuation
-- required_slots: list what is needed but missing (application, service, department)
-- missing_slots: subset of required_slots that are not resolved from context
-- If needs_private_data is true, Laravel must fetch live DB data
-- If needs_static_knowledge is true, RAG/SOP knowledge is needed
-- confidence: 0.0 to 1.0 — lower if ambiguous
-- "so what can you tell" or "what else" with active context → follow_up on active topic
-- "renewal" alone or "renewal and more" → smalltalk_or_help, capabilities
-- Account questions: "my username", "my email", "my mobile", "who am i" → smalltalk_or_help with needs_private_data=true
-
-Return ONLY valid JSON, no explanation, no markdown:
-{
-  "language": "en | hi | mixed",
-  "message_kind": "new_question | follow_up | correction | exit | greeting | unclear",
-  "capability_family": "application_lifecycle | payment | certificate | documents | service_discovery | eligibility | renewal | notifications | grievance_support | general_knowledge | smalltalk_or_help | unknown",
-  "user_goal": "short natural description of what the user wants",
-  "needs_private_data": true,
-  "needs_static_knowledge": false,
-  "is_context_switch": false,
-  "is_correction": false,
-  "is_exit": false,
-  "entities": [
-    {
-      "type": "application | service | department | certificate | scheme | payment | unknown",
-      "text": "raw entity text from message",
-      "normalized": null
-    }
-  ],
-  "references": ["active_application | active_service | previous_topic | selected_option | none"],
-  "required_slots": ["application | service | department"],
-  "missing_slots": [],
-  "confidence": 0.9,
-  "clarification_question": null,
-  "reason": "short reason for classification"
-}
-"""
+ALLOWED_REFERENCES = [
+    "active_application",
+    "active_service",
+    "selected_option",
+    "previous_topic",
+    "none",
+]
 
 
 def understand_message(message: str, session_meta: dict, history: list) -> dict:
     payload = {
         "message": message,
-        "session_meta": session_meta,
-        "history": history,
+        "session_meta": session_meta or {},
+        "history": history or [],
     }
 
     try:
         logger.info(
-    "Understand Message Request: %s",
-    json.dumps(payload, default=str, ensure_ascii=False)
-)
+            "Understand Message Request: %s",
+            json.dumps(payload, default=str, ensure_ascii=False),
+        )
+
         completion = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
                 {"role": "system", "content": UNDERSTAND_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(payload, default=str)},
+                {"role": "user", "content": json.dumps(payload, default=str, ensure_ascii=False)},
             ],
             temperature=0,
             response_format={"type": "json_object"},
-            max_completion_tokens=600,
+            max_completion_tokens=900,
         )
+
     except Exception as e:
         error_msg = str(e).lower()
+
+        logger.exception("Understand AI request failed")
+
         if "rate_limit" in error_msg or "429" in error_msg:
             raise HTTPException(status_code=429, detail="AI rate limit reached. Please wait.")
+
         raise HTTPException(status_code=503, detail="AI service unavailable.")
 
-    text = completion.choices[0].message.content
+    text = completion.choices[0].message.content if completion.choices else None
     logger.info("Understand Message Response: %s", text)
 
     if not text:
-        raise HTTPException(status_code=500, detail="AI returned empty response")
+        return fallback_understanding(
+            message=message,
+            reason="AI returned empty response",
+        )
 
     try:
         data = json.loads(text)
-        logger.info(
-            "Parsed Response: %s",
-            json.dumps(data, ensure_ascii=False)
-        )
-        
     except Exception:
-        raise HTTPException(status_code=500, detail={"message": "AI returned invalid JSON", "raw": text})
+        logger.warning("AI returned invalid JSON: %s", text)
+        return fallback_understanding(
+            message=message,
+            reason="AI returned invalid JSON or truncated JSON",
+        )
 
-    allowed_families = [
-        "application_lifecycle", "payment", "certificate", "documents",
-        "service_discovery", "eligibility", "renewal", "notifications",
-        "grievance_support", "general_knowledge", "smalltalk_or_help", "unknown",
-    ]
-    allowed_kinds = ["new_question", "follow_up", "correction", "exit", "greeting", "unclear"]
+    if not isinstance(data, dict):
+        return fallback_understanding(
+            message=message,
+            reason="AI JSON was not an object",
+        )
 
-    if data.get("capability_family") not in allowed_families:
-        data["capability_family"] = "unknown"
-    if data.get("message_kind") not in allowed_kinds:
-        data["message_kind"] = "unclear"
+    cleaned = clean_understanding(data, message)
+
+    logger.info(
+        "Parsed Understanding: %s",
+        json.dumps(cleaned, ensure_ascii=False),
+    )
+
+    return cleaned
+
+
+def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
+    route = clean_enum(data.get("route"), ALLOWED_ROUTES, "unknown")
+    family = clean_enum(data.get("capability_family"), ALLOWED_FAMILIES, "unknown")
+    kind = clean_enum(data.get("message_kind"), ALLOWED_KINDS, "unclear")
+
+    query_focus = safe_string(data.get("query_focus")) or "general"
+    user_goal = safe_string(data.get("user_goal"))
+    language = clean_language(data.get("language"))
+
+    is_exit = bool(data.get("is_exit", False))
+    if is_exit:
+        route = "exit"
+        kind = "exit"
+
+    if kind == "greeting" and route == "unknown":
+        route = "greeting"
+
+    entities = clean_entities(data.get("entities"))
+    references = clean_references(data.get("references"))
+
+    required_slots = clean_string_list(data.get("required_slots"))
+    missing_slots = clean_string_list(data.get("missing_slots"))
+
+    needs_selection = bool(data.get("needs_selection", False))
+    selection_type = data.get("selection_type")
+
+    if selection_type not in ["application", "service", "department", None]:
+        selection_type = None
+
+    filters = data.get("filters")
+    if not isinstance(filters, dict):
+        filters = {}
+
+    confidence = safe_float(data.get("confidence"), 0.7)
+    confidence = max(0.0, min(1.0, confidence))
+
+    clarification_question = data.get("clarification_question")
+    if clarification_question is not None:
+        clarification_question = safe_string(clarification_question) or None
+
+    # Safety normalization: collection questions must not force application selection.
+    if route == "application_collection":
+        needs_selection = False
+        selection_type = None
+        required_slots = []
+        missing_slots = []
+        if not references:
+            references = ["none"]
+
+    # Safety normalization: single application questions need application unless context/entity exists.
+    if route == "application_single":
+        has_application_context = (
+            "active_application" in references
+            or any(e.get("type") == "application" for e in entities)
+        )
+
+        if not has_application_context and not needs_selection:
+            needs_selection = True
+            selection_type = "application"
+            required_slots = ["application"]
+            missing_slots = ["application"]
+
+    # Safety normalization: service questions need service unless context/entity exists.
+    if route == "service":
+        has_service_context = (
+            "active_service" in references
+            or any(e.get("type") == "service" for e in entities)
+        )
+
+        if not has_service_context and not needs_selection:
+            needs_selection = True
+            selection_type = "service"
+            required_slots = ["service"]
+            missing_slots = ["service"]
+
+    # Clarification should not claim private data need.
+    if route in ["greeting", "capabilities", "clarification", "exit", "unknown"]:
+        if route != "account":
+            data["needs_private_data"] = False
 
     return {
-        "language": data.get("language", "en"),
-        "message_kind": data.get("message_kind", "unclear"),
-        "capability_family": data.get("capability_family", "unknown"),
-        "user_goal": data.get("user_goal", ""),
+        "language": language,
+        "message_kind": kind,
+        "route": route,
+        "query_focus": query_focus,
+        "capability_family": family,
+        "user_goal": user_goal,
         "needs_private_data": bool(data.get("needs_private_data", False)),
         "needs_static_knowledge": bool(data.get("needs_static_knowledge", False)),
+        "needs_selection": needs_selection,
+        "selection_type": selection_type,
         "is_context_switch": bool(data.get("is_context_switch", False)),
         "is_correction": bool(data.get("is_correction", False)),
-        "is_exit": bool(data.get("is_exit", False)),
-        "entities": data.get("entities", []),
-        "references": data.get("references", ["none"]),
-        "required_slots": data.get("required_slots", []),
-        "missing_slots": data.get("missing_slots", []),
-        "confidence": float(data.get("confidence", 0.7)),
-        "clarification_question": data.get("clarification_question"),
-        "reason": data.get("reason", ""),
+        "is_exit": is_exit,
+        "entities": entities,
+        "references": references,
+        "filters": filters,
+        "required_slots": required_slots,
+        "missing_slots": missing_slots,
+        "confidence": confidence,
+        "clarification_question": clarification_question,
+        "reason": safe_string(data.get("reason")) or "classified by semantic planner",
     }
+
+
+def fallback_understanding(message: str, reason: str = "fallback") -> Dict[str, Any]:
+    return {
+        "language": "mixed",
+        "message_kind": "unclear",
+        "route": "clarification",
+        "query_focus": "clarification",
+        "capability_family": "unknown",
+        "user_goal": "clarify user question",
+        "needs_private_data": False,
+        "needs_static_knowledge": False,
+        "needs_selection": False,
+        "selection_type": None,
+        "is_context_switch": False,
+        "is_correction": False,
+        "is_exit": False,
+        "entities": [],
+        "references": ["none"],
+        "filters": {},
+        "required_slots": [],
+        "missing_slots": [],
+        "confidence": 0.0,
+        "clarification_question": "Please tell me if your question is about your application or about a service.",
+        "reason": reason,
+    }
+
+
+def clean_enum(value: Any, allowed: List[str], default: str) -> str:
+    value = safe_string(value).lower()
+    return value if value in allowed else default
+
+
+def clean_language(value: Any) -> str:
+    value = safe_string(value).lower()
+    return value if value in ["en", "hi", "mixed"] else "en"
+
+
+def clean_entities(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+
+    cleaned = []
+
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+
+        entity_type = safe_string(item.get("type")).lower()
+        if entity_type not in ALLOWED_ENTITY_TYPES:
+            entity_type = "unknown"
+
+        cleaned.append(
+            {
+                "type": entity_type,
+                "text": safe_string(item.get("text")),
+                "normalized": item.get("normalized") if item.get("normalized") is not None else None,
+                "id": item.get("id") if item.get("id") is not None else None,
+            }
+        )
+
+    return cleaned[:10]
+
+
+def clean_references(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        return ["none"]
+
+    refs = []
+
+    for ref in value:
+        ref = safe_string(ref).lower()
+        if ref in ALLOWED_REFERENCES and ref not in refs:
+            refs.append(ref)
+
+    return refs or ["none"]
+
+
+def clean_string_list(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        return []
+
+    cleaned = []
+
+    for item in value:
+        text = safe_string(item)
+        if text:
+            cleaned.append(text)
+
+    return cleaned[:10]
+
+
+def safe_string(value: Any) -> str:
+    if value is None:
+        return ""
+
+    if isinstance(value, str):
+        return value.strip()
+
+    return str(value).strip()
+
+
+def safe_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default

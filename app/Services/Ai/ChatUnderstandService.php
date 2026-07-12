@@ -3,19 +3,22 @@
 namespace App\Services\Ai;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ChatUnderstandService
 {
     public function understand(string $message, array $session_meta, array $history): array
     {
-        $base_url = rtrim(config('ai.base_url'), '/');
+        $base_url = rtrim((string) config('ai.base_url'), '/');
 
         try {
-            $response = Http::timeout(30)
+            $response = Http::timeout(35)
+                ->connectTimeout(10)
                 ->withHeaders([
-                    'Accept'       => 'application/json',
-                    'Content-Type' => 'application/json',
-                    'X-AI-SECRET'  => config('ai.secret'),
+                    'Accept'      => 'application/json',
+                    'Content-Type'=> 'application/json',
+                    'X-AI-SECRET' => config('ai.secret'),
                 ])
                 ->post($base_url . '/api/ai/chat/understand', [
                     'message'      => $message,
@@ -24,34 +27,166 @@ class ChatUnderstandService
                 ]);
 
             if ($response->failed()) {
-                return $this->fallback_understand();
+                Log::warning('AI understand failed HTTP response', [
+                    'status' => $response->status(),
+                    'body'   => $response->body(),
+                ]);
+
+                return $this->fallback_understand('AI understand HTTP failed');
             }
 
-            return $response->json() ?: $this->fallback_understand();
-        } catch (\Exception $e) {
-            return $this->fallback_understand();
+            $json = $response->json();
+
+            if (!is_array($json)) {
+                return $this->fallback_understand('AI understand returned invalid JSON');
+            }
+
+            $data = $this->extract_payload($json);
+
+            return $this->normalize_understand($data);
+
+        } catch (Throwable $e) {
+            Log::warning('AI understand exception', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->fallback_understand('AI understand exception');
         }
     }
 
-    private function fallback_understand(): array
+    private function extract_payload(array $json): array
+    {
+        // Supports both:
+        // 1. direct FastAPI response: { route: "...", query_focus: "..." }
+        // 2. wrapped response: { status: true, data: { route: "..."} }
+
+        if (isset($json['data']) && is_array($json['data'])) {
+            return $json['data'];
+        }
+
+        return $json;
+    }
+
+    private function normalize_understand(array $data): array
+    {
+        $allowed_routes = [
+            'greeting',
+            'capabilities',
+            'account',
+            'application_single',
+            'application_collection',
+            'service',
+            'clarification',
+            'exit',
+            'unknown',
+        ];
+
+        $allowed_families = [
+            'application_lifecycle',
+            'payment',
+            'certificate',
+            'documents',
+            'service_discovery',
+            'eligibility',
+            'renewal',
+            'notifications',
+            'grievance_support',
+            'general_knowledge',
+            'smalltalk_or_help',
+            'unknown',
+        ];
+
+        $allowed_kinds = [
+            'new_question',
+            'follow_up',
+            'correction',
+            'exit',
+            'greeting',
+            'unclear',
+        ];
+
+        $route = $data['route'] ?? 'unknown';
+        $family = $data['capability_family'] ?? 'unknown';
+        $kind = $data['message_kind'] ?? 'unclear';
+
+        if (!in_array($route, $allowed_routes, true)) {
+            $route = 'unknown';
+        }
+
+        if (!in_array($family, $allowed_families, true)) {
+            $family = 'unknown';
+        }
+
+        if (!in_array($kind, $allowed_kinds, true)) {
+            $kind = 'unclear';
+        }
+
+        $confidence = (float) ($data['confidence'] ?? 0.7);
+        $confidence = max(0, min(1, $confidence));
+
+        $entities = $data['entities'] ?? [];
+        $references = $data['references'] ?? ['none'];
+        $filters = $data['filters'] ?? [];
+        $required_slots = $data['required_slots'] ?? [];
+        $missing_slots = $data['missing_slots'] ?? [];
+
+        return [
+            'language'               => $data['language'] ?? 'en',
+            'message_kind'           => $kind,
+            'route'                  => $route,
+            'query_focus'            => $data['query_focus'] ?? 'general',
+            'capability_family'      => $family,
+            'user_goal'              => $data['user_goal'] ?? '',
+
+            'needs_private_data'     => (bool) ($data['needs_private_data'] ?? false),
+            'needs_static_knowledge' => (bool) ($data['needs_static_knowledge'] ?? false),
+            'needs_selection'        => (bool) ($data['needs_selection'] ?? false),
+            'selection_type'         => $data['selection_type'] ?? null,
+
+            'is_context_switch'      => (bool) ($data['is_context_switch'] ?? false),
+            'is_correction'          => (bool) ($data['is_correction'] ?? false),
+            'is_exit'                => (bool) ($data['is_exit'] ?? false),
+
+            'entities'               => is_array($entities) ? $entities : [],
+            'references'             => is_array($references) ? $references : ['none'],
+            'filters'                => is_array($filters) ? $filters : [],
+            'required_slots'         => is_array($required_slots) ? $required_slots : [],
+            'missing_slots'          => is_array($missing_slots) ? $missing_slots : [],
+
+            'confidence'             => $confidence,
+            'clarification_question' => $data['clarification_question'] ?? null,
+            'reason'                 => $data['reason'] ?? 'normalized',
+        ];
+    }
+
+    private function fallback_understand(string $reason = 'fallback'): array
     {
         return [
-            'language'             => 'en',
-            'message_kind'         => 'unclear',
-            'capability_family'    => 'unknown',
-            'user_goal'            => '',
-            'needs_private_data'   => false,
+            'language'               => 'mixed',
+            'message_kind'           => 'unclear',
+            'route'                  => 'clarification',
+            'query_focus'            => 'clarification',
+            'capability_family'      => 'unknown',
+            'user_goal'              => 'clarify user question',
+
+            'needs_private_data'     => false,
             'needs_static_knowledge' => false,
-            'is_context_switch'    => false,
-            'is_correction'        => false,
-            'is_exit'              => false,
-            'entities'             => [],
-            'references'           => ['none'],
-            'required_slots'       => [],
-            'missing_slots'        => [],
-            'confidence'           => 0.0,
-            'clarification_question' => null,
-            'reason'               => 'fallback',
+            'needs_selection'        => false,
+            'selection_type'         => null,
+
+            'is_context_switch'      => false,
+            'is_correction'          => false,
+            'is_exit'                => false,
+
+            'entities'               => [],
+            'references'             => ['none'],
+            'filters'                => [],
+            'required_slots'         => [],
+            'missing_slots'          => [],
+
+            'confidence'             => 0.0,
+            'clarification_question' => 'Please tell me if your question is about your application or about a service.',
+            'reason'                 => $reason,
         ];
     }
 }

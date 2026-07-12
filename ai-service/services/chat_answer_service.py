@@ -46,6 +46,13 @@ If data_scope is RAG_KNOWLEDGE:
 - Answer general process/SOP/FAQ questions.
 - If no specific data is available, give a helpful general answer about government portal processes.
 
+Formatting rules:
+- If answer contains multiple applications, services, documents, payments, or timeline events, use a numbered list.
+- Put application number/service name in bold.
+- Do not write long comma-separated paragraphs.
+- Use short lines.
+- Use Markdown formatting only: **bold**, numbered lists, and bullet points.
+
 Return only valid JSON:
 {
   "answer": "simple helpful answer",

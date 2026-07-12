@@ -20,13 +20,32 @@ class ChatLiveDataService
             ->where('id', $application_id)
             ->where('user_id', $user_id)
             ->select([
-                'id', 'applicationId', 'user_id', 'service_id', 'status', 'payment_status',
-                'total_fee', 'final_fee', 'effective_fee', 'paid_amount', 'GRN_number',
-                'created_at', 'updated_at', 'application_date',
-                'NOC_certificate', 'NOC_rejection_certificate', 'NOC_generationDate','NOC_expiry_date',
-                'renewal_cycle_id', 'renewal', 'renewalYear',
-                'PreviousNOCexpiryDate', 'external_valid_till', 'external_noc_number',
-                'is_third_party', 'previous_application_id',
+                'id',
+                'applicationId',
+                'user_id',
+                'service_id',
+                'status',
+                'payment_status',
+                'total_fee',
+                'final_fee',
+                'effective_fee',
+                'paid_amount',
+                'GRN_number',
+                'created_at',
+                'updated_at',
+                'application_date',
+                'NOC_certificate',
+                'NOC_rejection_certificate',
+                'NOC_generationDate',
+                'NOC_expiry_date',
+                'renewal_cycle_id',
+                'renewal',
+                'renewalYear',
+                'PreviousNOCexpiryDate',
+                'external_valid_till',
+                'external_noc_number',
+                'is_third_party',
+                'previous_application_id',
             ])
             ->first();
 
@@ -39,10 +58,18 @@ class ChatLiveDataService
             ->where('awa.application_id', $application->id)
             ->orderByDesc('awa.id')
             ->select([
-                'awa.id', 'awa.step_number', 'awa.step_type', 'awa.department_id',
-                'd.name as department_name', 'awa.hierarchy_level', 'awa.status',
-                'awa.action_taken_by', 'awa.action_taken_at', 'awa.remarks',
-                'awa.created_at', 'awa.updated_at',
+                'awa.id',
+                'awa.step_number',
+                'awa.step_type',
+                'awa.department_id',
+                'd.name as department_name',
+                'awa.hierarchy_level',
+                'awa.status',
+                'awa.action_taken_by',
+                'awa.action_taken_at',
+                'awa.remarks',
+                'awa.created_at',
+                'awa.updated_at',
             ])
             ->first();
 
@@ -52,10 +79,18 @@ class ChatLiveDataService
             ->orderByDesc('awa.id')
             ->limit(8)
             ->select([
-                'awa.id', 'awa.step_number', 'awa.step_type', 'awa.department_id',
-                'd.name as department_name', 'awa.hierarchy_level', 'awa.status',
-                'awa.action_taken_by', 'awa.action_taken_at', 'awa.remarks',
-                'awa.created_at', 'awa.updated_at',
+                'awa.id',
+                'awa.step_number',
+                'awa.step_type',
+                'awa.department_id',
+                'd.name as department_name',
+                'awa.hierarchy_level',
+                'awa.status',
+                'awa.action_taken_by',
+                'awa.action_taken_at',
+                'awa.remarks',
+                'awa.created_at',
+                'awa.updated_at',
             ])
             ->get();
 
@@ -76,9 +111,15 @@ class ChatLiveDataService
             ->orderByDesc('awa.action_taken_at')
             ->orderByDesc('awa.id')
             ->select([
-                'awa.id', 'awa.step_number', 'awa.step_type', 'awa.department_id',
-                'd.name as department_name', 'awa.status',
-                'awa.action_taken_by', 'awa.action_taken_at', 'awa.remarks',
+                'awa.id',
+                'awa.step_number',
+                'awa.step_type',
+                'awa.department_id',
+                'd.name as department_name',
+                'awa.status',
+                'awa.action_taken_by',
+                'awa.action_taken_at',
+                'awa.remarks',
             ])
             ->first();
 
@@ -116,6 +157,28 @@ class ChatLiveDataService
             ];
         }
 
+        $payment_status = strtolower((string) $application->payment_status);
+        $latest_payment_status = strtolower((string) ($latest_payment->payment_status ?? ''));
+
+        $current_payment_state = match (true) {
+            $payment_status === 'paid' =>
+            'payment_completed',
+
+            $payment_status === 'failed' =>
+            'payment_failed',
+
+            $payment_status === 'pending' && $latest_payment_status === 'paid' =>
+            'payment_success_but_application_not_updated',
+
+            default =>
+            'payment_pending',
+        };
+
+        // Never show payable amount after payment is completed.
+        if ($payment_status === 'paid') {
+            $amount_to_pay = null;
+        }
+
         return [
             'application' => [
                 'id'                 => $application->id,
@@ -140,13 +203,26 @@ class ChatLiveDataService
                 'sent_back_at'    => $latest_send_back->action_taken_at ?? null,
             ] : ['was_sent_back' => false, 'remarks' => null],
             'payment_context' => [
-                'payment_status'        => $application->payment_status,
-                'is_zero_fee'           => $is_zero_fee,
-                'total_fee'             => $total_fee,
-                'effective_fee'         => $effective_fee,
-                'paid_amount'           => $paid_amount,
-                'amount_to_pay'         => $amount_to_pay,
-                'amount_to_pay_display' => $amount_to_pay ? ('₹' . rtrim(rtrim(number_format($amount_to_pay, 2, '.', ''), '0'), '.')) : null,
+                'payment_status' => $payment_status,
+                'current_state'  => $current_payment_state,
+
+                // Keep both temporarily if old code still uses is_zero_fee.
+                'is_zero_fee'             => $is_zero_fee,
+                'is_zero_fee_application' => $is_zero_fee,
+
+                'total_fee'     => $total_fee,
+                'effective_fee' => $effective_fee,
+
+                'paid_amount' => $paid_amount,
+                'paid_amount_display' => $paid_amount > 0
+                    ? '₹' . rtrim(rtrim(number_format($paid_amount, 2, '.', ''), '0'), '.')
+                    : null,
+
+                'amount_to_pay' => $amount_to_pay,
+                'amount_to_pay_display' => $amount_to_pay !== null
+                    ? '₹' . rtrim(rtrim(number_format($amount_to_pay, 2, '.', ''), '0'), '.')
+                    : null,
+
                 'grn_number'            => $application->GRN_number,
                 'latest_payment_status' => $latest_payment->payment_status ?? null,
                 'latest_payment_amount' => $payment_amount,
@@ -263,7 +339,7 @@ class ChatLiveDataService
         return UserServiceApplication::where('user_id', $user_id)
             ->where(function ($q) use ($normalized) {
                 $q->whereRaw("REPLACE(UPPER(`applicationId`), ' ', '') = ?", [$normalized])
-                  ->orWhereRaw("UPPER(`applicationId`) LIKE ?", ['%' . $normalized . '%']);
+                    ->orWhereRaw("UPPER(`applicationId`) LIKE ?", ['%' . $normalized . '%']);
             })
             ->latest('id')
             ->first();
