@@ -21,7 +21,7 @@ logging.basicConfig(
     filename="logs/ai_service.log",
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    filemode="a",  # append
+    filemode="a",
 )
 
 logger = logging.getLogger(__name__)
@@ -35,8 +35,10 @@ app = FastAPI(
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+RAG_SERVICES_DIR = os.path.join(BASE_DIR, "rag-documents", "services")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(RAG_SERVICES_DIR, exist_ok=True)
 
 
 @app.get("/")
@@ -72,14 +74,14 @@ def upload_document(file: UploadFile = File(...)):
             detail="Only PDF files are allowed"
         )
 
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    file_path = os.path.join(RAG_SERVICES_DIR, "service-37.md")
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     result = process_document(
         file_path=file_path,
-        document_name=file.filename
+        document_name="service-37.md"
     )
 
     return result

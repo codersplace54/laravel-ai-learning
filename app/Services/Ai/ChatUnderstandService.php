@@ -32,6 +32,10 @@ class ChatUnderstandService
                     'body'   => $response->body(),
                 ]);
 
+                if ($response->status() === 429) {
+                    return $this->fallback_understand('rate_limit');
+                }
+
                 return $this->fallback_understand('AI understand HTTP failed');
             }
 
@@ -166,6 +170,10 @@ class ChatUnderstandService
 
     private function fallback_understand(string $reason = 'fallback'): array
     {
+        $clarification = $reason === 'rate_limit'
+            ? 'The AI service is temporarily busy. Please wait a moment and try again.'
+            : 'I could not understand your request. Please try again.';
+
         return [
             'language'               => 'mixed',
             'message_kind'           => 'unclear',
@@ -173,25 +181,22 @@ class ChatUnderstandService
             'query_focus'            => 'clarification',
             'capability_family'      => 'unknown',
             'user_goal'              => 'clarify user question',
-            'answer_mode'      => 'fact',
-            'resolved_question'=> '',
+            'answer_mode'            => 'fact',
+            'resolved_question'      => '',
             'needs_private_data'     => false,
             'needs_static_knowledge' => false,
             'needs_selection'        => false,
             'selection_type'         => null,
-
             'is_context_switch'      => false,
             'is_correction'          => false,
             'is_exit'                => false,
-
             'entities'               => [],
             'references'             => ['none'],
             'filters'                => [],
             'required_slots'         => [],
             'missing_slots'          => [],
-
             'confidence'             => 0.0,
-            'clarification_question' => 'Please tell me if your question is about your application or about a service.',
+            'clarification_question' => $clarification,
             'reason'                 => $reason,
         ];
     }

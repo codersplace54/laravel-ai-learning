@@ -94,7 +94,7 @@ def understand_message(message: str, session_meta: dict, history: list) -> dict:
         logger.exception("Understand AI request failed")
 
         if "rate_limit" in error_msg or "429" in error_msg:
-            raise HTTPException(status_code=429, detail="AI rate limit reached. Please wait.")
+            raise HTTPException(status_code=429, detail="AI rate limit reached. Please wait a moment and try again.")
 
         raise HTTPException(status_code=503, detail="AI service unavailable.")
 
@@ -155,7 +155,7 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
     if answer_mode not in allowed_answer_modes:
         answer_mode = "fact"
 
-        allowed_scopes = {
+    allowed_scopes = {
         "all_records",
         "previous_result",
         "active_application",
@@ -167,12 +167,12 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
     if scope not in allowed_scopes:
         scope = "all_records"
 
-
     resolved_question = (
         safe_string(data.get("resolved_question"))
         or safe_string(data.get("user_goal"))
         or message
     )
+
     metric = safe_string(data.get("metric")) or None
 
     user_goal = safe_string(data.get("user_goal"))
@@ -209,6 +209,8 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
     if clarification_question is not None:
         clarification_question = safe_string(clarification_question) or None
 
+    needs_private_data = bool(data.get("needs_private_data", False))
+
     # Safety normalization: collection questions must not force application selection.
     if route == "application_collection":
         needs_selection = False
@@ -219,7 +221,7 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
         if not references:
             references = ["none"]
 
-    # Safety normalization: single application questions need application unless context/entity exists.
+    # Safety normalization: single application questions need an application unless context/entity exists.
     if route == "application_single":
         has_application_context = (
             "active_application" in references
@@ -232,7 +234,7 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
             required_slots = ["application"]
             missing_slots = ["application"]
 
-    # Safety normalization: service questions need service unless context/entity exists.
+    # Safety normalization: service questions need a service unless context/entity exists.
     if route == "service":
         has_service_context = (
             "active_service" in references
@@ -245,7 +247,7 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
             required_slots = ["service"]
             missing_slots = ["service"]
 
-    # Clarification should not claim private data need.
+    # Greeting/capability/exit should never require private data.
     if route in ["greeting", "capabilities", "exit", "unknown"]:
         needs_private_data = False
 
@@ -260,7 +262,7 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
         "metric": metric,
         "capability_family": family,
         "user_goal": user_goal,
-        "needs_private_data": bool(data.get("needs_private_data", False)),
+        "needs_private_data": needs_private_data,
         "needs_static_knowledge": bool(data.get("needs_static_knowledge", False)),
         "needs_selection": needs_selection,
         "selection_type": selection_type,
@@ -276,6 +278,7 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
         "clarification_question": clarification_question,
         "reason": safe_string(data.get("reason")) or "classified by semantic planner",
     }
+
 
 def fallback_understanding(message: str, reason: str = "fallback") -> Dict[str, Any]:
     return {
@@ -302,7 +305,7 @@ def fallback_understanding(message: str, reason: str = "fallback") -> Dict[str, 
         "required_slots": [],
         "missing_slots": [],
         "confidence": 0.0,
-        "clarification_question": "Please tell me if your question is about your application or about a service.",
+        "clarification_question": "I'm having trouble understanding your request right now. Please try again in a moment.",
         "reason": reason,
     }
 

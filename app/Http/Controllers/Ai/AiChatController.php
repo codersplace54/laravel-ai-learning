@@ -14,14 +14,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Throwable;
-use Carbon\Carbon;
+use App\Services\Ai\ApplicationCollectionQueryService;
+use Illuminate\Support\Str;
 
 class AiChatController extends Controller
 {
     public function __construct(
-        private ChatUnderstandService $understand_service,
-        private ChatLiveDataService $live_data,
-        private ChatAnswerService $answer_service,
+        private ChatUnderstandService             $understand_service,
+        private ChatLiveDataService               $live_data,
+        private ChatAnswerService                 $answer_service,
+        private ApplicationCollectionQueryService $application_collection_query_service,
     ) {}
 
     // ---------------------------------------------------------------------
@@ -108,6 +110,18 @@ class AiChatController extends Controller
         }
 
         if ($plan['route'] === 'capabilities') {
+            if ($plan['query_focus'] === 'out_of_scope') {
+                return $this->reply(
+                    $session,
+                    'Sorry, I’m here to help with SWAAGAT applications, payments, certificates, documents, and services.',
+                    'out_of_scope',
+                    [
+                        'Show my applications',
+                        'What is my application status?',
+                    ]
+                );
+            }
+
             return $this->answer_capabilities($session);
         }
 
@@ -135,30 +149,127 @@ class AiChatController extends Controller
     // AI UNDERSTANDING + PLAN
     // ---------------------------------------------------------------------
 
-    private function safe_understand(string $message, array $session_meta, array $history): array
-    {
+    private function safe_understand(
+        string $message,
+        array $session_meta,
+        array $history
+    ): array {
+        $request_id = (string) Str::uuid();
+
+        Log::info('SWAAGAT understand request starting', [
+            'request_id' => $request_id,
+            'message' => $message,
+            'session_meta' => $session_meta,
+            'history_count' => count($history),
+        ]);
+
         try {
-            $understanding = $this->understand_service->understand($message, $session_meta, $history);
-            return is_array($understanding) ? $understanding : [];
-        } catch (Throwable $e) {
-            Log::warning('SWAAGAT AI understand failed', [
-                'error' => $e->getMessage(),
-                'message' => $message,
+            $understanding = $this->understand_service->understand(
+                $message,
+                $session_meta,
+                $history
+            );
+
+            /*
+         * Do not silently accept an empty or invalid FastAPI response.
+         */
+            if (!is_array($understanding)) {
+                throw new \RuntimeException(
+                    'Understand service returned '
+                        . get_debug_type($understanding)
+                        . ' instead of an array.'
+                );
+            }
+
+            if (empty($understanding['route'])) {
+                throw new \RuntimeException(
+                    'Understand service response does not contain route. Response: '
+                        . json_encode($understanding)
+                );
+            }
+
+            Log::info('SWAAGAT understand request completed', [
+                'request_id' => $request_id,
+                'route' => $understanding['route'] ?? null,
+                'query_focus' => $understanding['query_focus'] ?? null,
+                'answer_mode' => $understanding['answer_mode'] ?? null,
             ]);
 
+            return $understanding;
+        } catch (Throwable $e) {
+            /*
+         * Use ERROR, not WARNING, so it is visible even when
+         * Laravel's LOG_LEVEL is set to error.
+         */
+            Log::error('SWAAGAT AI understand failed', [
+                'request_id' => $request_id,
+                'exception' => get_class($e),
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'message' => $message,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            /*
+         * Send the exception to Laravel's configured exception reporter too.
+         */
+            report($e);
+
+            /*
+         * Infrastructure fallback for basic greetings.
+         * This is not business-question keyword routing.
+         */
+            if (
+                preg_match(
+                    '/^\s*(hi|hello|hey|good\s+morning|good\s+afternoon|good\s+evening)\b[!,.?\s]*$/i',
+                    $message
+                )
+            ) {
+                return [
+                    'route' => 'greeting',
+                    'query_focus' => 'greeting',
+                    'answer_mode' => 'fact',
+                    'resolved_question' => $message,
+                    'scope' => 'all_records',
+                    'metric' => null,
+                    'message_kind' => 'greeting',
+                    'capability_family' => 'smalltalk_or_help',
+                    'user_goal' => 'greet',
+                    'needs_private_data' => false,
+                    'needs_static_knowledge' => false,
+                    'references' => ['none'],
+                    'entities' => [],
+                    'filters' => [],
+                    'confidence' => 1,
+                    'clarification_question' => null,
+                    'is_exit' => false,
+                ];
+            }
+
+            /*
+         * Never return an unrelated application/service clarification
+         * when the actual problem is AI-service connectivity.
+         */
             return [
-                'route' => 'unknown',
-                'query_focus' => 'unknown',
+                'route' => 'clarification',
+                'query_focus' => 'ai_service_unavailable',
+                'answer_mode' => 'fact',
+                'resolved_question' => $message,
+                'scope' => 'all_records',
+                'metric' => null,
                 'message_kind' => 'unclear',
                 'capability_family' => 'unknown',
-                'user_goal' => 'understand service failed',
+                'user_goal' => 'understand service unavailable',
                 'needs_private_data' => false,
                 'needs_static_knowledge' => false,
                 'references' => ['none'],
                 'entities' => [],
                 'filters' => [],
-                'confidence' => 0,
-                'clarification_question' => 'Please tell me if this is about your application or about a service.',
+                'confidence' => 1,
+                'clarification_question' =>
+                'I am temporarily unable to connect to the AI understanding service. Please try again in a moment.',
+                'is_exit' => false,
             ];
         }
     }
@@ -383,10 +494,10 @@ class AiChatController extends Controller
             $ai['answer'],
             $ai['answer_type'] ?? 'application',
             [
-                'Application ka full history dikhao',
-                'Meri application abhi kis stage me hai?',
-                'Maine kitna payment kiya?',
-                'Certificate download link do',
+                'Show the complete history of my application',
+                'What stage is my application currently in?',
+                'How much did I pay?',
+                'Can i renew?',
             ],
             $ai['short_status'] ?? null,
             $ai['waiting_on'] ?? null,
@@ -403,7 +514,7 @@ class AiChatController extends Controller
                 'user_goal' => $plan['user_goal'] ?? null,
             ];
 
-            $ai = $this->answer_service->generate_application_answer($message, $context);
+            $ai = $this->answer_service->generate($message, 'APPLICATION_DATA', $context);
 
             if (is_array($ai) && !empty($ai['answer'])) {
                 return $ai;
@@ -451,262 +562,109 @@ class AiChatController extends Controller
     // APPLICATION COLLECTION
     // ---------------------------------------------------------------------
 
-    private function handle_application_collection(AiChatSession $session, string $message, array $plan)
-    {
-        $applications = UserServiceApplication::with(['service:id,service_title_or_description'])
-            ->where('user_id', $session->user_id)
-            ->latest('id')
-            ->get(['id', 'applicationId', 'service_id', 'status', 'payment_status', 'created_at', 'updated_at', 'NOC_expiry_date']);
+    private function handle_application_collection(
+        AiChatSession $session,
+        string $message,
+        array $plan
+    ) {
+        /*
+     * Previous collection is used for follow-ups like:
+     * "Are these all expired?"
+     */
+        $last_collection = $this->get_meta(
+            $session,
+            'last_collection',
+            []
+        );
 
-        $filtered = $this->apply_application_filters($applications, $plan);
-
-        $focus = strtolower((string) ($plan['query_focus'] ?? ''));
-
-        // Count-only answer
-        if (str_contains($focus, 'count') || str_contains($focus, 'total')) {
-            $count = $applications->count();
-
-            return $this->reply(
-                $session,
-                "You have **{$count} application" . ($count === 1 ? "" : "s") . "** in total.",
-                'application_count',
-                [
-                    'Show my applications',
-                    'Show pending applications',
-                    'Show payment pending applications',
-                ]
-            );
+        if (!is_array($last_collection)) {
+            $last_collection = [];
         }
 
-        // Readable list answer
-        if ($filtered->count() === 0) {
-            return $this->reply(
-                $session,
-                'I could not find any matching applications in your account.',
-                'application_collection',
-                ['Show my applications']
-            );
+        /*
+     * PHP performs the authoritative database work:
+     * filters, counts, totals, all-match checks, etc.
+     */
+        $result = $this->application_collection_query_service->execute(
+            (int) $session->user_id,
+            $plan,
+            $last_collection
+        );
+
+        /*
+     * Save collection memory for future follow-ups.
+     */
+        if (
+            array_key_exists('last_collection', $result)
+            && is_array($result['last_collection'])
+        ) {
+            $meta = $this->meta($session);
+            $meta['last_collection'] = $result['last_collection'];
+
+            $session->meta = $meta;
+            $session->save();
         }
 
-        $lines = [];
-        $lines[] = "You have **{$filtered->count()} application" . ($filtered->count() === 1 ? "" : "s") . "**:";
-        $lines[] = "";
+        /*
+     * Use the complete resolved question, not vague raw wording.
+     */
+        $question = trim(
+            (string) ($plan['resolved_question'] ?? '')
+        );
 
-        foreach ($filtered->take(15) as $index => $app) {
-            $number = $app->applicationId ?? ('Application #' . $app->id);
-            $service = $app->service->service_title_or_description ?? 'Service not available';
-            $status = $app->status ?? 'Status not available';
-            $payment = $app->payment_status ?? null;
-
-            $lines[] = ($index + 1) . ". **{$number}**";
-            $lines[] = "   - Service: {$service}";
-            $lines[] = "   - Status: **{$status}**";
-
-            if ($payment) {
-                $lines[] = "   - Payment: {$payment}";
-            }
-
-            $lines[] = "";
+        if ($question === '') {
+            $question = $message;
         }
 
-        if ($filtered->count() > 15) {
-            $lines[] = "_Showing latest 15 applications only._";
-        }
+        /*
+     * Send the verified PHP result to Python only for explanation.
+     */
+        $context = [
+            '_ai_plan' => [
+                'route' => 'application_collection',
+                'query_focus' => $plan['query_focus'] ?? null,
+                'answer_mode' => $plan['answer_mode'] ?? 'list',
+                'scope' => $plan['scope'] ?? 'all_records',
+                'metric' => $plan['metric'] ?? null,
+                'filters' => $plan['filters'] ?? [],
+                'resolved_question' => $question,
+            ],
 
-        $answer = trim(implode("\n", $lines));
+            /*
+         * Python must treat this result as authoritative.
+         */
+            'query_result' => $result,
+        ];
 
-        $options = $filtered->take(15)->map(fn($a) => [
-            'id' => $a->id,
-            'title' => $a->applicationId ?? ('Application #' . $a->id),
-            'subtitle' => ($a->service->service_title_or_description ?? 'Service') . ' — ' . ($a->status ?? 'status not available'),
-        ])->values()->toArray();
+        /*
+     * PHP message remains the fallback when Python is unavailable.
+     */
+        $fallback = $result['message']
+            ?? 'I could not prepare a reliable answer from the available application data.';
+
+        $ai = $this->safe_generic_answer(
+            $question,
+            'APPLICATION_COLLECTION_DATA',
+            $context,
+            $fallback
+        );
+
+        $options = is_array($result['options'] ?? null)
+            ? $result['options']
+            : [];
 
         return $this->reply(
             $session,
-            $answer,
-            'application_list',
-            [
-                'Meri latest application kaunsi hai?',
-                'Show pending applications',
-                'Show payment pending applications',
-                'Application ka status batao',
-            ],
-            null,
-            null,
-            null,
+            $ai['answer'] ?? $fallback,
+            $ai['answer_type'] ?? 'application_collection',
+            [],
+            $ai['short_status'] ?? null,
+            $ai['waiting_on'] ?? null,
+            $ai['next_action'] ?? null,
             false,
             null,
             $options
         );
-    }
-
-    private function apply_application_filters($applications, array $plan)
-    {
-        $filters = $this->normalize_collection_filters($plan);
-
-        if ($filters['action'] === 'latest') {
-            return $applications->take(1)->values();
-        }
-
-        return $applications->filter(function ($a) use ($filters) {
-            $status = strtolower((string) $a->status);
-            $payment = strtolower((string) $a->payment_status);
-
-            if ($filters['payment'] && $payment !== $filters['payment']) {
-                return false;
-            }
-
-            if ($filters['status_group']) {
-                return $this->application_status_matches($a, $filters['status_group']);
-            }
-
-            return true;
-        })->values();
-    }
-
-    private function normalize_collection_filters(array $plan): array
-    {
-        $raw = $plan['filters'] ?? [];
-
-        $text = strtolower(trim(implode(' ', array_filter([
-            $plan['query_focus'] ?? '',
-            $plan['user_goal'] ?? '',
-            $raw['status_group'] ?? '',
-            $raw['status'] ?? '',
-            $raw['stage'] ?? '',
-            $raw['payment_group'] ?? '',
-            $raw['payment_status'] ?? '',
-            !empty($raw['noc_issued']) ? 'noc issued' : '',
-        ]))));
-
-        $action = strtolower((string) ($raw['action'] ?? 'list'));
-
-        return [
-            'action' => str_contains($text, 'latest') ? 'latest' : $action,
-
-            'payment' => match (true) {
-                str_contains($text, 'payment pending'),
-                str_contains($text, 'unpaid'), ($raw['payment_status'] ?? null) === 'pending' => 'pending',
-
-                str_contains($text, 'payment paid'),
-                str_contains($text, 'paid applications'), ($raw['payment_status'] ?? null) === 'paid' => 'paid',
-
-                str_contains($text, 'payment failed'), ($raw['payment_status'] ?? null) === 'failed' => 'failed',
-
-                default => null,
-            },
-
-            'status_group' => match (true) {
-                str_contains($text, 'draft') => 'draft',
-
-                str_contains($text, 'saved'),
-                str_contains($text, 'payment stage') => 'saved',
-
-                str_contains($text, 'processing'),
-                str_contains($text, 'process'),
-                str_contains($text, 'under review'),
-                str_contains($text, 'review'),
-                str_contains($text, 'pending with department'),
-                str_contains($text, 'department pending'),
-                str_contains($text, 'approval pending'),
-                str_contains($text, 'submitted') => 'in_process',
-
-                str_contains($text, 'send back'),
-                str_contains($text, 'send_back'),
-                str_contains($text, 'correction') => 'send_back',
-
-                str_contains($text, 'rejected') => 'rejected',
-
-                str_contains($text, 'extra payment') => 'extra_payment',
-
-                str_contains($text, 'noc issued'),
-                str_contains($text, 'certificate issued') => 'final_approved',
-
-                str_contains($text, 'approved') => 'final_approved',
-
-                str_contains($text, 'expired') => 'expired',
-
-                default => null,
-            },
-        ];
-    }
-
-    private function application_status_matches($a, ?string $group): bool
-    {
-        $status = strtolower((string) $a->status);
-
-        return match ($group) {
-            'draft' => $status === 'draft',
-
-            // saved = payment stage/payment pending before real submission
-            'saved' => $status === 'saved',
-
-            // actual processing/review side
-            'in_process' => in_array($status, [
-                'submitted',
-                'under_review',
-                're_submitted',
-            ], true),
-
-            'send_back' => $status === 'send_back',
-
-            'rejected' => $status === 'rejected',
-
-            'extra_payment' => $status === 'extra_payment',
-
-            // your rule: approved OR noc_issued means final approved
-            'final_approved' => in_array($status, [
-                'approved',
-                'noc_issued',
-            ], true),
-
-            // status may be expired, or NOC expiry date may already be crossed
-            'expired' => $status === 'expired' || $this->noc_is_expired($a),
-
-            default => true,
-        };
-    }
-
-    private function noc_is_expired($a): bool
-    {
-        if (empty($a->NOC_expiry_date)) {
-            return false;
-        }
-
-        try {
-            return \Carbon\Carbon::parse($a->NOC_expiry_date)->lt(now()->startOfDay());
-        } catch (\Throwable $e) {
-            return false;
-        }
-    }
-
-    private function local_application_collection_fallback(array $context): string
-    {
-        $total = $context['total_applications'] ?? 0;
-        $matched = $context['matched_applications'] ?? 0;
-        $apps = $context['applications'] ?? [];
-        $focus = strtolower((string) ($context['query_focus'] ?? ''));
-
-        if (str_contains($focus, 'count') || str_contains($focus, 'total')) {
-            return "You have **{$total}** application" . ((int) $total === 1 ? '.' : 's.');
-        }
-
-        if ((int) $matched === 0) {
-            return 'I could not find any matching applications in your account.';
-        }
-
-        $lines = [];
-        $lines[] = "I found **{$matched}** matching application" . ((int) $matched === 1 ? ':' : 's:');
-
-        foreach (array_slice($apps, 0, 8) as $app) {
-            $lines[] = '- **' . ($app['application_number'] ?? 'Application') . '** — ' . ($app['service_name'] ?? 'Service') . ' — Status: ' . ($app['status'] ?? 'not available');
-        }
-
-        if ($matched > 8) {
-            $lines[] = 'Showing the latest 8 only.';
-        }
-
-        return implode("\n", $lines);
     }
 
     // ---------------------------------------------------------------------
@@ -1123,9 +1081,9 @@ class AiChatController extends Controller
     private function ask_clarification(AiChatSession $session, string $question)
     {
         return $this->reply($session, $question, 'clarification', [
-            'Application related question hai',
-            'Service related question hai',
-            'Show my applications',
+            'Question is related to an application.',
+            'Question is related to a service.',
+            'Show my applications.',
         ]);
     }
 
@@ -1368,6 +1326,6 @@ class AiChatController extends Controller
 
     private function get_user_id(): int
     {
-        return Auth::id() ?: 8247;
+        return Auth::id() ?: 13909;
     }
 }

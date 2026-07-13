@@ -77,7 +77,10 @@
                             ? 'ml-auto bg-indigo-600 text-white'
                             : 'mr-auto bg-slate-100 text-slate-800'"
                         class="max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-relaxed">
-                        <div class="whitespace-pre-line break-words" x-text="message.text"></div>
+                        <div
+                            class="break-words"
+                            x-html="renderMessage(message)">
+                        </div>
 
                         <template x-if="message.meta">
                             <div class="mt-2 border-t border-white/20 pt-2 text-xs opacity-75" x-text="message.meta"></div>
@@ -242,14 +245,74 @@
             },
 
             addMessage(role, text, meta = null) {
+                const safeText = this.escapeHtml(text || '');
+
+                const html = role === 'assistant' ?
+                    this.formatAssistantMessage(safeText) :
+                    safeText.replace(/\n/g, '<br>');
+
                 this.messages.push({
                     id: Date.now() + Math.random(),
                     role,
                     text,
+                    html,
                     meta
                 });
 
                 this.$nextTick(() => this.scrollBottom());
+            },
+
+            formatAssistantMessage(text) {
+                return String(text || '')
+                    // Markdown bold
+                    .replace(
+                        /\*\*(.*?)\*\*/g,
+                        '<strong class="font-semibold text-slate-900">$1</strong>'
+                    )
+
+                    // Markdown inline code
+                    .replace(
+                        /`([^`]+)`/g,
+                        '<code class="rounded bg-slate-200 px-1 py-0.5 text-xs">$1</code>'
+                    )
+
+                    // Preserve line breaks
+                    .replace(/\n/g, '<br>');
+            },
+
+            escapeHtml(text) {
+                return String(text || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            },
+
+            renderMessage(message) {
+                let text = this.escapeHtml(message?.text || '');
+
+                // User messages remain plain and safe.
+                if (message?.role === 'user') {
+                    return text.replace(/\n/g, '<br>');
+                }
+
+                // Convert Markdown bold: **text**
+                text = text.replace(
+                    /\*\*(.+?)\*\*/g,
+                    '<strong class="font-semibold">$1</strong>'
+                );
+
+                // Convert Markdown inline code: `text`
+                text = text.replace(
+                    /`([^`]+)`/g,
+                    '<code class="rounded bg-slate-200 px-1 py-0.5 text-xs">$1</code>'
+                );
+
+                // Preserve line breaks.
+                text = text.replace(/\n/g, '<br>');
+
+                return text;
             },
 
             scrollBottom() {
@@ -301,9 +364,9 @@
                     try {
                         result = await response.json();
                     } catch (parseError) {
-                        this.addMessage('assistant', response.status === 429
-                            ? 'AI service is busy. Please wait a moment and try again.'
-                            : 'AI service returned an unexpected error. Please try again.');
+                        this.addMessage('assistant', response.status === 429 ?
+                            'AI service is busy. Please wait a moment and try again.' :
+                            'AI service returned an unexpected error. Please try again.');
                         return;
                     }
 

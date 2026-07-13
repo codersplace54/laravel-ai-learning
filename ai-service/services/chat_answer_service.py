@@ -2,7 +2,9 @@ import json
 from fastapi import HTTPException
 from config import GROQ_MODEL
 from services.groq_service import groq_client
-
+import logging
+from prompts.application_chat_prompt import APPLICATION_STUCK_EXPLANATION_PROMPT
+logger = logging.getLogger(__name__)
 
 CHAT_ANSWER_PROMPT = """
 You are SWAAGAT AI Assistant — a helpful government portal assistant for Tripura, India.
@@ -18,6 +20,25 @@ General rules:
 - If data is genuinely missing, say so clearly and suggest what the user can do.
 
 Scope-specific rules:
+
+If data_scope is APPLICATION_DATA:
+- Answer ONLY about the specific application's status, payment, timeline, certificate, or renewal.
+- Use the application context to give a direct, factual answer.
+- Mention application number, service name, current status, and any relevant details.
+- If payment is pending, mention the amount due.
+- If certificate is available, mention it.
+- Do NOT invent data not present in context.
+
+If data_scope is APPLICATION_COLLECTION_DATA:
+- You have a list of the user's applications in context.applications[].
+- Each application has: application_number, service_name, status, payment_status, paid_amount, application_date, noc_expiry_date.
+- Answer the user's question directly using this data. You can sort, compare, filter, aggregate, or find specific records.
+- For totals: sum the paid_amount values.
+- For comparisons: compare fields across applications.
+- For expiry questions: use noc_expiry_date to find soonest/latest.
+- For renewal questions: applications with status expired or noc_issued are candidates.
+- Be direct. Do not say "not available" if the data is there.
+- If context.query_result.message is set and answer_from_ai is not true, use that message as your answer.
 
 If data_scope is APPLICATION_LIST:
 - Summarize the applications clearly.
@@ -64,11 +85,22 @@ Return only valid JSON:
 
 
 def answer_from_context(request_data) -> dict:
+
     payload = {
         "message": request_data.message,
         "data_scope": request_data.data_scope,
         "context": request_data.context,
     }
+
+    logger.info(
+        "Answer Request Payload:\n%s",
+        json.dumps(payload, indent=4, ensure_ascii=False, default=str),
+    )
+    system_prompt = (
+        APPLICATION_STUCK_EXPLANATION_PROMPT
+        if request_data.data_scope == "APPLICATION_DATA"
+        else CHAT_ANSWER_PROMPT
+    )
 
     try:
         completion = groq_client.chat.completions.create(
@@ -76,7 +108,7 @@ def answer_from_context(request_data) -> dict:
             messages=[
                 {
                     "role": "system",
-                    "content": CHAT_ANSWER_PROMPT,
+                    "content": system_prompt,
                 },
                 {
                     "role": "user",

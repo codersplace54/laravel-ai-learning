@@ -123,6 +123,17 @@ class ChatLiveDataService
             ])
             ->first();
 
+        // Fallback: fetch send-back reason from workflow history if remarks is null
+        $send_back_remarks = $latest_send_back->remarks ?? null;
+        if ($latest_send_back && empty($send_back_remarks)) {
+            $send_back_remarks = DB::table('application_workflow_history')
+                ->where('application_id', $application->id)
+                ->where('status', 'send_back')
+                ->whereNotNull('remarks')
+                ->orderByDesc('id')
+                ->value('remarks');
+        }
+
         $approved_at = DB::table('application_workflow_assignments')
             ->where('application_id', $application->id)
             ->where('status', 'approved')
@@ -197,7 +208,7 @@ class ChatLiveDataService
             'recent_assignments'  => $recent_assignments,
             'send_back_context'   => $latest_send_back ? [
                 'was_sent_back'   => true,
-                'remarks'         => $latest_send_back->remarks,
+                'remarks'         => $send_back_remarks,
                 'department_name' => $latest_send_back->department_name ?? null,
                 'step_number'     => $latest_send_back->step_number ?? null,
                 'sent_back_at'    => $latest_send_back->action_taken_at ?? null,

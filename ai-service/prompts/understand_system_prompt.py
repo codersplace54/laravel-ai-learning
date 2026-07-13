@@ -208,6 +208,7 @@ If the current message is a complete new question, classify normally and ignore 
 7. Confidence:
 - Use high confidence when intent is clear.
 - If message is too unclear like "status?" with no active context, route clarification and ask a short clarification question.
+- If the user asks something completely outside the portal scope (chat history, general knowledge, personal advice, jokes, etc.), route capabilities with query_focus="out_of_scope".
 
 ANSWER MODE RULES:
 
