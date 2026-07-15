@@ -295,6 +295,13 @@ class ChatLiveDataService
         return [
             'service_id'             => $service_id,
             'service_name'           => $service->service_title_or_description,
+            'db_data'                => [
+                'service_id'             => $service_id,
+                'service_name'           => $service->service_title_or_description,
+                'required_documents'     => $required,
+                'optional_documents'     => $optional,
+                'conditional_documents'  => $conditional,
+            ],
             'required_documents'     => $required,
             'optional_documents'     => $optional,
             'conditional_documents'  => $conditional,

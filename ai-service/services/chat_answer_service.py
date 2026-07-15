@@ -2,6 +2,7 @@ import json
 from fastapi import HTTPException
 from config import GROQ_MODEL
 from services.groq_service import groq_client
+from services.vector_service import search_service_chunks
 import logging
 from prompts.application_chat_prompt import APPLICATION_STUCK_EXPLANATION_PROMPT
 logger = logging.getLogger(__name__)
@@ -30,15 +31,11 @@ If data_scope is APPLICATION_DATA:
 - Do NOT invent data not present in context.
 
 If data_scope is APPLICATION_COLLECTION_DATA:
-- You have a list of the user's applications in context.applications[].
-- Each application has: application_number, service_name, status, payment_status, paid_amount, application_date, noc_expiry_date.
-- Answer the user's question directly using this data. You can sort, compare, filter, aggregate, or find specific records.
-- For totals: sum the paid_amount values.
-- For comparisons: compare fields across applications.
-- For expiry questions: use noc_expiry_date to find soonest/latest.
-- For renewal questions: applications with status expired or noc_issued are candidates.
-- Be direct. Do not say "not available" if the data is there.
-- If context.query_result.message is set and answer_from_ai is not true, use that message as your answer.
+- CRITICAL: If context.query_result.message is set AND context.query_result.answer_from_ai is not true, output that message EXACTLY as your answer. Do NOT rephrase, expand, or add anything.
+- Only if context.query_result.answer_from_ai is true, use context.query_result.applications[] to answer. You can sort, compare, filter, or find specific records.
+- For totals: sum paid_amount. For expiry: use noc_expiry_date. For renewal candidates: status expired or noc_issued.
+- Be direct. One or two sentences maximum unless a list is genuinely needed.
+- Do NOT repeat the service name on every line if all applications are for the same service.
 
 If data_scope is APPLICATION_LIST:
 - Summarize the applications clearly.
@@ -48,10 +45,13 @@ If data_scope is APPLICATION_LIST:
 - Example: "You have 12 applications in total. 3 have payment pending: CFO-57-000688 (Factory License), ..."
 
 If data_scope is SERVICE_DATA:
-- Answer ONLY about document requirements for the service.
-- List required_documents, optional_documents, and conditional_documents clearly.
+- Answer about the service using BOTH context.db_data (live database) AND context.rag_chunks (RAG document).
+- rag_chunks contains verified content from the official service guide. Prefer it for fees, eligibility, processing time, required documents, and how-to-apply.
+- db_data.required_documents / optional_documents / conditional_documents are from the live application form configuration.
+- Combine both sources naturally. Do NOT say "according to RAG" or "according to database".
+- If rag_chunks is empty AND db_data document lists are also empty, say: "Verified information for this service is currently unavailable."
+- Do NOT invent fees, documents, eligibility, timelines, or rules that are not present in either source.
 - Do NOT mention application status, payment, certificate, or renewal.
-- If all document lists are empty, say: "I could not find configured document requirements for this service."
 
 If data_scope is ACCOUNT_DATA:
 - Answer only about the user's account details (name, email, mobile, username).
@@ -68,11 +68,12 @@ If data_scope is RAG_KNOWLEDGE:
 - If no specific data is available, give a helpful general answer about government portal processes.
 
 Formatting rules:
-- If answer contains multiple applications, services, documents, payments, or timeline events, use a numbered list.
-- Put application number/service name in bold.
-- Do not write long comma-separated paragraphs.
-- Use short lines.
-- Use Markdown formatting only: **bold**, numbered lists, and bullet points.
+- Keep answers SHORT. Answer only what was asked. Do not volunteer extra information.
+- If the PHP query_result.message already contains the full answer, output it as-is.
+- If answer contains a list, use numbered bullets. Put application number in bold.
+- Do NOT repeat the service name on every list item if all items share the same service.
+- Do NOT write long paragraphs. Use short lines.
+- Use Markdown: **bold**, numbered lists, bullet points only.
 
 Return only valid JSON:
 {
@@ -84,12 +85,63 @@ Return only valid JSON:
 """
 
 
+def _inject_rag_chunks(context: dict, data_scope: str, message: str) -> dict:
+    """
+    For SERVICE_DATA scope: search Qdrant filtered by service_id and inject
+    matching chunks into context.rag_chunks.
+    Logs service_id, resolved_question, filters, chunks_found, chunk IDs.
+    """
+    if data_scope != "SERVICE_DATA":
+        return context
+
+    service_id = context.get("service_id") or context.get("db_data", {}).get("service_id")
+    if not service_id:
+        logger.warning("SERVICE_DATA scope but no service_id in context — skipping RAG")
+        return context
+
+    resolved_question = (
+        context.get("_ai_plan", {}).get("resolved_question")
+        or message
+    )
+
+    logger.info(
+        "RAG search | service_id=%s | resolved_question=%s | filters=service_id=%s,is_active=true",
+        service_id, resolved_question[:100], service_id,
+    )
+
+    chunks = search_service_chunks(
+        question=resolved_question,
+        service_id=int(service_id),
+        limit=8,
+    )
+
+    logger.info(
+        "RAG result | service_id=%s | chunks_found=%d | chunk_ids=%s",
+        service_id,
+        len(chunks),
+        [c["id"] for c in chunks],
+    )
+
+    context["rag_chunks"] = chunks
+    return context
+
+
 def answer_from_context(request_data) -> dict:
+
+    context = dict(request_data.context)
+
+    # Restructure SERVICE_DATA context so db_data is clearly separated
+    if request_data.data_scope == "SERVICE_DATA" and "service_id" not in context:
+        # service_id may be at top level already
+        pass
+
+    # Inject RAG chunks for service questions
+    context = _inject_rag_chunks(context, request_data.data_scope, request_data.message)
 
     payload = {
         "message": request_data.message,
         "data_scope": request_data.data_scope,
-        "context": request_data.context,
+        "context": context,
     }
 
     logger.info(
@@ -117,7 +169,7 @@ def answer_from_context(request_data) -> dict:
             ],
             temperature=0.2,
             response_format={"type": "json_object"},
-            max_completion_tokens=700,
+            max_completion_tokens=400,
         )
     except Exception as e:
         error_msg = str(e).lower()

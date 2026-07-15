@@ -113,7 +113,7 @@ class AiChatController extends Controller
             if ($plan['query_focus'] === 'out_of_scope') {
                 return $this->reply(
                     $session,
-                    'Sorry, I’m here to help with SWAAGAT applications, payments, certificates, documents, and services.',
+                    "Sorry, I'm not able to answer this question. I can help with queries related to SWAAGAT applications, payments, certificates, documents, and services.",
                     'out_of_scope',
                     [
                         'Show my applications',
@@ -738,10 +738,17 @@ class AiChatController extends Controller
         $this->set_active_service($session, $service_id, $service_name, $plan['query_focus'] ?? 'service');
 
         $context['_ai_plan'] = [
-            'route' => 'service',
-            'query_focus' => $plan['query_focus'] ?? null,
-            'user_goal' => $plan['user_goal'] ?? null,
+            'route'             => 'service',
+            'query_focus'       => $plan['query_focus'] ?? null,
+            'user_goal'         => $plan['user_goal'] ?? null,
+            'resolved_question' => $plan['resolved_question'] ?? $message,
         ];
+
+        Log::info('SWAAGAT service RAG context', [
+            'service_id'        => $service_id,
+            'resolved_question' => $plan['resolved_question'] ?? $message,
+            'query_focus'       => $plan['query_focus'] ?? null,
+        ]);
 
         $ai = $this->safe_generic_answer(
             $message,
@@ -755,10 +762,10 @@ class AiChatController extends Controller
             $ai['answer'],
             $ai['answer_type'] ?? 'service',
             [
-                'Is service ka processing time kya hai?',
-                'Is service ki fee kitni hai?',
-                'Required documents batao',
-                'Eligibility kya hai?',
+                'What is the processing time for this service?',
+                'What is the fee for this service?',
+                'What documents are required?',
+                'What are the eligibility criteria?',
             ],
             $ai['short_status'] ?? $service_name
         );
@@ -1072,9 +1079,9 @@ class AiChatController extends Controller
     {
         return $this->reply($session, 'I can help with application status, application history, payment, certificate/NOC, uploaded documents, field verification, and service details like documents, eligibility, fees, and processing time.', 'capabilities', [
             'Show my applications',
-            'Meri application kahan atki hai?',
-            'Required documents batao',
-            'Is service ka processing time kya hai?',
+            'What is the status of my application?',
+            'What documents are required?',
+            'What is the processing time for this service?',
         ]);
     }
 

@@ -5,7 +5,7 @@ from fastapi import FastAPI, Header, HTTPException, UploadFile, File, Request
 
 from config import check_config
 from schemas import AskRequest, ApplicationStuckRequest, ChatPlanRequest, ChatAnswerRequest, ChatUnderstandRequest
-from services.rag_service import process_document, answer_question
+from services.rag_service import process_document, process_service_document, answer_question
 from services.vector_service import clear_vector_db
 from services.application_stuck_ai_service import investigate_application_stuck_with_rag
 from services.application_stuck_explanation_service import explain_application_stuck
@@ -41,6 +41,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RAG_SERVICES_DIR, exist_ok=True)
 
 
+
 @app.get("/")
 def home():
     return {
@@ -59,32 +60,57 @@ def health_check():
 @app.post("/upload-document")
 def upload_document(file: UploadFile = File(...)):
     """
-    Upload Swaagat SOP/help/process PDF and save in RAG vector DB.
+    Legacy upload — no service metadata.
     """
-
     if not file.filename:
-        raise HTTPException(
-            status_code=400,
-            detail="Please upload a valid file"
-        )
+        raise HTTPException(status_code=400, detail="Please upload a valid file")
 
     if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(
-            status_code=400,
-            detail="Only PDF files are allowed"
-        )
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
 
-    file_path = os.path.join(RAG_SERVICES_DIR, "service-37.md")
-
+    file_path = os.path.join(UPLOAD_DIR, file.filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    result = process_document(
-        file_path=file_path,
-        document_name="service-37.md"
+    return process_document(file_path=file_path, document_name=file.filename)
+
+
+@app.post("/upload-service-document")
+def upload_service_document(
+    file: UploadFile = File(...),
+    service_id: int = 37,
+    doc_id: str = "SERVICE-37-GUIDE",
+    document_type: str = "service_guide",
+    language: str = "en",
+):
+    """
+    Upload a service-specific PDF and store chunks in Qdrant with metadata:
+      service_id, doc_id, document_type, language, is_active, section.
+    Re-uploading the same doc_id replaces all previous chunks (dedup).
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Please upload a valid file")
+
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+
+    file_path = os.path.join(RAG_SERVICES_DIR, f"service-{service_id}.pdf")
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    logger.info(
+        "upload-service-document | service_id=%d | doc_id=%s | file=%s",
+        service_id, doc_id, file.filename,
     )
 
-    return result
+    return process_service_document(
+        file_path=file_path,
+        doc_id=doc_id,
+        service_id=service_id,
+        document_type=document_type,
+        language=language,
+        is_active=True,
+    )
 
 
 @app.post("/ask")
