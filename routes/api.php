@@ -56,10 +56,6 @@ use App\Http\Controllers\InformationWizardController;
 use App\Http\Controllers\Service\ApplicationAssignmentController;
 use App\Http\Controllers\Integration\SaralSsoController;
 
-use App\Http\Controllers\AI\AiInvestigationController;
-use App\Http\Controllers\Ai\Admin\ApplicationStuckInvestigationController;
-use App\Http\Controllers\Ai\AiApplicationStuckToolController;
-use App\Http\Controllers\Ai\ApplicationAiContextController;
 use App\Http\Controllers\Ai\AiChatController;
 
 Route::prefix('user')->group(function () {
@@ -534,17 +530,7 @@ Route::post('holidays-view', [HolidayController::class, 'holidays_view']);
 Route::post('saral-sso-login', [SaralSsoController::class, 'saral_sso_login']);
 
 Route::prefix('ai')->group(function () {
-    Route::post('investigate-application', [AiInvestigationController::class, 'investigate_application']);
-    // Route::middleware(['auth:api'])->group(function () {
-        Route::post('application-stuck-investigator', [ApplicationStuckInvestigationController::class, 'investigate']);
-        Route::post('tools/application-stuck', [AiApplicationStuckToolController::class, 'run_tool']);
-        Route::post('application-chat', [ApplicationAiContextController::class, 'application_chat']);
-    // });
-
     Route::post('chat/options', [AiChatController::class, 'options']);
     Route::post('chat', [AiChatController::class, 'chat']);
 });
-
-
-Route::post('summarize-text', [ApplicationAiContextController::class, 'summarize_text']);
 

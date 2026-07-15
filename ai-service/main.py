@@ -1,15 +1,11 @@
 import os
 import shutil
 
-from fastapi import FastAPI, Header, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, Header, HTTPException, UploadFile, File
 
 from config import check_config
-from schemas import AskRequest, ApplicationStuckRequest, ChatPlanRequest, ChatAnswerRequest, ChatUnderstandRequest
-from services.rag_service import process_document, process_service_document, answer_question
-from services.vector_service import clear_vector_db
-from services.application_stuck_ai_service import investigate_application_stuck_with_rag
-from services.application_stuck_explanation_service import explain_application_stuck
-from services.chat_planner_service import plan_chat_message
+from schemas import ChatAnswerRequest, ChatUnderstandRequest
+from services.rag_service import process_service_document
 from services.chat_answer_service import answer_from_context
 from services.understand_service import understand_message
 
@@ -34,10 +30,8 @@ app = FastAPI(
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 RAG_SERVICES_DIR = os.path.join(BASE_DIR, "rag-documents", "services")
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RAG_SERVICES_DIR, exist_ok=True)
 
 
@@ -55,24 +49,6 @@ def health_check():
         "status": 1,
         "message": "SWAAGAT AI service is running"
     }
-
-
-@app.post("/upload-document")
-def upload_document(file: UploadFile = File(...)):
-    """
-    Legacy upload — no service metadata.
-    """
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Please upload a valid file")
-
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    return process_document(file_path=file_path, document_name=file.filename)
 
 
 @app.post("/upload-service-document")
@@ -111,55 +87,6 @@ def upload_service_document(
         language=language,
         is_active=True,
     )
-
-
-@app.post("/ask")
-def ask_question(request: AskRequest):
-    """
-    Normal document Q&A from uploaded RAG docs.
-    """
-
-    return answer_question(request.question)
-
-
-@app.delete("/clear-documents")
-def clear_documents():
-    return clear_vector_db()
-
-
-@app.post("/api/ai/application-stuck-investigator")
-def application_stuck_investigator(
-    request_data: ApplicationStuckRequest,
-    x_ai_secret: str | None = Header(default=None),
-):
-    """
-    Finds where application is stuck using:
-    1. Laravel live application data
-    2. RAG SOP/help documents
-    3. Groq AI final diagnosis
-    """
-
-
-    return investigate_application_stuck_with_rag(request_data)
-
-@app.post("/api/ai/application-chat")
-async def application_stuck_explain(
-    request_data: Request,
-    x_ai_secret: str | None = Header(default=None),
-):
-    body = await request_data.json()
-    return explain_application_stuck(
-        message=body.get("message"),
-        context=body.get("context", {})
-    )
-
-@app.post("/api/ai/chat/plan")
-def chat_plan(
-    request_data: ChatPlanRequest,
-    x_ai_secret: str | None = Header(default=None),
-):
-
-    return plan_chat_message(request_data)
 
 
 @app.post("/api/ai/chat/answer")
