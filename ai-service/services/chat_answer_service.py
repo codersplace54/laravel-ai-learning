@@ -7,6 +7,32 @@ import logging
 from prompts.application_chat_prompt import APPLICATION_STUCK_EXPLANATION_PROMPT
 logger = logging.getLogger(__name__)
 
+SERVICE_SECTION_BY_FOCUS = {
+    "service_info": "overview",
+    "service_department": "overview",
+
+    "service_documents": "documents",
+    "documents_for_service": "documents",
+    "service_required_documents": "documents",
+
+    "service_questionnaire": "questionnaire",
+    "service_eligibility": "questionnaire",
+    "service_how_to_apply": "questionnaire",
+
+    "service_fee": "fees",
+    "service_refund_rule": "fees",
+
+    "service_processing_time": "approval_flow",
+    "service_approval_flow": "approval_flow",
+
+    "service_renewal": "renewal",
+    "service_renewal_fee": "renewal",
+
+    "service_certificate": "certificate",
+    "service_noc": "certificate",
+    "service_validity": "certificate",
+}
+
 CHAT_ANSWER_PROMPT = """
 You are SWAAGAT AI Assistant — a helpful government portal assistant for Tripura, India.
 
@@ -45,13 +71,19 @@ If data_scope is APPLICATION_LIST:
 - Example: "You have 12 applications in total. 3 have payment pending: CFO-57-000688 (Factory License), ..."
 
 If data_scope is SERVICE_DATA:
-- Answer about the service using BOTH context.db_data (live database) AND context.rag_chunks (RAG document).
-- rag_chunks contains verified content from the official service guide. Prefer it for fees, eligibility, processing time, required documents, and how-to-apply.
-- db_data.required_documents / optional_documents / conditional_documents are from the live application form configuration.
-- Combine both sources naturally. Do NOT say "according to RAG" or "according to database".
-- If rag_chunks is empty AND db_data document lists are also empty, say: "Verified information for this service is currently unavailable."
-- Do NOT invent fees, documents, eligibility, timelines, or rules that are not present in either source.
-- Do NOT mention application status, payment, certificate, or renewal.
+- Answer only about the selected service.
+- context.rag_chunks contains verified knowledge generated from the latest published service configuration.
+- context.db_data contains live service configuration that Laravel has provided.
+- Prefer the most relevant RAG chunks for service overview, questionnaire, documents, fees, approval flow, processing time, renewal, certificate and NOC rules.
+- Use only information present in context.
+- Do not invent eligibility, documents, fees, timelines, renewal rules, certificate rules, refund rules or approval steps.
+- A configured processing target is not a guaranteed approval date.
+- A configured certificate setting does not prove that a user's certificate has been issued.
+- A configured renewal cycle does not prove that a specific user's licence is currently eligible for renewal.
+- The actual user's application status, paid amount, certificate availability and expiry date require live application data.
+- You may explain general service-level renewal and certificate rules when the user asks about them.
+- If no relevant verified information exists, say: "Verified information for this service is currently unavailable."
+- Do not mention RAG, Qdrant, JSON, embeddings or database tables.
 
 If data_scope is ACCOUNT_DATA:
 - Answer only about the user's account details (name, email, mobile, username).
@@ -85,46 +117,101 @@ Return only valid JSON:
 """
 
 
-def _inject_rag_chunks(context: dict, data_scope: str, message: str) -> dict:
+def _inject_rag_chunks(
+    context: dict,
+    data_scope: str,
+    message: str,
+) -> dict:
     """
-    For SERVICE_DATA scope: search Qdrant filtered by service_id and inject
-    matching chunks into context.rag_chunks.
-    Logs service_id, resolved_question, filters, chunks_found, chunk IDs.
+    Retrieve generated service knowledge from Qdrant.
+
+    Retrieval is always filtered by service_id.
+    When possible, it is also filtered by section_type.
     """
+
     if data_scope != "SERVICE_DATA":
         return context
 
-    service_id = context.get("service_id") or context.get("db_data", {}).get("service_id")
-    if not service_id:
-        logger.warning("SERVICE_DATA scope but no service_id in context — skipping RAG")
-        return context
+    db_data = context.get("db_data") or {}
+    ai_plan = context.get("_ai_plan") or {}
 
-    resolved_question = (
-        context.get("_ai_plan", {}).get("resolved_question")
-        or message
+    service_id = (
+        context.get("service_id")
+        or db_data.get("service_id")
     )
 
-    logger.info(
-        "RAG search | service_id=%s | resolved_question=%s | filters=service_id=%s,is_active=true",
-        service_id, resolved_question[:100], service_id,
+    if not service_id:
+        logger.warning(
+            "SERVICE_DATA received without service_id"
+        )
+
+        context["rag_chunks"] = []
+
+        return context
+
+    resolved_question = str(
+        ai_plan.get("resolved_question")
+        or message
+        or ""
+    ).strip()
+
+    query_focus = str(
+        ai_plan.get("query_focus")
+        or ""
+    ).strip().lower()
+
+    section_type = SERVICE_SECTION_BY_FOCUS.get(
+        query_focus
     )
 
     chunks = search_service_chunks(
         question=resolved_question,
         service_id=int(service_id),
-        limit=8,
+        section_type=section_type,
+        limit=6,
     )
 
-    logger.info(
-        "RAG result | service_id=%s | chunks_found=%d | chunk_ids=%s",
-        service_id,
-        len(chunks),
-        [c["id"] for c in chunks],
-    )
+    
+    # If the expected section does not exist, retry across
+    # all sections for the same service.
+    if not chunks and section_type:
+        chunks = search_service_chunks(
+            question=resolved_question,
+            service_id=int(service_id),
+            section_type=None,
+            limit=6,
+        )
 
     context["rag_chunks"] = chunks
-    return context
 
+    context["rag_retrieval"] = {
+        "service_id": int(service_id),
+        "query_focus": query_focus,
+        "requested_section_type": section_type,
+        "resolved_question": resolved_question,
+        "chunks_found": len(chunks),
+    }
+
+    logger.info(
+        (
+            "Service RAG injected | "
+            "service_id=%d | "
+            "query_focus=%s | "
+            "section_type=%s | "
+            "chunks=%d | "
+            "knowledge_keys=%s"
+        ),
+        int(service_id),
+        query_focus,
+        section_type,
+        len(chunks),
+        [
+            chunk.get("knowledge_key")
+            for chunk in chunks
+        ],
+    )
+
+    return context
 
 def answer_from_context(request_data) -> dict:
 

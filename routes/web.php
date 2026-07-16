@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Service\PaymentController;
 use App\Http\Controllers\Admin\ApplicationDataCorrectionController;
 use App\Http\Controllers\Ai\AiChatController;
+use App\Http\Controllers\Ai\ServiceKnowledgePdfController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -13,6 +14,11 @@ Route::get('/', function () {
 Route::get('/ai-chat-test', function () {
     return view('ai-chat-test');
 });
+
+Route::get(
+    '/ai/service-knowledge/{service_id}/pdf',
+    [ServiceKnowledgePdfController::class, 'show']
+);
 
 Route::get('/ai/chat/options', [AiChatController::class, 'options']);
 Route::post('/ai/chat', [AiChatController::class, 'chat']);

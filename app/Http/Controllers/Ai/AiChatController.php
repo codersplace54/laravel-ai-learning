@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Ai;
 use App\Http\Controllers\Controller;
 use App\Models\AiChatMessage;
 use App\Models\AiChatSession;
-use App\Models\ServiceMaster;
 use App\Models\UserServiceApplication;
 use App\Services\Ai\ChatAnswerService;
 use App\Services\Ai\ChatLiveDataService;
@@ -25,48 +24,6 @@ class AiChatController extends Controller
         private ChatAnswerService                 $answer_service,
         private ApplicationCollectionQueryService $application_collection_query_service,
     ) {}
-
-    // ---------------------------------------------------------------------
-    // OPTIONS
-    // ---------------------------------------------------------------------
-
-    public function options(Request $request)
-    {
-        $user_id = $this->get_user_id();
-
-        $applications = UserServiceApplication::with(['service:id,service_title_or_description'])
-            ->where('user_id', $user_id)
-            ->latest('id')
-            ->limit(25)
-            ->get(['id', 'applicationId', 'service_id', 'status', 'payment_status', 'created_at'])
-            ->map(fn($a) => [
-                'id' => $a->id,
-                'application_number' => $a->applicationId,
-                'service_id' => $a->service_id,
-                'service_name' => $a->service->service_title_or_description ?? null,
-                'status' => $a->status,
-                'payment_status' => $a->payment_status,
-                'created_at' => optional($a->created_at)->toDateTimeString(),
-            ])
-            ->values();
-
-        $services = ServiceMaster::orderBy('service_title_or_description')
-            ->limit(200)
-            ->get(['id', 'service_title_or_description'])
-            ->map(fn($s) => [
-                'id' => $s->id,
-                'service_name' => $s->service_title_or_description,
-            ])
-            ->values();
-
-        return response()->json([
-            'status' => true,
-            'data' => [
-                'applications' => $applications,
-                'services' => $services,
-            ],
-        ]);
-    }
 
     // ---------------------------------------------------------------------
     // CHAT
@@ -100,7 +57,7 @@ class AiChatController extends Controller
 
         $understanding = $this->safe_understand($message, $session_meta, $history);
         $plan = $this->make_plan($understanding, $session);
-        Log::info('AI Plan: ' . json_encode($plan, JSON_PRETTY_PRINT));
+        Log::channel('ai_chat')->info('AI Plan: ' . json_encode($plan, JSON_PRETTY_PRINT));
         if ($plan['route'] === 'exit') {
             return $this->handle_exit($session);
         }
@@ -156,7 +113,7 @@ class AiChatController extends Controller
     ): array {
         $request_id = (string) Str::uuid();
 
-        Log::info('SWAAGAT understand request starting', [
+        Log::channel('ai_chat')->info('SWAAGAT understand request starting', [
             'request_id' => $request_id,
             'message' => $message,
             'session_meta' => $session_meta,
@@ -170,9 +127,6 @@ class AiChatController extends Controller
                 $history
             );
 
-            /*
-         * Do not silently accept an empty or invalid FastAPI response.
-         */
             if (!is_array($understanding)) {
                 throw new \RuntimeException(
                     'Understand service returned '
@@ -188,7 +142,7 @@ class AiChatController extends Controller
                 );
             }
 
-            Log::info('SWAAGAT understand request completed', [
+            Log::channel('ai_chat')->info('SWAAGAT understand request completed', [
                 'request_id' => $request_id,
                 'route' => $understanding['route'] ?? null,
                 'query_focus' => $understanding['query_focus'] ?? null,
@@ -201,7 +155,7 @@ class AiChatController extends Controller
          * Use ERROR, not WARNING, so it is visible even when
          * Laravel's LOG_LEVEL is set to error.
          */
-            Log::error('SWAAGAT AI understand failed', [
+            Log::channel('ai_chat')->error('SWAAGAT AI understand failed', [
                 'request_id' => $request_id,
                 'exception' => get_class($e),
                 'error' => $e->getMessage(),
@@ -520,7 +474,7 @@ class AiChatController extends Controller
                 return $ai;
             }
         } catch (Throwable $e) {
-            Log::warning('SWAAGAT application answer failed', [
+            Log::channel('ai_chat')->warning('SWAAGAT application answer failed', [
                 'error' => $e->getMessage(),
                 'message' => $message,
             ]);
@@ -744,7 +698,7 @@ class AiChatController extends Controller
             'resolved_question' => $plan['resolved_question'] ?? $message,
         ];
 
-        Log::info('SWAAGAT service RAG context', [
+        Log::channel('ai_chat')->info('SWAAGAT service RAG context', [
             'service_id'        => $service_id,
             'resolved_question' => $plan['resolved_question'] ?? $message,
             'query_focus'       => $plan['query_focus'] ?? null,
@@ -773,9 +727,7 @@ class AiChatController extends Controller
 
     private function local_service_fallback(array $context): string
     {
-        $service = $context['service_name'] ?? $context['service']['service_name'] ?? $context['service']['name'] ?? 'this service';
-
-        return "I found **{$service}**. I could not generate the detailed AI reply right now, but the service data is available in the system. Please ask specifically about documents, eligibility, fees, or processing time.";
+        return 'I am temporarily unable to connect to the AI service. Please try again in a moment.';
     }
 
     private function safe_generic_answer(string $message, string $scope, array $context, string $fallback): array
@@ -787,7 +739,7 @@ class AiChatController extends Controller
                 return $ai;
             }
         } catch (Throwable $e) {
-            Log::warning('SWAAGAT AI answer failed', [
+            Log::channel('ai_chat')->warning('SWAAGAT AI answer failed', [
                 'scope' => $scope,
                 'error' => $e->getMessage(),
                 'message' => $message,
@@ -810,7 +762,7 @@ class AiChatController extends Controller
         try {
             $context = $this->live_data->fetch_account_context($session->user_id);
         } catch (Throwable $e) {
-            Log::warning('SWAAGAT account context failed', [
+            Log::channel('ai_chat')->warning('SWAAGAT account context failed', [
                 'error' => $e->getMessage(),
             ]);
 

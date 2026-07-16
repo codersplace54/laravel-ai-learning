@@ -530,7 +530,6 @@ Route::post('holidays-view', [HolidayController::class, 'holidays_view']);
 Route::post('saral-sso-login', [SaralSsoController::class, 'saral_sso_login']);
 
 Route::prefix('ai')->group(function () {
-    Route::post('chat/options', [AiChatController::class, 'options']);
     Route::post('chat', [AiChatController::class, 'chat']);
 });
 

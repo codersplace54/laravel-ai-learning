@@ -1,6 +1,5 @@
 <div
     x-data="swaagatAiChat()"
-    x-init="init()"
     class="fixed bottom-6 right-6 z-[9999]">
     <!-- Floating Button -->
     <button
@@ -176,9 +175,6 @@
             selectedApplicationId: '',
             selectedServiceId: '',
 
-            applications: [],
-            services: [],
-
             messages: [],
 
             lastUserQuestion: null,
@@ -199,33 +195,9 @@
                 'Documents required for Professional tax service?',
             ],
 
-            init() {
-                this.loadOptions();
-            },
-
             openChat() {
                 this.isOpen = true;
                 this.$nextTick(() => this.scrollBottom());
-            },
-
-            async loadOptions() {
-                try {
-                    const response = await fetch('/api/ai/chat/options', {
-                        headers: {
-                            'Accept': 'application/json'
-                        },
-                        credentials: 'same-origin'
-                    });
-
-                    const result = await response.json();
-
-                    if (result.status) {
-                        this.applications = result.data.applications || [];
-                        this.services = result.data.services || [];
-                    }
-                } catch (e) {
-                    console.warn('AI options load failed', e);
-                }
             },
 
             askQuick(question) {

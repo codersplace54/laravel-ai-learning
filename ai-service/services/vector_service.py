@@ -80,7 +80,7 @@ def save_service_chunks_to_vector_db(chunks: list, doc_id: str, service_id: int,
     """
     delete_chunks_by_doc_id(doc_id)
 
-    points = []
+        
     for index, chunk_data in enumerate(chunks):
         text = chunk_data["text"] if isinstance(chunk_data, dict) else chunk_data
         section = chunk_data.get("section", "General") if isinstance(chunk_data, dict) else "General"
@@ -121,56 +121,359 @@ def search_similar_chunks(question: str, limit: int = 15):
     return [point.payload["text"] for point in results.points]
 
 
-def search_service_chunks(question: str, service_id: int, limit: int = 8):
+def search_service_chunks(
+    question: str,
+    service_id: int,
+    section_type: str | None = None,
+    limit: int = 6,
+):
     """
-    Search Qdrant filtered by service_id=<service_id> AND is_active=true.
-    Returns list of dicts with text, section, doc_id, chunk_index.
+    Search generated RAG knowledge for one service.
+
+    Optional section_type examples:
+    - overview
+    - questionnaire
+    - documents
+    - fees
+    - approval_flow
+    - renewal
+    - certificate
     """
-    if not get_qdrant().collection_exists(collection_name=QDRANT_COLLECTION):
-        logger.warning("Qdrant collection does not exist — returning empty chunks")
+
+    if not get_qdrant().collection_exists(
+        collection_name=QDRANT_COLLECTION
+    ):
+        logger.warning(
+            "Qdrant collection does not exist"
+        )
+
+        return []
+
+    question = str(question or "").strip()
+
+    if not question:
         return []
 
     question_vector = create_embedding(question)
 
-    qdrant_filter = Filter(
-        must=[
-            FieldCondition(key="service_id", match=MatchValue(value=service_id)),
-            FieldCondition(key="is_active", match=MatchValue(value=True)),
-        ]
-    )
+    must_conditions = [
+        FieldCondition(
+            key="service_id",
+            match=MatchValue(
+                value=int(service_id)
+            ),
+        ),
+
+        FieldCondition(
+            key="is_active",
+            match=MatchValue(
+                value=True
+            ),
+        ),
+    ]
+
+    if section_type:
+        must_conditions.append(
+            FieldCondition(
+                key="section_type",
+                match=MatchValue(
+                    value=section_type
+                ),
+            )
+        )
 
     results = get_qdrant().query_points(
         collection_name=QDRANT_COLLECTION,
         query=question_vector,
-        query_filter=qdrant_filter,
+
+        query_filter=Filter(
+            must=must_conditions
+        ),
+
         limit=limit,
         with_payload=True,
     )
 
     chunks = []
+
     for point in results.points:
+        payload = point.payload or {}
+
         chunks.append({
             "id": str(point.id),
-            "text": point.payload.get("text", ""),
-            "section": point.payload.get("section", "General"),
-            "doc_id": point.payload.get("doc_id", ""),
-            "chunk_index": point.payload.get("chunk_index", 0),
-            "score": round(point.score, 4) if hasattr(point, "score") else None,
+
+            "text": payload.get(
+                "text",
+                "",
+            ),
+
+            "knowledge_key": payload.get(
+                "knowledge_key",
+                payload.get(
+                    "doc_id",
+                    "",
+                ),
+            ),
+
+            "section_type": payload.get(
+                "section_type",
+                payload.get(
+                    "section",
+                    "general",
+                ),
+            ),
+
+            "section_title": payload.get(
+                "section_title",
+                payload.get(
+                    "section",
+                    "General",
+                ),
+            ),
+
+            "title": payload.get(
+                "title",
+                "",
+            ),
+
+            "service_id": payload.get(
+                "service_id"
+            ),
+
+            "service_name": payload.get(
+                "service_name"
+            ),
+
+            "content_hash": payload.get(
+                "content_hash"
+            ),
+
+            "chunk_index": payload.get(
+                "chunk_index",
+                0,
+            ),
+
+            "score": (
+                round(point.score, 4)
+                if hasattr(point, "score")
+                else None
+            ),
         })
 
     logger.info(
-        "Qdrant search | service_id=%d | question=%s | chunks_found=%d | chunk_ids=%s",
+        (
+            "Service RAG search | "
+            "service_id=%d | "
+            "section_type=%s | "
+            "chunks=%d"
+        ),
         service_id,
-        question[:80],
+        section_type,
         len(chunks),
-        [c["id"] for c in chunks],
     )
 
     return chunks
-
 
 def clear_vector_db():
     if get_qdrant().collection_exists(collection_name=QDRANT_COLLECTION):
         get_qdrant().delete_collection(collection_name=QDRANT_COLLECTION)
         return {"status": "success", "message": "Vector db cleared successfully"}
     return {"status": "info", "message": "Collection does not exist"}
+
+def delete_chunks_by_service_id(service_id: int):
+    """
+    Delete every RAG point belonging to one service.
+
+    This removes old sections that may no longer exist, such as when:
+    - renewal is disabled
+    - a fee rule is removed
+    - questionnaire rows are deleted
+    - certificate configuration is removed
+    """
+
+    if not get_qdrant().collection_exists(
+        collection_name=QDRANT_COLLECTION
+    ):
+        return 0
+
+    result = get_qdrant().delete(
+        collection_name=QDRANT_COLLECTION,
+        points_selector=Filter(
+            must=[
+                FieldCondition(
+                    key="service_id",
+                    match=MatchValue(value=int(service_id)),
+                )
+            ]
+        ),
+        wait=True,
+    )
+
+    logger.info(
+        "Deleted existing service knowledge | service_id=%d",
+        service_id,
+    )
+
+    return result
+
+
+def replace_service_knowledge_in_vector_db(
+    service_id: int,
+    chunks: list,
+):
+    """
+    Safely replace all RAG knowledge for one service.
+
+    Important:
+    Embeddings are created before deleting old knowledge.
+    Therefore, if embedding creation fails, the previous service
+    knowledge remains available.
+    """
+
+    points = []
+
+    for chunk in chunks:
+        text = str(chunk.get("text", "")).strip()
+
+        if not text:
+            continue
+
+        vector = create_embedding(text)
+
+        ensure_collection(
+            vector_size=len(vector)
+        )
+
+        knowledge_key = str(
+            chunk.get(
+                "knowledge_key",
+                f"service:{service_id}:general",
+            )
+        )
+
+        content_hash = str(
+            chunk.get("content_hash", "")
+        )
+
+        chunk_index = int(
+            chunk.get("chunk_index", 0)
+        )
+
+        point_id = str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                (
+                    f"swaagat:"
+                    f"{knowledge_key}:"
+                    f"{content_hash}:"
+                    f"{chunk_index}"
+                ),
+            )
+        )
+
+        payload = {
+            "knowledge_key": knowledge_key,
+
+            "entity_type": chunk.get(
+                "entity_type",
+                "service",
+            ),
+
+            "entity_id": chunk.get(
+                "entity_id",
+                service_id,
+            ),
+
+            "service_id": int(service_id),
+
+            "service_name": chunk.get(
+                "service_name"
+            ),
+
+            "department_id": chunk.get(
+                "department_id"
+            ),
+
+            "department_name": chunk.get(
+                "department_name"
+            ),
+
+            "section_type": chunk.get(
+                "section_type",
+                "general",
+            ),
+
+            "section_title": chunk.get(
+                "section_title",
+                "General",
+            ),
+
+            "title": chunk.get(
+                "title"
+            ),
+
+            "language": chunk.get(
+                "language",
+                "en",
+            ),
+
+            "content_hash": content_hash,
+
+            "source_updated_at": chunk.get(
+                "source_updated_at"
+            ),
+
+            "is_active": bool(
+                chunk.get(
+                    "is_active",
+                    True,
+                )
+            ),
+
+            "chunk_index": chunk_index,
+            "text": text,
+        }
+
+        # Do not store unnecessary null values in Qdrant.
+        payload = {
+            key: value
+            for key, value in payload.items()
+            if value is not None
+        }
+
+        points.append(
+            PointStruct(
+                id=point_id,
+                vector=vector,
+                payload=payload,
+            )
+        )
+
+    # If there are no latest sections, remove the old service knowledge.
+    if not points:
+        delete_chunks_by_service_id(service_id)
+
+        return {
+            "total_chunks_saved": 0,
+            "service_id": service_id,
+        }
+
+    # Delete only after every new embedding has been created.
+    delete_chunks_by_service_id(service_id)
+
+    get_qdrant().upsert(
+        collection_name=QDRANT_COLLECTION,
+        points=points,
+        wait=True,
+    )
+
+    logger.info(
+        "Replaced service knowledge | service_id=%d | chunks=%d",
+        service_id,
+        len(points),
+    )
+
+    return {
+        "total_chunks_saved": len(points),
+        "service_id": service_id,
+    }

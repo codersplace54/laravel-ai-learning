@@ -27,7 +27,7 @@ class ChatAnswerService
                 ]);
 
             if ($response->failed()) {
-                Log::warning('AI generic answer failed HTTP response', [
+                Log::channel('ai_chat')->warning('AI generic answer failed HTTP response', [
                     'status' => $response->status(),
                     'body'   => $response->body(),
                     'scope'  => $data_scope,
@@ -47,7 +47,7 @@ class ChatAnswerService
             return $this->normalize_answer($data, $data_scope);
 
         } catch (Throwable $e) {
-            Log::warning('AI generic answer exception', [
+            Log::channel('ai_chat')->warning('AI generic answer exception', [
                 'error' => $e->getMessage(),
                 'scope' => $data_scope,
             ]);
@@ -74,7 +74,7 @@ class ChatAnswerService
                 ]);
 
             if ($response->failed()) {
-                Log::warning('AI application answer failed HTTP response', [
+                Log::channel('ai_chat')->warning('AI application answer failed HTTP response', [
                     'status' => $response->status(),
                     'body'   => $response->body(),
                 ]);
@@ -93,7 +93,7 @@ class ChatAnswerService
             return $this->normalize_answer($data, 'APPLICATION_DATA');
 
         } catch (Throwable $e) {
-            Log::warning('AI application answer exception', [
+            Log::channel('ai_chat')->warning('AI application answer exception', [
                 'error' => $e->getMessage(),
             ]);
 

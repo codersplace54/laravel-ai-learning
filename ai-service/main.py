@@ -4,10 +4,17 @@ import shutil
 from fastapi import FastAPI, Header, HTTPException, UploadFile, File
 
 from config import check_config
-from schemas import ChatAnswerRequest, ChatUnderstandRequest
+from schemas import (
+    ChatAnswerRequest,
+    ChatUnderstandRequest,
+    ServiceKnowledgeSyncRequest,
+)
 from services.rag_service import process_service_document
 from services.chat_answer_service import answer_from_context
 from services.understand_service import understand_message
+from services.service_knowledge_service import (
+    sync_service_knowledge,
+)
 
 import logging 
 
@@ -49,6 +56,29 @@ def health_check():
         "status": 1,
         "message": "SWAAGAT AI service is running"
     }
+
+@app.post("/api/ai/knowledge/services/sync")
+def sync_service_knowledge_api(
+    request_data: ServiceKnowledgeSyncRequest,
+    x_ai_secret: str | None = Header(default=None),
+):
+    """
+    Receive the latest generated knowledge sections for one service
+    and replace that service's existing Qdrant knowledge.
+    """
+
+    logger.info(
+        (
+            "service-knowledge-sync | "
+            "service_id=%d | sections=%d"
+        ),
+        request_data.service_id,
+        len(request_data.sections),
+    )
+
+    return sync_service_knowledge(
+        request_data
+    )
 
 
 @app.post("/upload-service-document")

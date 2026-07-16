@@ -55,7 +55,7 @@ return [
         'stack' => [
             'driver' => 'stack',
             'channels' => explode(',', env('LOG_STACK', 'single')),
-            'ignore_exceptions' => false,
+            'ignore_exceptions' => true,
         ],
 
         'single' => [
@@ -63,6 +63,7 @@ return [
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'daily' => [
@@ -71,6 +72,7 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'slack' => [
@@ -133,6 +135,7 @@ return [
             'level' => env('LOG_LEVEL', 'info'),
             'days' => 60,
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'saral_sync' => [
@@ -141,6 +144,7 @@ return [
             'level' => env('LOG_LEVEL', 'info'),
             'days' => 60,
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'external_sms' => [
@@ -149,6 +153,7 @@ return [
             'level' => env('LOG_LEVEL', 'info'),
             'days' => 60,
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'sms' => [
@@ -157,14 +162,16 @@ return [
             'level' => env('LOG_LEVEL', 'info'),
             'days' => 60,
             'replace_placeholders' => true,
+            'permission' => 0664
         ],
-
+        
         'whatsapp' => [
             'driver' => 'daily',
             'path' => storage_path('logs/whatsapp.log'),
             'level' => env('LOG_LEVEL', 'info'),
             'days' => 60,
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'pan_verification' => [
@@ -173,6 +180,7 @@ return [
             'level' => env('LOG_LEVEL', 'info'),
             'days' => 60,
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'entity_locker' => [
@@ -181,6 +189,7 @@ return [
             'level' => env('LOG_LEVEL', 'info'),
             'days' => 60,
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'payment' => [
@@ -189,6 +198,7 @@ return [
             'level' => env('LOG_LEVEL', 'info'),
             'days' => 60,
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'deemed_approval' => [
@@ -197,6 +207,7 @@ return [
             'level' => env('LOG_LEVEL', 'info'),
             'days' => 60,
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'single_window_report' => [
@@ -205,6 +216,34 @@ return [
             'level' => env('LOG_LEVEL', 'info'),
             'days' => 60,
             'replace_placeholders' => true,
+            'permission' => 0664,
+        ],
+
+        'third_party' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/third_party.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 60,
+            'replace_placeholders' => true,
+            'permission' => 0664,
+        ],
+
+        'fix_assignment' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/fix_assignment.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 90,
+            'replace_placeholders' => true,
+            'permission' => 0664,
+        ],
+
+        'ai_chat' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/ai_chat.log'),
+            'level' => 'debug',
+            'days' => 30,
+            'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
     ],
