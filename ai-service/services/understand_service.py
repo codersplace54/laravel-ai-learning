@@ -16,6 +16,7 @@ ALLOWED_ROUTES = [
     "application_single",
     "application_collection",
     "service",
+    "service_discovery",
     "clarification",
     "exit",
     "unknown",
@@ -27,10 +28,12 @@ ALLOWED_FAMILIES = [
     "certificate",
     "documents",
     "service_discovery",
+    "service_information",
     "eligibility",
     "renewal",
     "notifications",
     "grievance_support",
+    "account",
     "general_knowledge",
     "smalltalk_or_help",
     "unknown",
@@ -76,6 +79,40 @@ def understand_message(message: str, session_meta: dict, history: list) -> dict:
             "Understand Message Request: %s",
             json.dumps(payload, default=str, ensure_ascii=False),
         )
+
+        IGNORED_ASSISTANT_MESSAGES = [
+            "temporarily busy",
+            "temporarily unable to connect",
+            "could not complete the service search",
+            "please try again in a moment",
+        ]
+
+        clean_history = []
+
+        for item in history:
+            role = str(item.get("role", "")).strip()
+            message = str(
+                item.get("message", "")
+            ).strip()
+
+            if not message:
+                continue
+
+            if role == "assistant":
+                lowered = message.lower()
+
+                if any(
+                    ignored in lowered
+                    for ignored in IGNORED_ASSISTANT_MESSAGES
+                ):
+                    continue
+
+            clean_history.append({
+                "role": role,
+                "message": message,
+            })
+
+        history = clean_history[-4:]
 
         completion = groq_client.chat.completions.create(
             model=GROQ_MODEL,
@@ -148,6 +185,8 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
         "comparison",
         "process",
         "explain_previous",
+        "recommendation",
+        "service_recommendation"
     }
 
     answer_mode = safe_string(data.get("answer_mode")) or "fact"

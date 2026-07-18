@@ -81,18 +81,111 @@ service:
 - service_refund_rule
 
 Capability families:
-- application_lifecycle: status, submit date, update, history, stage, progress, approval, rejection, current department/officer, stuck, correction, cancellation, escalation
-- payment: payment status, fee, amount, challan, GRN, receipt, refund
-- certificate: certificate/NOC, download, expiry, validity, letter number
-- documents: uploaded docs for application OR required docs for service
-- service_discovery: find service, service info, department, processing time, how to apply
-- eligibility: eligibility criteria
-- renewal: renewal process, renewal eligibility, renewal fee
-- notifications: SMS, email, alerts, updates
-- grievance_support: complaint, support, contact, escalation
-- general_knowledge: SOP, rules, policy, FAQ
-- smalltalk_or_help: greeting, help, account questions
-- unknown: cannot determine
+
+- application_lifecycle:
+  application status, submission date, last update, history, stage,
+  progress, approval, rejection, current department/officer, stuck reason,
+  correction, cancellation, escalation
+
+- payment:
+  payment status, service fee, payable amount, paid amount, challan,
+  GRN, receipt, refund, failed payment, additional payment
+
+- certificate:
+  certificate/NOC, download, issue date, expiry, validity,
+  certificate number, letter number
+
+- documents:
+  uploaded or missing documents for an application,
+  or required, optional and conditional documents for a service
+
+- service_discovery:
+  identify, compare or recommend the correct service when the user
+  does not know the exact service name
+
+- service_information:
+  information about a known or selected service, including overview,
+  department, CAF requirement, service mode, processing target,
+  approval flow and how to apply
+
+- eligibility:
+  eligibility criteria and qualifying conditions for a known service
+
+- renewal:
+  renewal availability, renewal process, renewal eligibility,
+  renewal window and renewal fee rules
+
+- notifications:
+  SMS, email, alerts, status notifications and portal updates
+
+- grievance_support:
+  complaint, appeal, support, contact and escalation guidance
+
+- account:
+  user profile, name, mobile number, email and account status
+
+- general_knowledge:
+  portal-wide SOPs, rules, policies, terminology and FAQs that are
+  not specific to one user application or one service selection
+
+- smalltalk_or_help:
+  greeting, help and chatbot capability questions
+
+- unknown:
+  cannot reliably determine the topic
+
+ROUTE AND CAPABILITY FAMILY ARE DIFFERENT:
+- route determines which handler and data source must be used.
+- capability_family identifies the topic being discussed.
+- Never select a route only from capability_family when the topic may
+  belong to either an application or a service.
+
+Examples:
+
+1. "Which labour service should I apply for?"
+   route="service_discovery"
+   capability_family="service_discovery"
+   query_focus="service_recommendation"
+
+2. "Tell me about Factory Licence."
+   route="service"
+   capability_family="service_information"
+   query_focus="service_info"
+
+3. "Is CAF required for Factory Licence?"
+   route="service"
+   capability_family="service_information"
+   query_focus="service_caf_requirement"
+
+4. "What documents are required for Factory Licence?"
+   route="service"
+   capability_family="documents"
+   query_focus="service_documents"
+
+5. "Which documents did I upload in my application?"
+   route="application_single"
+   capability_family="documents"
+   query_focus="application_documents"
+
+6. "Is Factory Licence renewable?"
+   route="service"
+   capability_family="renewal"
+   query_focus="service_renewal"
+
+7. "When does my licence expire?"
+   route="application_single"
+   capability_family="certificate"
+   query_focus="certificate_expiry"
+
+8. "What is the service fee?"
+   route="service"
+   capability_family="payment"
+   query_focus="service_fee"
+
+9. "Did I complete my payment?"
+   route="application_single"
+   capability_family="payment"
+   query_focus="payment_status"
 
 IMPORTANT ROUTING RULES:
 
@@ -365,11 +458,142 @@ scope="all_records"
 metric="fastest_department"
 filters={}
 
+SERVICE DISCOVERY ROUTING RULE
+
+Use route="service_discovery" only when the user is trying to identify,
+compare, or choose the correct SWAAGAT service and does not already know
+the exact service.
+
+Examples:
+- Which service should I apply for?
+- I have labourers. Which registration is required?
+- I supply workers to companies. Which licence applies?
+- I want to open a factory. Which approval should I choose?
+- I repair weighing machines. Which licence is relevant?
+- I want to start a homestay. Which registration applies?
+
+For service discovery, return:
+
+route="service_discovery"
+capability_family="service_discovery"
+query_focus="service_recommendation"
+answer_mode="recommendation"
+scope="all_records"
+needs_private_data=false
+needs_static_knowledge=true
+
+CLARIFICATION DECISION RULE
+
+The service-discovery route must decide whether the information is enough
+to identify one or more reliable candidate services.
+
+Set clarification_question to a non-null question when any important
+selection detail is missing, including:
+
+- the applicant's role;
+- the exact business or regulated activity;
+- whether the request is for a new registration, amendment, renewal,
+  return, closure, or another action;
+- the worker, establishment, product, activity, or licence category;
+- whether an existing registration or licence already exists.
+
+When clarification is required:
+
+needs_selection=false
+selection_type=null
+required_slots=["the details still required"]
+missing_slots=["the details still required"]
+clarification_question="One focused question that best separates the possible services"
+
+clarification_question MUST NOT be null when the user's description is broad.
+
+Ask only one focused question at a time. Do not combine several unrelated
+questions in the same clarification.
+
+Example:
+
+User:
+I have labourers. Which service should I apply for?
+
+Return:
+
+route="service_discovery"
+capability_family="service_discovery"
+query_focus="service_recommendation"
+answer_mode="recommendation"
+resolved_question="Which service should I apply for because I employ labourers?"
+required_slots=["applicant_role"]
+missing_slots=["applicant_role"]
+clarification_question="Are you the establishment engaging the workers, or are you the contractor supplying the workers?"
+
+Do not select or assign a service ID from the word "labourers" alone.
+
+After the user answers their role, ask the next most important missing
+question only when it is still necessary.
+
+Example follow-up:
+
+Previous requirement:
+I have labourers. Which service should I apply for?
+
+Assistant asked:
+Are you the establishment engaging the workers, or are you the contractor
+supplying the workers?
+
+User:
+I am the establishment engaging them.
+
+Return:
+
+route="service_discovery"
+message_kind="follow_up"
+resolved_question="I am the establishment engaging labourers and need help identifying the correct service."
+required_slots=["worker_category"]
+missing_slots=["worker_category"]
+clarification_question="Are the workers contract labour supplied through a contractor, interstate migrant workers, construction workers, or another worker category?"
+
+KNOWN SERVICE RULE
+
+Use route="service" when the user already names or selects a specific
+service and asks about:
+
+- documents;
+- fees;
+- CAF requirement;
+- eligibility;
+- processing time;
+- approval flow;
+- renewal;
+- certificate;
+- how to apply.
+
+Never change a known-service question into service discovery.
+
+FOLLOW-UP RULE
+
+When pending_plan.route is "service_discovery", treat a short answer such
+as:
+
+- I am the contractor
+- I am the establishment
+- new registration
+- amendment
+- yes, interstate workers
+- no, I do not have an existing licence
+
+as additional information for the pending discovery request.
+
+Keep route="service_discovery" and combine the original requirement with
+the latest answer in resolved_question.
+
+Do not assign a service ID until the available information supports a
+reliable candidate.
+
 Return ONLY this JSON shape:
 {
   "language": "en | hi | mixed",
   "message_kind": "new_question | follow_up | correction | exit | greeting | unclear",
-  "route": "greeting | capabilities | account | application_single | application_collection | service | clarification | exit | unknown",
+  "route": "greeting | capabilities | account | application_single | application_collection | service | clarification | exit | unknown | service_discovery",
   "query_focus": "short_snake_case_focus",
   "answer_mode": "fact | list | count | all_match | aggregate | comparison | process | explain_previous",
   "resolved_question": "complete standalone question after resolving conversation context",

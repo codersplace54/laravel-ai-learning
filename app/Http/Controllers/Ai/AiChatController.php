@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Ai;
 use App\Http\Controllers\Controller;
 use App\Models\AiChatMessage;
 use App\Models\AiChatSession;
+use App\Models\ServiceMaster;
 use App\Models\UserServiceApplication;
 use App\Services\Ai\ChatAnswerService;
 use App\Services\Ai\ChatLiveDataService;
@@ -89,15 +90,20 @@ class AiChatController extends Controller
             );
         }
 
-        if (in_array($plan['route'], ['application_collection', 'service', 'account'], true)) {
+        if (in_array($plan['route'], [
+            'application_collection',
+            'service',
+            'service_discovery',
+            'account',
+        ], true)) {
             $this->clear_pending($session);
         }
-
         return match ($plan['route']) {
             'application_single' => $this->handle_application_single($session, $message, $plan),
             'application_collection' => $this->handle_application_collection($session, $message, $plan),
             'service' => $this->handle_service($session, $message, $plan),
             'account' => $this->handle_account($session, $message, $plan),
+            'service_discovery' => $this->handle_service_discovery($session, $message, $plan),
             default => $this->handle_unknown($session, $message, $plan),
         };
     }
@@ -315,6 +321,9 @@ class AiChatController extends Controller
             'latest_application' => 'application_collection',
             'duplicate_applications' => 'application_collection',
 
+            'service_discovery' => 'service_discovery',
+            'service_recommendation' => 'service_discovery',
+            'service_selection_help' => 'service_discovery',
             'service' => 'service',
             'service_answer' => 'service',
             'service_info' => 'service',
@@ -339,7 +348,15 @@ class AiChatController extends Controller
                 : 'capabilities';
         }
 
-        if (in_array($family, ['documents', 'service_discovery', 'eligibility', 'general_knowledge'], true)) {
+        if ($family === 'service_discovery') {
+            return 'service_discovery';
+        }
+
+        if (in_array($family, [
+            'documents',
+            'eligibility',
+            'general_knowledge',
+        ], true)) {
             return 'service';
         }
 
@@ -622,6 +639,280 @@ class AiChatController extends Controller
     }
 
     // ---------------------------------------------------------------------
+    // SERVICE DISCOVERY
+    // ---------------------------------------------------------------------
+
+    private function handle_service_discovery(
+        AiChatSession $session,
+        string $message,
+        array $plan
+    ) {
+        $question = trim(
+            (string) (
+                $plan['resolved_question']
+                ?? ''
+            )
+        );
+
+        $clarification_question = trim(
+            (string) (
+                $plan['clarification_question']
+                ?? ''
+            )
+        );
+
+        if ($clarification_question !== '') {
+            $resolved_question = trim(
+                (string) (
+                    $plan['resolved_question']
+                    ?? $question
+                )
+            );
+
+            $this->set_pending_plan(
+                $session,
+                [
+                    'route' => 'service_discovery',
+
+                    'query_focus' =>
+                    $plan['query_focus']
+                        ?? 'service_recommendation',
+
+                    'answer_mode' => 'recommendation',
+
+                    'original_message' =>
+                    $resolved_question,
+
+                    'required_slots' =>
+                    $plan['required_slots']
+                        ?? [],
+
+                    'missing_slots' =>
+                    $plan['missing_slots']
+                        ?? [],
+
+                    'clarification_question' =>
+                    $clarification_question,
+                ]
+            );
+
+            return $this->ask_clarification(
+                $session,
+                $clarification_question
+            );
+        }
+
+        if ($question === '') {
+            $question = $message;
+        }
+
+        $context = [
+            '_ai_plan' => [
+                'route' => 'service_discovery',
+
+                'query_focus' =>
+                $plan['query_focus']
+                    ?? 'service_recommendation',
+
+                'answer_mode' =>
+                $plan['answer_mode']
+                    ?? 'recommendation',
+
+                'resolved_question' =>
+                $question,
+
+                'user_goal' =>
+                $plan['user_goal']
+                    ?? null,
+
+                'filters' =>
+                $plan['filters']
+                    ?? [],
+            ],
+        ];
+
+        $fallback = trim(
+            (string) (
+                $plan['clarification_question']
+                ?? ''
+            )
+        );
+
+        if ($fallback === '') {
+            $fallback = 'The matching service guidance was found, but the final response could not be generated right now. Please try again after a short moment.';
+        }
+
+        $ai = $this->safe_generic_answer(
+            $question,
+            'SERVICE_DISCOVERY',
+            $context,
+            'I could not complete the service search right now. Please try again after a moment.'
+        );
+
+        $raw_candidates = is_array(
+            $ai['candidate_services'] ?? null
+        )
+            ? $ai['candidate_services']
+            : [];
+
+        /*
+     * Verify every AI candidate against ServiceMaster.
+     * This prevents an invented service ID or stale name
+     * from becoming a selectable option.
+     */
+        $candidate_reasons = [];
+
+        foreach ($raw_candidates as $candidate) {
+            $service_id = (int) (
+                $candidate['service_id']
+                ?? $candidate['id']
+                ?? 0
+            );
+
+            if ($service_id <= 0) {
+                continue;
+            }
+
+            $candidate_reasons[$service_id] = trim(
+                (string) (
+                    $candidate['reason']
+                    ?? ''
+                )
+            );
+        }
+
+        $services = empty($candidate_reasons)
+            ? collect()
+            : ServiceMaster::query()
+            ->whereIn(
+                'id',
+                array_keys($candidate_reasons)
+            )
+            ->get([
+                'id',
+                'service_title_or_description',
+            ])
+            ->keyBy('id');
+
+        $options = [];
+
+        foreach ($candidate_reasons as $service_id => $reason) {
+            $service = $services->get(
+                $service_id
+            );
+
+            if (!$service) {
+                continue;
+            }
+
+            $options[] = [
+                'id' => (int) $service->id,
+
+                'title' =>
+                $service
+                    ->service_title_or_description,
+
+                'subtitle' =>
+                $reason !== ''
+                    ? $reason
+                    : 'This service may match your requirement.',
+            ];
+        }
+
+        $needs_clarification = (bool) (
+            $ai['needs_clarification']
+            ?? false
+        );
+
+        $clarification_question = trim(
+            (string) (
+                $ai['clarification_question']
+                ?? ''
+            )
+        );
+
+        if ($needs_clarification) {
+            $this->set_pending_plan(
+                $session,
+                [
+                    'route' =>
+                    'service_discovery',
+
+                    'query_focus' =>
+                    'service_recommendation',
+
+                    'original_message' =>
+                    $question,
+
+                    'selection_type' =>
+                    'service',
+                ]
+            );
+        } elseif (!empty($options)) {
+            /*
+         * When the user clicks one candidate,
+         * the existing service-selection handler
+         * will show the selected service overview.
+         */
+            $this->set_pending_plan(
+                $session,
+                [
+                    'route' => 'service',
+
+                    'query_focus' =>
+                    'service_info',
+
+                    'user_goal' =>
+                    'view selected service information',
+
+                    'original_message' =>
+                    'Tell me about the selected service.',
+
+                    'selection_type' =>
+                    'service',
+                ]
+            );
+        } else {
+            $this->clear_pending(
+                $session
+            );
+        }
+
+        $answer = trim(
+            (string) (
+                $ai['answer']
+                ?? ''
+            )
+        );
+
+        if (
+            $answer === ''
+            && $clarification_question !== ''
+        ) {
+            $answer = $clarification_question;
+        }
+
+        if ($answer === '') {
+            $answer = 'I could not identify a verified service from the available guidance. Please describe your business activity and whether you need a new registration, amendment, renewal, licence, or approval.';
+        }
+
+        return $this->reply(
+            $session,
+            $answer,
+            'service_discovery',
+            [],
+            null,
+            null,
+            null,
+            !empty($options),
+            !empty($options)
+                ? 'service'
+                : null,
+            $options
+        );
+    }
+
+    // ---------------------------------------------------------------------
     // SERVICE
     // ---------------------------------------------------------------------
 
@@ -692,11 +983,20 @@ class AiChatController extends Controller
         $this->set_active_service($session, $service_id, $service_name, $plan['query_focus'] ?? 'service');
 
         $context['_ai_plan'] = [
-            'route'             => 'service',
-            'query_focus'       => $plan['query_focus'] ?? null,
-            'user_goal'         => $plan['user_goal'] ?? null,
-            'resolved_question' => $plan['resolved_question'] ?? $message,
+            'route' => 'service',
+            'query_focus' => $plan['query_focus'] ?? null,
+            'answer_mode' => $plan['answer_mode'] ?? 'fact',
+            'resolved_question' => trim((string) ($plan['resolved_question'] ?? '')) ?: $message,
+            'user_goal' => $plan['user_goal'] ?? null,
+            'filters' => $plan['filters'] ?? [],
         ];
+
+        $answer_question = trim(
+            (string) (
+                $context['_ai_plan']['resolved_question']
+                ?? ''
+            )
+        ) ?: $message;
 
         Log::channel('ai_chat')->info('SWAAGAT service RAG context', [
             'service_id'        => $service_id,
@@ -705,7 +1005,7 @@ class AiChatController extends Controller
         ]);
 
         $ai = $this->safe_generic_answer(
-            $message,
+            $answer_question,
             'SERVICE_DATA',
             $context,
             $this->local_service_fallback($context)

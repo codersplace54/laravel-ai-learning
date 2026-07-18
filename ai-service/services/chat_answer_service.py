@@ -2,10 +2,15 @@ import json
 from fastapi import HTTPException
 from config import GROQ_MODEL
 from services.groq_service import groq_client
-from services.vector_service import search_service_chunks
+from services.vector_service import search_service_chunks, search_service_discovery_chunks
 import logging
 from prompts.application_chat_prompt import APPLICATION_STUCK_EXPLANATION_PROMPT
 logger = logging.getLogger(__name__)
+from services.openrouter_service import (
+    OpenRouterError,
+    OpenRouterRateLimitError,
+    generate_openrouter_answer,
+)
 
 SERVICE_SECTION_BY_FOCUS = {
     "service_info": "overview",
@@ -70,6 +75,43 @@ If data_scope is APPLICATION_LIST:
 - If filtered (e.g. payment pending, noc issued), mention only those.
 - Example: "You have 12 applications in total. 3 have payment pending: CFO-57-000688 (Factory License), ..."
 
+If data_scope is SERVICE_DISCOVERY:
+
+- The user is trying to identify the correct SWAAGAT service.
+- context.rag_chunks contains verified service-selection guidance.
+- Recommend only services explicitly present in the retrieved chunks.
+- Every candidate must have a verified numeric Service ID and service name.
+- Never invent a service ID or service name.
+- Do not recommend a service based only on one matching keyword.
+- Consider applicant role, business activity, application purpose, location,
+  and whether the request is new, amendment, renewal, return, closure, or
+  an existing licence.
+- When multiple services may apply, ask the most useful clarification question.
+- Do not provide documents, fees, CAF requirements, processing timelines,
+  approval flows, or renewal cycles from discovery documents.
+- Those details are answered only after a specific service is selected.
+- Do not claim that a service definitely applies. Say that it "may apply",
+  "appears relevant", or "should be considered" unless the guide explicitly
+  makes the choice unambiguous.
+- Return no more than five candidate services.
+- Do not mention PDFs, RAG, Qdrant, embeddings, JSON, or internal routing.
+
+Return JSON in this shape:
+
+{
+  "answer": "User-facing recommendation or clarification question",
+  "answer_type": "service_discovery",
+  "needs_clarification": true,
+  "clarification_question": "Question to ask, or null",
+  "candidate_services": [
+    {
+      "service_id": 16,
+      "service_name": "Exact service name from retrieved knowledge",
+      "reason": "Why this service may match"
+    }
+  ]
+}
+
 If data_scope is SERVICE_DATA:
 - Answer only about the selected service.
 - context.rag_chunks contains verified knowledge generated from the latest published service configuration.
@@ -129,12 +171,117 @@ def _inject_rag_chunks(
     When possible, it is also filtered by section_type.
     """
 
-    if data_scope != "SERVICE_DATA":
-        return context
-
     db_data = context.get("db_data") or {}
     ai_plan = context.get("_ai_plan") or {}
 
+    if data_scope == "SERVICE_DISCOVERY":
+        resolved_question = str(
+            ai_plan.get("resolved_question")
+            or message
+            or ""
+        ).strip()
+
+        filters = ai_plan.get("filters") or {}
+
+        category = (
+            context.get("category")
+            or filters.get("discovery_category")
+        )
+
+        raw_chunks = search_service_discovery_chunks(
+            question=resolved_question,
+            category=category,
+            limit=8,
+        )
+
+        chunks = []
+
+        for chunk in raw_chunks:
+            if (
+                chunk.get("section_type")
+                != "service_profile"
+            ):
+                continue
+
+            compact_chunk = dict(chunk)
+
+            compact_chunk["text"] = str(
+                chunk.get("text", "")
+            )[:700]
+
+            chunks.append(
+                compact_chunk
+            )
+
+            if len(chunks) >= 5:
+                break
+
+        context["rag_chunks"] = chunks
+
+        logger.info(
+            "Discovery chunks sent to answer model:\n%s",
+            json.dumps(
+                [
+                    {
+                        "document_key": chunk.get(
+                            "document_key"
+                        ),
+                        "section_type": chunk.get(
+                            "section_type"
+                        ),
+                        "section_title": chunk.get(
+                            "section_title"
+                        ),
+                        "service_ids": chunk.get(
+                            "service_ids",
+                            [],
+                        ),
+                        "score": chunk.get(
+                            "score"
+                        ),
+                        "text": chunk.get(
+                            "text",
+                            "",
+                        ),
+                    }
+                    for chunk in chunks
+                ],
+                indent=2,
+                ensure_ascii=False,
+            ),
+        )
+        context["rag_retrieval"] = {
+            "route": "service_discovery",
+            "resolved_question": resolved_question,
+            "category": category,
+            "chunks_found": len(chunks),
+            "raw_chunks_found": len(raw_chunks),
+            "document_keys": list({
+                chunk.get("document_key")
+                for chunk in chunks
+                if chunk.get("document_key")
+            }),
+        }
+
+        logger.info(
+            (
+                "Service discovery RAG injected | "
+                "category=%s | raw_chunks=%d | "
+                "compact_chunks=%d | documents=%s"
+            ),
+            category,
+            len(raw_chunks),
+            len(chunks),
+            context["rag_retrieval"][
+                "document_keys"
+            ],
+        )
+
+        return context
+
+    if data_scope != "SERVICE_DATA":
+        return context
+  
     service_id = (
         context.get("service_id")
         or db_data.get("service_id")
@@ -241,10 +388,7 @@ def answer_from_context(request_data) -> dict:
         else CHAT_ANSWER_PROMPT
     )
 
-    try:
-        completion = groq_client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
+    messages=[
                 {
                     "role": "system",
                     "content": system_prompt,
@@ -254,10 +398,49 @@ def answer_from_context(request_data) -> dict:
                     "content": json.dumps(payload, default=str),
                 },
             ],
-            temperature=0.2,
-            response_format={"type": "json_object"},
-            max_completion_tokens=400,
-        )
+    try:
+        # completion = groq_client.chat.completions.create(
+        #     model=GROQ_MODEL,
+        #     messages=[
+        #         {
+        #             "role": "system",
+        #             "content": system_prompt,
+        #         },
+        #         {
+        #             "role": "user",
+        #             "content": json.dumps(payload, default=str),
+        #         },
+        #     ],
+        #     temperature=0.2,
+        #     response_format={"type": "json_object"},
+        #     max_completion_tokens=400,
+        # )
+
+        try:
+            raw_content = generate_openrouter_answer(
+                messages=messages,
+                temperature=0.1,
+                max_tokens=1000,
+            )
+
+        except OpenRouterRateLimitError:
+            logger.warning(
+                "Final answer rate limited by OpenRouter"
+            )
+
+            raise
+
+        except OpenRouterError as exception:
+            logger.error(
+                (
+                    "Final answer OpenRouter failure | "
+                    "error=%s"
+                ),
+                str(exception),
+            )
+
+            raise
+
     except Exception as e:
         error_msg = str(e).lower()
         if "rate_limit" in error_msg or "429" in error_msg:

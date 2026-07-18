@@ -21,4 +21,29 @@ def check_config():
 
     if missing:
         raise Exception("Missing env values: " + ", ".join(missing))
-        
+
+
+OPENROUTER_API_KEY = os.getenv(
+    "OPENROUTER_API_KEY",
+    ""
+).strip()
+
+OPENROUTER_BASE_URL = os.getenv(
+    "OPENROUTER_BASE_URL",
+    "https://openrouter.ai/api/v1",
+).rstrip("/")
+
+OPENROUTER_MODEL = os.getenv(
+    "OPENROUTER_MODEL",
+    "openai/gpt-oss-120b:free",
+).strip()
+
+OPENROUTER_SITE_URL = os.getenv(
+    "OPENROUTER_SITE_URL",
+    "http://localhost",
+).strip()
+
+OPENROUTER_APP_NAME = os.getenv(
+    "OPENROUTER_APP_NAME",
+    "SWAAGAT AI",
+).strip()

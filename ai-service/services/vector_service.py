@@ -2,7 +2,7 @@ import uuid
 import logging
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
-
+import hashlib
 from config import QDRANT_COLLECTION
 from services.embedding_service import create_embedding
 
@@ -10,6 +10,184 @@ logger = logging.getLogger(__name__)
 
 _qdrant = None
 
+def delete_discovery_chunks_by_document_key(
+    document_key: str,
+):
+    """
+    Remove all existing discovery chunks for one document.
+
+    Example document key:
+    discovery:labour-services
+    """
+
+    if not get_qdrant().collection_exists(
+        collection_name=QDRANT_COLLECTION
+    ):
+        return 0
+
+    result = get_qdrant().delete(
+        collection_name=QDRANT_COLLECTION,
+        points_selector=Filter(
+            must=[
+                FieldCondition(
+                    key="document_key",
+                    match=MatchValue(
+                        value=document_key
+                    ),
+                )
+            ]
+        ),
+        wait=True,
+    )
+
+    logger.info(
+        "Deleted discovery knowledge | document_key=%s",
+        document_key,
+    )
+
+    return result
+
+
+def replace_discovery_chunks_in_vector_db(
+    document_key: str,
+    chunks: list,
+    metadata: dict,
+):
+    """
+    Replace all Qdrant chunks belonging to one discovery document.
+
+    Embeddings are generated before deleting the previous version.
+    Therefore, the old document remains available if embedding
+    generation fails.
+    """
+
+    prepared_points = []
+
+    content_hash = str(
+        metadata.get("content_hash", "")
+    )
+
+    for index, chunk in enumerate(chunks):
+        text = str(
+            chunk.get("text", "")
+        ).strip()
+
+        if not text:
+            continue
+
+        vector = create_embedding(text)
+
+        ensure_collection(
+            vector_size=len(vector)
+        )
+
+        chunk_hash = hashlib.sha256(
+            text.encode("utf-8")
+        ).hexdigest()
+
+        point_id = str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                (
+                    f"swaagat:"
+                    f"{document_key}:"
+                    f"{content_hash}:"
+                    f"{chunk_hash}:"
+                    f"{index}"
+                ),
+            )
+        )
+
+        payload = {
+            "document_key": document_key,
+            "document_type": "service_discovery",
+
+            "title": metadata.get("title"),
+            "category": metadata.get("category"),
+            "language": metadata.get(
+                "language",
+                "en",
+            ),
+
+            "version": metadata.get(
+                "version",
+                1,
+            ),
+
+            "is_active": True,
+
+            "source_filename": metadata.get(
+                "source_filename"
+            ),
+
+            "content_hash": content_hash,
+
+            "section_type": chunk.get(
+                "section_type",
+                "general_guidance",
+            ),
+
+            "section_title": chunk.get(
+                "section_title",
+                "General Guidance",
+            ),
+
+            "service_ids": chunk.get(
+                "service_ids",
+                [],
+            ),
+
+            "chunk_index": index,
+            "text": text,
+        }
+
+        payload = {
+            key: value
+            for key, value in payload.items()
+            if value is not None
+        }
+
+        prepared_points.append(
+            PointStruct(
+                id=point_id,
+                vector=vector,
+                payload=payload,
+            )
+        )
+
+    if not prepared_points:
+        return {
+            "total_chunks_saved": 0,
+            "document_key": document_key,
+        }
+
+    # Delete the previous version only after all new
+    # embeddings have been prepared successfully.
+    delete_discovery_chunks_by_document_key(
+        document_key
+    )
+
+    get_qdrant().upsert(
+        collection_name=QDRANT_COLLECTION,
+        points=prepared_points,
+        wait=True,
+    )
+
+    logger.info(
+        (
+            "Discovery knowledge replaced | "
+            "document_key=%s | chunks=%d"
+        ),
+        document_key,
+        len(prepared_points),
+    )
+
+    return {
+        "total_chunks_saved": len(
+            prepared_points
+        ),
+        "document_key": document_key,
+    }
 
 def get_qdrant():
     global _qdrant
@@ -477,3 +655,139 @@ def replace_service_knowledge_in_vector_db(
         "total_chunks_saved": len(points),
         "service_id": service_id,
     }
+
+def search_service_discovery_chunks(
+    question: str,
+    category: str | None = None,
+    limit: int = 8,
+):
+    """
+    Search only service-discovery documents.
+
+    Unlike normal service search, this does not require
+    a service_id because the user is asking which service
+    may be suitable.
+    """
+
+    if not get_qdrant().collection_exists(
+        collection_name=QDRANT_COLLECTION
+    ):
+        logger.warning(
+            "Qdrant collection does not exist"
+        )
+
+        return []
+
+    question = str(question or "").strip()
+
+    if not question:
+        return []
+
+    question_vector = create_embedding(
+        question
+    )
+
+    must_conditions = [
+        FieldCondition(
+            key="document_type",
+            match=MatchValue(
+                value="service_discovery"
+            ),
+        ),
+
+        FieldCondition(
+            key="is_active",
+            match=MatchValue(
+                value=True
+            ),
+        ),
+    ]
+
+    if category:
+        must_conditions.append(
+            FieldCondition(
+                key="category",
+                match=MatchValue(
+                    value=category
+                ),
+            )
+        )
+
+    results = get_qdrant().query_points(
+        collection_name=QDRANT_COLLECTION,
+        query=question_vector,
+
+        query_filter=Filter(
+            must=must_conditions
+        ),
+
+        limit=max(1, min(limit, 20)),
+        with_payload=True,
+    )
+
+    chunks = []
+
+    for point in results.points:
+        payload = point.payload or {}
+
+        chunks.append({
+            "id": str(point.id),
+
+            "document_key": payload.get(
+                "document_key"
+            ),
+
+            "title": payload.get(
+                "title"
+            ),
+
+            "category": payload.get(
+                "category"
+            ),
+
+            "section_type": payload.get(
+                "section_type",
+                "general_guidance",
+            ),
+
+            "section_title": payload.get(
+                "section_title",
+                "General Guidance",
+            ),
+
+            "service_ids": payload.get(
+                "service_ids",
+                [],
+            ),
+
+            "text": payload.get(
+                "text",
+                "",
+            ),
+
+            "chunk_index": payload.get(
+                "chunk_index",
+                0,
+            ),
+
+            "score": round(
+                float(point.score),
+                4
+            ),
+        })
+
+    logger.info(
+        (
+            "Service discovery search | "
+            "category=%s | chunks=%d | "
+            "document_keys=%s"
+        ),
+        category,
+        len(chunks),
+        [
+            chunk.get("document_key")
+            for chunk in chunks
+        ],
+    )
+
+    return chunks

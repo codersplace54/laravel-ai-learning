@@ -363,6 +363,84 @@ class ChatLiveDataService
             ->first();
     }
 
+    public function resolve_explicit_service_from_message(
+        string $message
+    ): ?array {
+        $normalized_message = strtolower(
+            preg_replace(
+                '/\s+/',
+                ' ',
+                trim(
+                    preg_replace(
+                        '/[^a-z0-9]+/i',
+                        ' ',
+                        $message
+                    )
+                )
+            )
+        );
+
+        if ($normalized_message === '') {
+            return null;
+        }
+
+        $matches = ServiceMaster::query()
+            ->get([
+                'id',
+                'service_title_or_description',
+            ])
+            ->map(function ($service) use ($normalized_message) {
+                $service_name = trim(
+                    (string) $service->service_title_or_description
+                );
+
+                $normalized_service_name = strtolower(
+                    preg_replace(
+                        '/\s+/',
+                        ' ',
+                        trim(
+                            preg_replace(
+                                '/[^a-z0-9]+/i',
+                                ' ',
+                                $service_name
+                            )
+                        )
+                    )
+                );
+
+                if (
+                    $normalized_service_name === ''
+                    || strlen($normalized_service_name) < 12
+                    || !str_contains(
+                        $normalized_message,
+                        $normalized_service_name
+                    )
+                ) {
+                    return null;
+                }
+
+                return [
+                    'service_id' => (int) $service->id,
+                    'service_name' => $service_name,
+                    'matched_length' => strlen(
+                        $normalized_service_name
+                    ),
+                ];
+            })
+            ->filter()
+            ->sortByDesc('matched_length')
+            ->values();
+
+        $match = $matches->first();
+
+        if (!$match) {
+            return null;
+        }
+
+        unset($match['matched_length']);
+
+        return $match;
+    }
     public function resolve_service_by_name(string $query): array
     {
         $normalized = strtolower(preg_replace('/[^a-z0-9 ]/i', ' ', $query));

@@ -52,3 +52,8 @@ class ServiceKnowledgeSyncRequest(BaseModel):
     sections: List[ServiceKnowledgeSection] = Field(
         default_factory=list
     )
+
+class DiscoverySearchRequest(BaseModel):
+    question: str
+    category: Optional[str] = None
+    limit: int = 8
