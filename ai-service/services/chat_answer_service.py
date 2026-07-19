@@ -77,24 +77,26 @@ If data_scope is APPLICATION_LIST:
 
 If data_scope is SERVICE_DISCOVERY:
 
-- The user is trying to identify the correct SWAAGAT service.
-- context.rag_chunks contains verified service-selection guidance.
-- Recommend only services explicitly present in the retrieved chunks.
-- Every candidate must have a verified numeric Service ID and service name.
-- Never invent a service ID or service name.
-- Do not recommend a service based only on one matching keyword.
-- Consider applicant role, business activity, application purpose, location,
-  and whether the request is new, amendment, renewal, return, closure, or
-  an existing licence.
-- When multiple services may apply, ask the most useful clarification question.
-- Do not provide documents, fees, CAF requirements, processing timelines,
-  approval flows, or renewal cycles from discovery documents.
-- Those details are answered only after a specific service is selected.
-- Do not claim that a service definitely applies. Say that it "may apply",
-  "appears relevant", or "should be considered" unless the guide explicitly
-  makes the choice unambiguous.
-- Return no more than five candidate services.
-- Do not mention PDFs, RAG, Qdrant, embeddings, JSON, or internal routing.
+- Recommend only services explicitly present in context.rag_chunks.
+- Every candidate must have a numeric Service ID and exact service name
+  found in the retrieved chunks.
+- Never invent, assume, rename or suggest a service using general model
+  knowledge.
+- Ask at most one combined clarification question.
+- After one clarification, recommend up to three verified candidates.
+- Do not ask the user which licence or registration they think they need.
+- If no reliable matching service exists in the retrieved chunks, clearly
+  say that no verified SWAAGAT service was found.
+
+When no match is found, return:
+
+{
+  "answer": "I could not find a verified matching SWAAGAT service in the available guidance.",
+  "answer_type": "service_discovery",
+  "needs_clarification": false,
+  "clarification_question": null,
+  "candidate_services": []
+}
 
 Return JSON in this shape:
 
@@ -360,17 +362,19 @@ def _inject_rag_chunks(
 
     return context
 
-def answer_from_context(request_data) -> dict:
+def answer_from_context(
+    request_data,
+) -> dict:  
+    context = dict(
+        request_data.context or {}
+    )
 
-    context = dict(request_data.context)
-
-    # Restructure SERVICE_DATA context so db_data is clearly separated
-    if request_data.data_scope == "SERVICE_DATA" and "service_id" not in context:
-        # service_id may be at top level already
-        pass
-
-    # Inject RAG chunks for service questions
-    context = _inject_rag_chunks(context, request_data.data_scope, request_data.message)
+    # Add RAG chunks when required.
+    context = _inject_rag_chunks(
+        context=context,
+        data_scope=request_data.data_scope,
+        message=request_data.message,
+    )
 
     payload = {
         "message": request_data.message,
@@ -380,92 +384,100 @@ def answer_from_context(request_data) -> dict:
 
     logger.info(
         "Answer Request Payload:\n%s",
-        json.dumps(payload, indent=4, ensure_ascii=False, default=str),
+        json.dumps(
+            payload,
+            indent=4,
+            ensure_ascii=False,
+            default=str,
+        ),
     )
+
     system_prompt = (
         APPLICATION_STUCK_EXPLANATION_PROMPT
-        if request_data.data_scope == "APPLICATION_DATA"
+        if request_data.data_scope
+        == "APPLICATION_DATA"
         else CHAT_ANSWER_PROMPT
     )
 
-    messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt,
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(payload, default=str),
-                },
-            ],
-    try:
-        # completion = groq_client.chat.completions.create(
-        #     model=GROQ_MODEL,
-        #     messages=[
-        #         {
-        #             "role": "system",
-        #             "content": system_prompt,
-        #         },
-        #         {
-        #             "role": "user",
-        #             "content": json.dumps(payload, default=str),
-        #         },
-        #     ],
-        #     temperature=0.2,
-        #     response_format={"type": "json_object"},
-        #     max_completion_tokens=400,
-        # )
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt,
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                payload,
+                ensure_ascii=False,
+                default=str,
+                separators=(",", ":"),
+            ),
+        },
+    ]
 
-        try:
-            raw_content = generate_openrouter_answer(
+    try:
+        raw_content = (
+            generate_openrouter_answer(
                 messages=messages,
                 temperature=0.1,
                 max_tokens=1000,
             )
-
-        except OpenRouterRateLimitError:
-            logger.warning(
-                "Final answer rate limited by OpenRouter"
-            )
-
-            raise
-
-        except OpenRouterError as exception:
-            logger.error(
-                (
-                    "Final answer OpenRouter failure | "
-                    "error=%s"
-                ),
-                str(exception),
-            )
-
-            raise
-
-    except Exception as e:
-        error_msg = str(e).lower()
-        if "rate_limit" in error_msg or "429" in error_msg:
-            raise HTTPException(status_code=429, detail="AI service rate limit reached. Please wait a moment.")
-        raise HTTPException(status_code=503, detail="AI service unavailable. Please try again.")
-
-    text = completion.choices[0].message.content
-
-    if not text:
-        raise HTTPException(status_code=500, detail="AI returned empty response")
-
-    try:
-        data = json.loads(text)
-    except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "message": "AI returned invalid JSON",
-                "ai_response": text,
-            },
         )
 
-    return {
-        "answer": data.get("answer", "I could not prepare an answer."),
-        "short_status": data.get("short_status"),
-        "answer_type": data.get("answer_type", "general"),
-        "confidence": data.get("confidence", 0.7),
-    }
+    except OpenRouterRateLimitError:
+        logger.warning(
+            "Final answer rate limited by OpenRouter"
+        )
+        raise
+
+    except OpenRouterError as exception:
+        logger.error(
+            (
+                "Final answer OpenRouter "
+                "failure | error=%s"
+            ),
+            str(exception),
+        )
+        raise
+
+    text = str(
+        raw_content or ""
+    ).strip()
+
+    logger.info(
+        "Answer Model Response: %s",
+        text,
+    )
+
+    if not text:
+        raise RuntimeError(
+            "OpenRouter returned an empty answer."
+        )
+
+    try:
+        data = json.loads(
+            text
+        )
+
+    except json.JSONDecodeError as exception:
+        logger.error(
+            (
+                "Answer model returned invalid "
+                "JSON | response=%s"
+            ),
+            text,
+        )
+
+        raise RuntimeError(
+            "Answer model returned invalid JSON."
+        ) from exception
+
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            (
+                "Answer model response must "
+                "be a JSON object."
+            )
+        )
+
+    return data

@@ -831,51 +831,62 @@ class AiChatController extends Controller
             )
         );
 
-        if ($needs_clarification) {
+        $pending_plan = is_array(
+            $session->pending_plan ?? null
+        )
+            ? $session->pending_plan
+            : [];
+
+        $clarification_count = (int) (
+            $pending_plan['clarification_count']
+            ?? 0
+        );
+
+        if ($clarification_count >= 1) {
+            $needs_clarification = false;
+            $clarification_question = '';
+        }
+
+        if (
+            $needs_clarification
+            && $clarification_count < 1
+        ) {
             $this->set_pending_plan(
                 $session,
                 [
                     'route' =>
-                    'service_discovery',
+                        'service_discovery',
 
                     'query_focus' =>
-                    'service_recommendation',
+                        'service_recommendation',
 
                     'original_message' =>
-                    $question,
+                        $question,
 
                     'selection_type' =>
-                    'service',
+                        'service',
+
+                    'clarification_count' =>
+                        $clarification_count + 1,
                 ]
             );
         } elseif (!empty($options)) {
-            /*
-         * When the user clicks one candidate,
-         * the existing service-selection handler
-         * will show the selected service overview.
-         */
             $this->set_pending_plan(
                 $session,
                 [
                     'route' => 'service',
-
-                    'query_focus' =>
-                    'service_info',
-
+                    'query_focus' => 'service_info',
                     'user_goal' =>
-                    'view selected service information',
+                        'view selected service information',
 
                     'original_message' =>
-                    'Tell me about the selected service.',
+                        'Tell me about the selected service.',
 
-                    'selection_type' =>
-                    'service',
+                    'selection_type' => 'service',
                 ]
             );
         } else {
-            $this->clear_pending(
-                $session
-            );
+            $this->clear_pending($session);
         }
 
         $answer = trim(

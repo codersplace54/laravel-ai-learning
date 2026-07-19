@@ -3,8 +3,9 @@ import logging
 from typing import Any, Dict, List
 from prompts.understand_system_prompt import UNDERSTAND_SYSTEM_PROMPT
 from fastapi import HTTPException
+from groq import RateLimitError
 
-from config import GROQ_MODEL
+from config import GROQ_MODEL, GROQ_UNDERSTAND_MODEL
 from services.groq_service import groq_client
 
 logger = logging.getLogger(__name__)
@@ -66,104 +67,481 @@ ALLOWED_REFERENCES = [
     "none",
 ]
 
+IGNORED_ASSISTANT_MESSAGES = [
+    "temporarily busy",
+    "temporarily unable to connect",
+    "could not complete the service search",
+    "please try again",
+    "ai service unavailable",
+    "ai service is unavailable",
+]
 
-def understand_message(message: str, session_meta: dict, history: list) -> dict:
-    payload = {
-        "message": message,
-        "session_meta": session_meta or {},
-        "history": history or [],
+
+def compact_session_meta(
+    session_meta: dict | None,
+) -> dict:
+    """
+    Keep only context required by the semantic planner.
+    """
+
+    source = (
+        session_meta
+        if isinstance(session_meta, dict)
+        else {}
+    )
+
+    compact = {}
+
+    simple_fields = [
+        "active_topic",
+        "active_application_id",
+        "active_application_number",
+        "active_service_id",
+        "active_service_name",
+        "language",
+    ]
+
+    for field in simple_fields:
+        value = source.get(field)
+
+        if value not in (
+            None,
+            "",
+            [],
+            {},
+        ):
+            compact[field] = value
+
+    pending_plan = source.get(
+        "pending_plan"
+    )
+
+    if isinstance(pending_plan, dict):
+        compact_pending = {}
+
+        pending_fields = [
+            "route",
+            "query_focus",
+            "answer_mode",
+            "original_message",
+            "clarification_question",
+            "clarification_count",
+            "selection_type",
+            "required_slots",
+            "missing_slots",
+        ]
+
+        for field in pending_fields:
+            value = pending_plan.get(field)
+
+            if value in (
+                None,
+                "",
+                [],
+                {},
+            ):
+                continue
+
+            if field == "original_message":
+                value = str(value)[:600]
+
+            if field == "clarification_question":
+                value = str(value)[:400]
+
+            compact_pending[field] = value
+
+        if compact_pending:
+            compact["pending_plan"] = (
+                compact_pending
+            )
+
+    entity_stack = source.get(
+        "entity_stack"
+    )
+
+    if isinstance(entity_stack, list):
+        compact_entities = []
+
+        for entity in entity_stack[-3:]:
+            if not isinstance(entity, dict):
+                continue
+
+            compact_entity = {}
+
+            for field in [
+                "type",
+                "id",
+                "text",
+                "normalized",
+            ]:
+                value = entity.get(field)
+
+                if value in (
+                    None,
+                    "",
+                    [],
+                    {},
+                ):
+                    continue
+
+                if field == "text":
+                    value = str(value)[:250]
+
+                compact_entity[field] = value
+
+            if compact_entity:
+                compact_entities.append(
+                    compact_entity
+                )
+
+        if compact_entities:
+            compact["entity_stack"] = (
+                compact_entities
+            )
+
+    return compact
+
+
+def compact_history(
+    history: list | None,
+    current_message: str,
+    has_pending_plan: bool = False,
+) -> list:
+    """
+    Remove failed assistant replies, duplicate messages,
+    long messages and unnecessary old conversation.
+    """
+
+    source = (
+        history
+        if isinstance(history, list)
+        else []
+    )
+
+    cleaned = []
+
+    normalized_current = (
+        str(current_message or "")
+        .strip()
+        .casefold()
+    )
+
+    for item in source:
+        if not isinstance(item, dict):
+            continue
+
+        role = str(
+            item.get("role", "")
+        ).strip()
+
+        history_message = str(
+            item.get("message", "")
+        ).strip()
+
+        if role not in [
+            "user",
+            "assistant",
+        ]:
+            continue
+
+        if not history_message:
+            continue
+
+        lowered = history_message.casefold()
+
+        if role == "assistant":
+            if any(
+                ignored_text in lowered
+                for ignored_text
+                in IGNORED_ASSISTANT_MESSAGES
+            ):
+                continue
+
+        # Avoid sending the current user message twice.
+        if (
+            role == "user"
+            and lowered == normalized_current
+        ):
+            continue
+
+        compact_item = {
+            "role": role,
+            "message": history_message[:450],
+        }
+
+        # Remove consecutive duplicate messages.
+        if cleaned:
+            previous = cleaned[-1]
+
+            if (
+                previous["role"]
+                == compact_item["role"]
+                and previous["message"].casefold()
+                == compact_item["message"].casefold()
+            ):
+                continue
+
+        cleaned.append(
+            compact_item
+        )
+
+    if has_pending_plan:
+        # pending_plan already contains the original
+        # requirement and clarification question.
+        return cleaned[-2:]
+
+    return cleaned[-4:]
+
+def understand_message(
+    message: str,
+    session_meta: dict,
+    history: list,
+) -> dict:
+    current_message = str(
+        message or ""
+    ).strip()
+
+    if not current_message:
+        return fallback_understanding(
+            message="",
+            reason="Empty user message",
+        )
+
+    compact_meta = compact_session_meta(
+        session_meta
+    )
+
+    pending_plan = compact_meta.get(
+        "pending_plan"
+    )
+
+    has_pending_plan = isinstance(
+        pending_plan,
+        dict,
+    ) and bool(pending_plan)
+
+    compact_chat_history = compact_history(
+        history=history,
+        current_message=current_message,
+        has_pending_plan=has_pending_plan,
+    )
+
+    # This is the only payload sent to Groq.
+    request_payload = {
+        "message": current_message,
     }
+
+    if compact_meta:
+        request_payload[
+            "session_meta"
+        ] = compact_meta
+
+    if compact_chat_history:
+        request_payload[
+            "history"
+        ] = compact_chat_history
+
+    # Compact JSON removes unnecessary whitespace tokens.
+    request_content = json.dumps(
+        request_payload,
+        default=str,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
     try:
         logger.info(
             "Understand Message Request: %s",
-            json.dumps(payload, default=str, ensure_ascii=False),
+            json.dumps(
+                request_payload,
+                default=str,
+                ensure_ascii=False,
+            ),
         )
 
-        IGNORED_ASSISTANT_MESSAGES = [
-            "temporarily busy",
-            "temporarily unable to connect",
-            "could not complete the service search",
-            "please try again in a moment",
-        ]
+        completion = (
+            groq_client
+            .chat
+            .completions
+            .create(
+                model=GROQ_UNDERSTAND_MODEL,
 
-        clean_history = []
+                messages=[
+                    {
+                        "role": "system",
+                        "content":
+                            UNDERSTAND_SYSTEM_PROMPT,
+                    },
+                    {
+                        "role": "user",
+                        "content":
+                            request_content,
+                    },
+                ],
 
-        for item in history:
-            role = str(item.get("role", "")).strip()
-            message = str(
-                item.get("message", "")
-            ).strip()
+                temperature=0,
 
-            if not message:
-                continue
+                response_format={
+                    "type": "json_object",
+                },
 
-            if role == "assistant":
-                lowered = message.lower()
-
-                if any(
-                    ignored in lowered
-                    for ignored in IGNORED_ASSISTANT_MESSAGES
-                ):
-                    continue
-
-            clean_history.append({
-                "role": role,
-                "message": message,
-            })
-
-        history = clean_history[-4:]
-
-        completion = groq_client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": UNDERSTAND_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(payload, default=str, ensure_ascii=False)},
-            ],
-            temperature=0,
-            response_format={"type": "json_object"},
-            max_completion_tokens=900,
+                max_completion_tokens=700,
+            )
         )
 
-    except Exception as e:
-        error_msg = str(e).lower()
+    except RateLimitError as exception:
+        logger.warning(
+            "Understand AI rate limited: %s",
+            str(exception),
+        )
 
-        logger.exception("Understand AI request failed")
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "AI rate limit reached. "
+                "Please wait a moment and try again."
+            ),
+        ) from exception
 
-        if "rate_limit" in error_msg or "429" in error_msg:
-            raise HTTPException(status_code=429, detail="AI rate limit reached. Please wait a moment and try again.")
+    except Exception as exception:
+        logger.exception(
+            "Understand AI request failed"
+        )
 
-        raise HTTPException(status_code=503, detail="AI service unavailable.")
+        raise HTTPException(
+            status_code=503,
+            detail="AI service unavailable.",
+        ) from exception
 
-    text = completion.choices[0].message.content if completion.choices else None
-    logger.info("Understand Message Response: %s", text)
+    usage = getattr(
+        completion,
+        "usage",
+        None,
+    )
+
+    logger.info(
+        (
+            "Understand token usage | "
+            "prompt_tokens=%s | "
+            "completion_tokens=%s | "
+            "total_tokens=%s"
+        ),
+        getattr(
+            usage,
+            "prompt_tokens",
+            None,
+        ),
+        getattr(
+            usage,
+            "completion_tokens",
+            None,
+        ),
+        getattr(
+            usage,
+            "total_tokens",
+            None,
+        ),
+    )
+
+    text = None
+
+    if completion.choices:
+        text = (
+            completion
+            .choices[0]
+            .message
+            .content
+        )
+
+    text = str(
+        text or ""
+    ).strip()
+
+    logger.info(
+        "Understand Message Response: %s",
+        text,
+    )
 
     if not text:
         return fallback_understanding(
-            message=message,
+            message=current_message,
             reason="AI returned empty response",
         )
 
     try:
         data = json.loads(text)
+
     except Exception:
-        logger.warning("AI returned invalid JSON: %s", text)
+        logger.warning(
+            "AI returned invalid JSON: %s",
+            text,
+        )
+
         return fallback_understanding(
-            message=message,
-            reason="AI returned invalid JSON or truncated JSON",
+            message=current_message,
+            reason=(
+                "AI returned invalid or "
+                "truncated JSON"
+            ),
         )
 
     if not isinstance(data, dict):
         return fallback_understanding(
-            message=message,
+            message=current_message,
             reason="AI JSON was not an object",
         )
 
-    cleaned = clean_understanding(data, message)
+    cleaned = clean_understanding(
+        data,
+        current_message,
+    )
+
+        # Prevent repeated service-discovery
+    # clarification rounds.
+    clarification_count = 0
+
+    if isinstance(pending_plan, dict):
+        try:
+            clarification_count = int(
+                pending_plan.get(
+                    "clarification_count",
+                    0,
+                )
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            clarification_count = 0
+
+    if (
+        cleaned.get("route")
+        == "service_discovery"
+        and cleaned.get("message_kind")
+        == "follow_up"
+        and clarification_count >= 1
+        and not cleaned.get(
+            "is_context_switch"
+        )
+    ):
+        cleaned[
+            "clarification_question"
+        ] = None
+
+        cleaned["required_slots"] = []
+        cleaned["missing_slots"] = []
+
+        cleaned["needs_selection"] = True
+        cleaned["selection_type"] = (
+            "service"
+        )
 
     logger.info(
         "Parsed Understanding: %s",
-        json.dumps(cleaned, ensure_ascii=False),
+        json.dumps(
+            cleaned,
+            ensure_ascii=False,
+        ),
     )
 
     return cleaned

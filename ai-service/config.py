@@ -23,6 +23,11 @@ def check_config():
         raise Exception("Missing env values: " + ", ".join(missing))
 
 
+GROQ_UNDERSTAND_MODEL = os.getenv(
+    "GROQ_UNDERSTAND_MODEL",
+    GROQ_MODEL,
+).strip()
+
 OPENROUTER_API_KEY = os.getenv(
     "OPENROUTER_API_KEY",
     ""
