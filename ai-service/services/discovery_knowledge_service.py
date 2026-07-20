@@ -19,6 +19,39 @@ SERVICE_ID_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+SERVICE_ID_LABEL_PATTERN = re.compile(
+    r"^\s*Service\s*ID\s*$",
+    re.IGNORECASE,
+)
+
+NUMBER_ONLY_PATTERN = re.compile(
+    r"^\s*(\d+)\s*$",
+)
+
+PROFILE_SECTION_PATTERN = re.compile(
+    r"\b(?:individual\s+)?service\s+discovery\s+profiles?\b",
+    re.IGNORECASE,
+)
+
+NUMBERED_HEADING_PATTERN = re.compile(
+    r"^\s*(?:\d+\.\s+|\d+(?:\.\d+)+\s+)\S",
+)
+
+TITLE_STOP_PATTERNS = (
+    re.compile(
+        r"^\s*Official\s+Service\s+Name\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^\s*Department\s*:?\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^\s*Service\s+ID\s*:?\s*$",
+        re.IGNORECASE,
+    ),
+)
+
 
 def clean_pdf_text(text: str) -> str:
     """
@@ -58,84 +91,249 @@ def clean_pdf_text(text: str) -> str:
     ).strip()
 
 
+def profile_section_start(
+    lines: list[str],
+) -> int | None:
+    """
+    Return the first full service-profile section.
+
+    Many discovery PDFs contain an early service summary table and later
+    contain the complete service profiles. When complete profiles exist,
+    only those later sections should create service chunks.
+    """
+
+    for index, line in enumerate(lines):
+        if PROFILE_SECTION_PATTERN.search(
+            line
+        ):
+            return index
+
+    return None
+
+
+def is_title_stop_line(
+    line: str,
+) -> bool:
+    if PROFILE_SECTION_PATTERN.search(
+        line
+    ):
+        return True
+
+    return any(
+        pattern.match(line)
+        for pattern in TITLE_STOP_PATTERNS
+    )
+
+
 def nearest_heading_before(
     lines: list[str],
     service_id_line_index: int,
+    floor_index: int = 0,
 ) -> tuple[int, str]:
     """
-    Find the service heading directly above:
-    Service ID: 37
+    Find the service title immediately above the Service ID.
+
+    Supports wrapped titles such as:
+
+    5.1 Principal Employer Registration Under The Contract
+    Labour Act
+    Service ID: 16
     """
 
-    start_index = service_id_line_index
-    title = ""
+    title_end = None
 
     for index in range(
         service_id_line_index - 1,
-        max(-1, service_id_line_index - 5),
+        floor_index - 1,
+        -1,
+    ):
+        if lines[index].strip():
+            title_end = index
+            break
+
+    if title_end is None:
+        return service_id_line_index, ""
+
+    title_start = None
+
+    for index in range(
+        title_end,
+        max(
+            floor_index - 1,
+            title_end - 8,
+        ),
         -1,
     ):
         line = lines[index].strip()
 
-        if not line:
+        if NUMBERED_HEADING_PATTERN.match(
+            line
+        ):
+            title_start = index
+            break
+
+        if index < title_end:
+            if not line:
+                break
+
+            if is_title_stop_line(line):
+                break
+
+    if title_start is None:
+        title_start = title_end
+
+    title_parts = [
+        lines[index].strip()
+        for index in range(
+            title_start,
+            title_end + 1,
+        )
+        if lines[index].strip()
+    ]
+
+    title = " ".join(
+        title_parts
+    )
+
+    title = re.sub(
+        r"^\s*\d+(?:\.\d+)*\.?\s*",
+        "",
+        title,
+    ).strip(" -:")
+
+    return title_start, title
+
+
+def find_service_markers(
+    lines: list[str],
+) -> tuple[int | None, list[dict]]:
+    """
+    Detect service profile markers.
+
+    Supported PDF layouts:
+
+    Service Name
+    Service ID: 37
+
+    and:
+
+    Official Service Name
+    Land Allotment
+    Service ID
+    64
+
+    When a full Service Discovery Profiles section exists, summary-table
+    Service IDs before that section are deliberately ignored.
+    """
+
+    profile_start = profile_section_start(
+        lines
+    )
+
+    floor_index = (
+        profile_start + 1
+        if profile_start is not None
+        else 0
+    )
+
+    markers = []
+    index = floor_index
+
+    while index < len(lines):
+        line = lines[index]
+
+        inline_match = SERVICE_ID_PATTERN.match(
+            line
+        )
+
+        service_id = None
+        service_id_line = index
+
+        if inline_match:
+            service_id = int(
+                inline_match.group(1)
+            )
+
+        elif SERVICE_ID_LABEL_PATTERN.match(
+            line
+        ):
+            value_index = index + 1
+
+            while (
+                value_index < len(lines)
+                and not lines[
+                    value_index
+                ].strip()
+                and value_index <= index + 3
+            ):
+                value_index += 1
+
+            value_match = (
+                NUMBER_ONLY_PATTERN.match(
+                    lines[value_index]
+                )
+                if value_index < len(lines)
+                else None
+            )
+
+            if value_match:
+                service_id = int(
+                    value_match.group(1)
+                )
+
+        if service_id is None:
+            index += 1
             continue
 
-        title = line
-        start_index = index
-        break
+        start_index, service_title = (
+            nearest_heading_before(
+                lines,
+                service_id_line,
+                floor_index=floor_index,
+            )
+        )
 
-    return start_index, title
+        markers.append({
+            "service_id": service_id,
+            "service_id_line": (
+                service_id_line
+            ),
+            "start_index": start_index,
+            "service_title": (
+                service_title
+            ),
+        })
+
+        index += 1
+
+    return profile_start, markers
 
 
 def extract_service_blocks(
     text: str,
 ) -> list[dict]:
     """
-    Split a category document into:
-    - general introductory guidance
-    - one block per service entry
+    Split a discovery document into general guidance and complete service
+    profiles.
 
-    Expected service entry format:
-
-    Service Name
-    Service ID: 37
-    Department: Directorate of Labour
+    The parser intentionally prefers full service-profile sections over
+    early summary tables so guidance is never assigned to the wrong service.
     """
 
     lines = text.split("\n")
 
-    service_markers = []
-
-    for index, line in enumerate(lines):
-        match = SERVICE_ID_PATTERN.match(
-            line
-        )
-
-        if not match:
-            continue
-
-        service_id = int(
-            match.group(1)
-        )
-
-        start_index, service_title = (
-            nearest_heading_before(
-                lines,
-                index,
-            )
-        )
-
-        service_markers.append({
-            "service_id": service_id,
-            "service_id_line": index,
-            "start_index": start_index,
-            "service_title": service_title,
-        })
+    _, service_markers = (
+        find_service_markers(lines)
+    )
 
     if not service_markers:
         return [{
-            "section_type": "general_guidance",
-            "section_title": "General Guidance",
+            "section_type": (
+                "general_guidance"
+            ),
+            "section_title": (
+                "General Guidance"
+            ),
             "service_ids": [],
             "text": text,
         }]
@@ -152,8 +350,12 @@ def extract_service_blocks(
 
     if introduction:
         blocks.append({
-            "section_type": "general_guidance",
-            "section_title": "General Guidance",
+            "section_type": (
+                "general_guidance"
+            ),
+            "section_title": (
+                "General Guidance"
+            ),
             "service_ids": [],
             "text": introduction,
         })
@@ -180,20 +382,23 @@ def extract_service_blocks(
             continue
 
         blocks.append({
-            "section_type": "service_profile",
-
+            "section_type": (
+                "service_profile"
+            ),
             "section_title": (
                 marker["service_title"]
                 or (
                     "Service "
-                    + str(marker["service_id"])
+                    + str(
+                        marker[
+                            "service_id"
+                        ]
+                    )
                 )
             ),
-
             "service_ids": [
                 marker["service_id"]
             ],
-
             "text": block_text,
         })
 

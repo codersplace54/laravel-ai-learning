@@ -30,6 +30,7 @@ def generate_openrouter_answer(
     messages: list[dict[str, Any]],
     temperature: float = 0.1,
     max_tokens: int = 1000,
+    reasoning_effort: str = "low",
 ) -> str:
     """
     Generate the final RAG answer using OpenRouter.
@@ -76,7 +77,14 @@ def generate_openrouter_answer(
         "temperature": temperature,
         "max_tokens": max_tokens,
 
-        # Your answer service expects JSON.
+        # Reasoning tokens count against max_tokens. Keep reasoning small for
+        # structured RAG validation and do not return the reasoning text.
+        "reasoning": {
+            "effort": reasoning_effort,
+            "exclude": True,
+        },
+
+        # The answer service always expects a JSON object.
         "response_format": {
             "type": "json_object",
         },
@@ -172,8 +180,20 @@ def generate_openrouter_answer(
                     "OpenRouter returned no choices."
                 )
 
+            choice = choices[0]
+
+            finish_reason = str(
+                choice.get("finish_reason")
+                or ""
+            ).strip()
+
+            native_finish_reason = str(
+                choice.get("native_finish_reason")
+                or ""
+            ).strip()
+
             message = (
-                choices[0].get("message")
+                choice.get("message")
                 or {}
             )
 
@@ -223,11 +243,19 @@ def generate_openrouter_answer(
                 "usage"
             ) or {}
 
+            completion_details = (
+                usage.get("completion_tokens_details")
+                or {}
+            )
+
             logger.info(
                 (
                     "OpenRouter answer received | "
                     "model=%s | prompt_tokens=%s | "
-                    "completion_tokens=%s"
+                    "completion_tokens=%s | "
+                    "reasoning_tokens=%s | "
+                    "finish_reason=%s | "
+                    "native_finish_reason=%s"
                 ),
                 result.get(
                     "model",
@@ -237,7 +265,19 @@ def generate_openrouter_answer(
                 usage.get(
                     "completion_tokens"
                 ),
+                completion_details.get(
+                    "reasoning_tokens"
+                ),
+                finish_reason,
+                native_finish_reason,
             )
+
+            if finish_reason == "length":
+                raise OpenRouterError(
+                    "OpenRouter output was truncated "
+                    "because the completion-token limit "
+                    "was reached."
+                )
 
             return content
 

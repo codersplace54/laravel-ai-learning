@@ -1,155 +1,87 @@
 import json
-from fastapi import HTTPException
-from config import GROQ_MODEL
-from services.groq_service import groq_client
-from services.vector_service import search_service_chunks, search_service_discovery_chunks
 import logging
-from prompts.application_chat_prompt import APPLICATION_STUCK_EXPLANATION_PROMPT
-logger = logging.getLogger(__name__)
+import re
+
+from prompts.application_chat_prompt import (
+    APPLICATION_STUCK_EXPLANATION_PROMPT,
+)
 from services.openrouter_service import (
     OpenRouterError,
     OpenRouterRateLimitError,
     generate_openrouter_answer,
 )
+from services.vector_service import (
+    search_service_chunks,
+    search_service_discovery_chunks,
+)
+
+logger = logging.getLogger(__name__)
+
 
 SERVICE_SECTION_BY_FOCUS = {
     "service_info": "overview",
     "service_department": "overview",
-
     "service_documents": "documents",
     "documents_for_service": "documents",
     "service_required_documents": "documents",
-
     "service_questionnaire": "questionnaire",
     "service_eligibility": "questionnaire",
     "service_how_to_apply": "questionnaire",
-
     "service_fee": "fees",
     "service_refund_rule": "fees",
-
     "service_processing_time": "approval_flow",
     "service_approval_flow": "approval_flow",
-
     "service_renewal": "renewal",
     "service_renewal_fee": "renewal",
-
     "service_certificate": "certificate",
     "service_noc": "certificate",
     "service_validity": "certificate",
 }
 
+
 CHAT_ANSWER_PROMPT = """
-You are SWAAGAT AI Assistant — a helpful government portal assistant for Tripura, India.
+You are SWAAGAT AI Assistant, a government portal assistant for Tripura.
 
-You will receive a user message, a data_scope, and a context object with verified data from the database.
-Answer the user's question naturally and helpfully using the provided context.
+You receive a user message, a data_scope and verified context.
+Answer only from that context.
 
-General rules:
-- Do NOT say "according to JSON" or "database" or "context".
-- Do NOT invent data not present in context.
-- Do NOT say "This information is not available" if the context has relevant data.
-- Answer in simple, clear language. Be direct and helpful.
-- If data is genuinely missing, say so clearly and suggest what the user can do.
+Never invent facts.
+Never mention JSON, RAG, Qdrant, embeddings, database tables or hidden
+context.
 
-Scope-specific rules:
+APPLICATION_COLLECTION_DATA:
+- If context.query_result.message exists and answer_from_ai is not true,
+  return that message exactly.
+- Otherwise use context.query_result.applications only.
+- For totals, sum paid_amount.
+- For expiry, use noc_expiry_date.
+- For renewal candidates, use status expired or noc_issued.
 
-If data_scope is APPLICATION_DATA:
-- Answer ONLY about the specific application's status, payment, timeline, certificate, or renewal.
-- Use the application context to give a direct, factual answer.
-- Mention application number, service name, current status, and any relevant details.
-- If payment is pending, mention the amount due.
-- If certificate is available, mention it.
-- Do NOT invent data not present in context.
+APPLICATION_LIST:
+- Mention total count and filtered count when applicable.
+- List application number, service name and status.
 
-If data_scope is APPLICATION_COLLECTION_DATA:
-- CRITICAL: If context.query_result.message is set AND context.query_result.answer_from_ai is not true, output that message EXACTLY as your answer. Do NOT rephrase, expand, or add anything.
-- Only if context.query_result.answer_from_ai is true, use context.query_result.applications[] to answer. You can sort, compare, filter, or find specific records.
-- For totals: sum paid_amount. For expiry: use noc_expiry_date. For renewal candidates: status expired or noc_issued.
-- Be direct. One or two sentences maximum unless a list is genuinely needed.
-- Do NOT repeat the service name on every line if all applications are for the same service.
-
-If data_scope is APPLICATION_LIST:
-- Summarize the applications clearly.
-- Mention total count and filtered count if filter was applied.
-- List application numbers, service names, and statuses.
-- If filtered (e.g. payment pending, noc issued), mention only those.
-- Example: "You have 12 applications in total. 3 have payment pending: CFO-57-000688 (Factory License), ..."
-
-If data_scope is SERVICE_DISCOVERY:
-
-- Recommend only services explicitly present in context.rag_chunks.
-- Every candidate must have a numeric Service ID and exact service name
-  found in the retrieved chunks.
-- Never invent, assume, rename or suggest a service using general model
-  knowledge.
-- Ask at most one combined clarification question.
-- After one clarification, recommend up to three verified candidates.
-- Do not ask the user which licence or registration they think they need.
-- If no reliable matching service exists in the retrieved chunks, clearly
-  say that no verified SWAAGAT service was found.
-
-When no match is found, return:
-
-{
-  "answer": "I could not find a verified matching SWAAGAT service in the available guidance.",
-  "answer_type": "service_discovery",
-  "needs_clarification": false,
-  "clarification_question": null,
-  "candidate_services": []
-}
-
-Return JSON in this shape:
-
-{
-  "answer": "User-facing recommendation or clarification question",
-  "answer_type": "service_discovery",
-  "needs_clarification": true,
-  "clarification_question": "Question to ask, or null",
-  "candidate_services": [
-    {
-      "service_id": 16,
-      "service_name": "Exact service name from retrieved knowledge",
-      "reason": "Why this service may match"
-    }
-  ]
-}
-
-If data_scope is SERVICE_DATA:
+SERVICE_DATA:
 - Answer only about the selected service.
-- context.rag_chunks contains verified knowledge generated from the latest published service configuration.
-- context.db_data contains live service configuration that Laravel has provided.
-- Prefer the most relevant RAG chunks for service overview, questionnaire, documents, fees, approval flow, processing time, renewal, certificate and NOC rules.
-- Use only information present in context.
-- Do not invent eligibility, documents, fees, timelines, renewal rules, certificate rules, refund rules or approval steps.
-- A configured processing target is not a guaranteed approval date.
-- A configured certificate setting does not prove that a user's certificate has been issued.
-- A configured renewal cycle does not prove that a specific user's licence is currently eligible for renewal.
-- The actual user's application status, paid amount, certificate availability and expiry date require live application data.
-- You may explain general service-level renewal and certificate rules when the user asks about them.
-- If no relevant verified information exists, say: "Verified information for this service is currently unavailable."
-- Do not mention RAG, Qdrant, JSON, embeddings or database tables.
+- Use context.rag_chunks and context.db_data.
+- Do not invent eligibility, documents, fees, timelines, renewal rules,
+  certificate rules, refund rules or approval steps.
+- A processing target is not a guaranteed approval date.
+- Service configuration does not prove a user's payment, certificate,
+  renewal eligibility or application status.
+- If verified information is missing, say:
+  "Verified information for this service is currently unavailable."
 
-If data_scope is ACCOUNT_DATA:
-- Answer only about the user's account details (name, email, mobile, username).
-- Do not mention applications or services.
+ACCOUNT_DATA:
+- Answer only about the user's account details.
 
-If data_scope is GENERAL:
-- Answer the user's question using any available context.
-- If application_context is provided, use it to answer follow-up questions.
-- If no relevant context, give a helpful general answer about the portal.
-- Do NOT say "not available" if you can give a useful general answer.
+GENERAL or RAG_KNOWLEDGE:
+- Give a helpful portal answer from the available verified context.
 
-If data_scope is RAG_KNOWLEDGE:
-- Answer general process/SOP/FAQ questions.
-- If no specific data is available, give a helpful general answer about government portal processes.
-
-Formatting rules:
-- Keep answers SHORT. Answer only what was asked. Do not volunteer extra information.
-- If the PHP query_result.message already contains the full answer, output it as-is.
-- If answer contains a list, use numbered bullets. Put application number in bold.
-- Do NOT repeat the service name on every list item if all items share the same service.
-- Do NOT write long paragraphs. Use short lines.
-- Use Markdown: **bold**, numbered lists, bullet points only.
+Formatting:
+- Keep the answer short and direct.
+- Use short paragraphs or numbered bullets only when needed.
+- If context.query_result.message already contains the full answer, use it.
 
 Return only valid JSON:
 {
@@ -161,29 +93,320 @@ Return only valid JSON:
 """
 
 
+SERVICE_DISCOVERY_PROMPT = """
+You verify SWAAGAT service-discovery matches.
+
+INPUT:
+- current_message: the user's exact latest message
+- resolved_request: a planner-generated combined request
+- is_new_independent_request: whether the latest message starts a fresh topic
+- clarification_already_asked: whether one clarification was already asked
+  for this same request
+- candidates: verified SWAAGAT service guidance retrieved from Qdrant
+
+SOURCE-OF-TRUTH RULES:
+1. current_message is authoritative.
+2. resolved_request is only a helper.
+3. If is_new_independent_request is true, do not inherit any role, activity,
+   service, purpose or requested action from earlier conversation.
+4. Do not trust a role, activity or requested action that appears only in
+   resolved_request unless current_message is clearly a direct answer to a
+   clarification for the same request.
+5. "I have workers/labourers" does not prove that the user is a contractor,
+   labour supplier or principal employer.
+6. "Contractor" alone does not prove labour-contractor activity.
+
+MATCHING RULES:
+A candidate is valid only when its guidance explicitly covers the same:
+- regulated activity or business purpose,
+- applicant role,
+- requested action such as new, amendment, renewal, return or closure,
+- jurisdiction or special qualifier when relevant.
+
+Generic words such as contractor, business, shop, construction, workers,
+food, licence, registration, approval, waste or renewal are not enough.
+
+Treat "consider this service when", "do not recommend", "only when",
+"confirm", "mandatory clarification" and recommendation restrictions as
+hard rules.
+
+A related or additional compliance cannot replace the permission the user
+actually requested.
+
+Never use general legal knowledge to fill a missing condition.
+Use only candidate Service IDs internally.
+Never invent a Service ID or service name.
+Never mention a Service ID or internal identifier in the user-facing answer.
+Preserve the verified service name exactly as supplied in candidates.
+
+CLARIFICATION:
+- If key facts are missing and clarification_already_asked is false, ask one
+  combined clarification question covering no more than:
+  applicant role, regulated activity/category and requested action.
+- When clarification is needed, return no candidate services.
+- If clarification_already_asked is true, never ask another question.
+- Recommend at most three candidates.
+- If no candidate directly matches, return an empty candidate_services list.
+
+Return only valid JSON:
+{
+  "answer": "brief answer or clarification question",
+  "short_status": null,
+  "answer_type": "service_discovery",
+  "confidence": 0.0,
+  "needs_clarification": false,
+  "clarification_question": null,
+  "candidate_services": [
+    {
+      "service_id": 37,
+      "service_name": "exact verified service name",
+      "reason": "brief evidence tied to the exact request"
+    }
+  ]
+}
+"""
+
+
+_NEW_REQUEST_PREFIXES = (
+    "one more question",
+    "another question",
+    "new question",
+    "a different question",
+    "different question",
+    "separate question",
+    "separately",
+    "forget that",
+    "ignore that",
+    "moving on",
+    "next question",
+)
+
+
+def _is_new_request_signal(message: str) -> bool:
+    normalized = re.sub(
+        r"\s+",
+        " ",
+        str(message or "").strip().casefold(),
+    )
+
+    return any(
+        normalized.startswith(prefix)
+        for prefix in _NEW_REQUEST_PREFIXES
+    )
+
+
+def _clean_new_request_prefix(message: str) -> str:
+    text = str(message or "").strip()
+
+    for prefix in _NEW_REQUEST_PREFIXES:
+        pattern = rf"^\s*{re.escape(prefix)}\s*[-:,.]?\s*"
+
+        cleaned = re.sub(
+            pattern,
+            "",
+            text,
+            count=1,
+            flags=re.IGNORECASE,
+        ).strip()
+
+        if cleaned != text:
+            return cleaned or text
+
+    return text
+
+
+def _clean_service_name(value: object) -> str:
+    name = str(value or "").strip()
+
+    name = re.sub(
+        r"^\d+(?:\.\d+)*\s*",
+        "",
+        name,
+    ).strip(" -:")
+
+    return name
+
+
+def _prepare_discovery_chunks(raw_chunks: list) -> list:
+    """
+    Deduplicate by service ID and merge the strongest rule-rich text.
+
+    The previous flow sent repeated chunks and cut each chunk at 700
+    characters. That could remove the "do not recommend" section.
+    """
+
+    grouped = {}
+
+    for chunk in raw_chunks:
+        if chunk.get("section_type") != "service_profile":
+            continue
+
+        service_ids = chunk.get("service_ids")
+
+        if not isinstance(service_ids, list):
+            continue
+
+        text = str(chunk.get("text") or "").strip()
+
+        if not text:
+            continue
+
+        score = float(chunk.get("score") or 0)
+        lowered = text.casefold()
+
+        rule_bonus = 0.0
+
+        if "consider this service" in lowered:
+            rule_bonus += 0.03
+
+        if "who should consider" in lowered:
+            rule_bonus += 0.02
+
+        if "do not recommend" in lowered:
+            rule_bonus += 0.04
+
+        if "mandatory clarification" in lowered:
+            rule_bonus += 0.02
+
+        if "recommendation restriction" in lowered:
+            rule_bonus += 0.02
+
+        quality = score + rule_bonus
+
+        service_name = _clean_service_name(
+            chunk.get("section_title")
+        )
+
+        for raw_service_id in service_ids:
+            try:
+                service_id = int(raw_service_id)
+            except (TypeError, ValueError):
+                continue
+
+            if service_id <= 0:
+                continue
+
+            group = grouped.setdefault(
+                service_id,
+                {
+                    "service_id": service_id,
+                    "service_name": service_name,
+                    "category": chunk.get("category"),
+                    "score": score,
+                    "parts": [],
+                },
+            )
+
+            if (
+                not group["service_name"]
+                and service_name
+            ):
+                group["service_name"] = service_name
+
+            group["score"] = max(
+                float(group["score"] or 0),
+                score,
+            )
+
+            group["parts"].append(
+                {
+                    "text": text,
+                    "quality": quality,
+                }
+            )
+
+    prepared = []
+
+    for group in grouped.values():
+        parts = sorted(
+            group.pop("parts"),
+            key=lambda item: item["quality"],
+            reverse=True,
+        )
+
+        guidance_parts = []
+        seen = set()
+        total_length = 0
+
+        for part in parts:
+            part_text = part["text"]
+            normalized = re.sub(
+                r"\s+",
+                " ",
+                part_text.casefold(),
+            )
+
+            if normalized in seen:
+                continue
+
+            seen.add(normalized)
+
+            remaining = 1400 - total_length
+
+            if remaining <= 0:
+                break
+
+            selected = part_text[:remaining].strip()
+
+            if selected:
+                guidance_parts.append(selected)
+                total_length += len(selected) + 2
+
+            if len(guidance_parts) >= 2:
+                break
+
+        if not group["service_name"]:
+            continue
+
+        group["score"] = round(
+            float(group["score"] or 0),
+            4,
+        )
+        group["guidance"] = "\n\n".join(
+            guidance_parts
+        )
+
+        prepared.append(group)
+
+    prepared.sort(
+        key=lambda item: item["score"],
+        reverse=True,
+    )
+
+    return prepared[:6]
+
+
 def _inject_rag_chunks(
     context: dict,
     data_scope: str,
     message: str,
 ) -> dict:
-    """
-    Retrieve generated service knowledge from Qdrant.
-
-    Retrieval is always filtered by service_id.
-    When possible, it is also filtered by section_type.
-    """
+    """Attach only the verified knowledge needed for the current answer."""
 
     db_data = context.get("db_data") or {}
     ai_plan = context.get("_ai_plan") or {}
 
-    if data_scope == "SERVICE_DISCOVERY":
-        resolved_question = str(
-            ai_plan.get("resolved_question")
-            or message
-            or ""
-        ).strip()
+    resolved_question = str(
+        ai_plan.get("resolved_question")
+        or message
+        or ""
+    ).strip()
 
-        filters = ai_plan.get("filters") or {}
+    if data_scope == "SERVICE_DISCOVERY":
+        is_new_request = _is_new_request_signal(
+            message
+        )
+
+        retrieval_question = (
+            _clean_new_request_prefix(message)
+            if is_new_request
+            else resolved_question
+        )
+
+        filters = ai_plan.get("filters")
+
+        if not isinstance(filters, dict):
+            filters = {}
 
         category = (
             context.get("category")
@@ -191,91 +414,49 @@ def _inject_rag_chunks(
         )
 
         raw_chunks = search_service_discovery_chunks(
-            question=resolved_question,
+            question=retrieval_question,
             category=category,
-            limit=8,
+            limit=20,
         )
 
-        chunks = []
-
-        for chunk in raw_chunks:
-            if (
-                chunk.get("section_type")
-                != "service_profile"
-            ):
-                continue
-
-            compact_chunk = dict(chunk)
-
-            compact_chunk["text"] = str(
-                chunk.get("text", "")
-            )[:700]
-
-            chunks.append(
-                compact_chunk
-            )
-
-            if len(chunks) >= 5:
-                break
+        chunks = _prepare_discovery_chunks(
+            raw_chunks
+        )
 
         context["rag_chunks"] = chunks
-
-        logger.info(
-            "Discovery chunks sent to answer model:\n%s",
-            json.dumps(
-                [
-                    {
-                        "document_key": chunk.get(
-                            "document_key"
-                        ),
-                        "section_type": chunk.get(
-                            "section_type"
-                        ),
-                        "section_title": chunk.get(
-                            "section_title"
-                        ),
-                        "service_ids": chunk.get(
-                            "service_ids",
-                            [],
-                        ),
-                        "score": chunk.get(
-                            "score"
-                        ),
-                        "text": chunk.get(
-                            "text",
-                            "",
-                        ),
-                    }
-                    for chunk in chunks
-                ],
-                indent=2,
-                ensure_ascii=False,
-            ),
-        )
         context["rag_retrieval"] = {
             "route": "service_discovery",
+            "raw_message": str(message or "").strip(),
             "resolved_question": resolved_question,
+            "retrieval_question": retrieval_question,
+            "is_new_independent_request": is_new_request,
             "category": category,
-            "chunks_found": len(chunks),
             "raw_chunks_found": len(raw_chunks),
-            "document_keys": list({
-                chunk.get("document_key")
+            "chunks_found": len(chunks),
+            "service_ids": [
+                chunk["service_id"]
                 for chunk in chunks
-                if chunk.get("document_key")
-            }),
+            ],
         }
 
         logger.info(
             (
-                "Service discovery RAG injected | "
-                "category=%s | raw_chunks=%d | "
-                "compact_chunks=%d | documents=%s"
+                "Service discovery RAG | "
+                "new_request=%s | "
+                "retrieval_question=%s | "
+                "raw=%d | unique=%d | services=%s"
             ),
-            category,
+            is_new_request,
+            retrieval_question,
             len(raw_chunks),
             len(chunks),
-            context["rag_retrieval"][
-                "document_keys"
+            [
+                {
+                    "service_id": chunk["service_id"],
+                    "service_name": chunk["service_name"],
+                    "score": chunk["score"],
+                }
+                for chunk in chunks
             ],
         )
 
@@ -283,7 +464,7 @@ def _inject_rag_chunks(
 
     if data_scope != "SERVICE_DATA":
         return context
-  
+
     service_id = (
         context.get("service_id")
         or db_data.get("service_id")
@@ -293,16 +474,8 @@ def _inject_rag_chunks(
         logger.warning(
             "SERVICE_DATA received without service_id"
         )
-
         context["rag_chunks"] = []
-
         return context
-
-    resolved_question = str(
-        ai_plan.get("resolved_question")
-        or message
-        or ""
-    ).strip()
 
     query_focus = str(
         ai_plan.get("query_focus")
@@ -320,9 +493,6 @@ def _inject_rag_chunks(
         limit=6,
     )
 
-    
-    # If the expected section does not exist, retry across
-    # all sections for the same service.
     if not chunks and section_type:
         chunks = search_service_chunks(
             question=resolved_question,
@@ -332,7 +502,6 @@ def _inject_rag_chunks(
         )
 
     context["rag_chunks"] = chunks
-
     context["rag_retrieval"] = {
         "service_id": int(service_id),
         "query_focus": query_focus,
@@ -343,61 +512,284 @@ def _inject_rag_chunks(
 
     logger.info(
         (
-            "Service RAG injected | "
-            "service_id=%d | "
-            "query_focus=%s | "
-            "section_type=%s | "
-            "chunks=%d | "
-            "knowledge_keys=%s"
+            "Service RAG | service_id=%d | "
+            "focus=%s | section=%s | chunks=%d"
         ),
         int(service_id),
         query_focus,
         section_type,
         len(chunks),
-        [
-            chunk.get("knowledge_key")
-            for chunk in chunks
-        ],
     )
 
     return context
 
-def answer_from_context(
-    request_data,
-) -> dict:  
-    context = dict(
-        request_data.context or {}
+
+def _normalize_discovery_result(
+    data: dict,
+    chunks: list,
+    allow_clarification: bool,
+) -> dict:
+    """
+    Validate model output.
+
+    Service IDs stay available internally but are never included in the
+    user-facing answer.
+    """
+
+    available = {
+        int(chunk["service_id"]): chunk
+        for chunk in chunks
+    }
+
+    needs_clarification = bool(
+        data.get("needs_clarification")
     )
 
-    # Add RAG chunks when required.
+    clarification_question = str(
+        data.get("clarification_question")
+        or data.get("answer")
+        or ""
+    ).strip()
+
+    if (
+        needs_clarification
+        and allow_clarification
+        and clarification_question
+    ):
+        return {
+            "answer": clarification_question[:500],
+            "short_status": None,
+            "answer_type": "service_discovery",
+            "confidence": 0.0,
+            "needs_clarification": True,
+            "clarification_question": (
+                clarification_question[:500]
+            ),
+            "candidate_services": [],
+        }
+
+    raw_candidates = data.get(
+        "candidate_services"
+    )
+
+    if not isinstance(raw_candidates, list):
+        raw_candidates = []
+
+    validated = []
+    seen_ids = set()
+
+    for candidate in raw_candidates:
+        if not isinstance(candidate, dict):
+            continue
+
+        try:
+            service_id = int(
+                candidate.get("service_id")
+            )
+        except (TypeError, ValueError):
+            continue
+
+        if (
+            service_id not in available
+            or service_id in seen_ids
+        ):
+            continue
+
+        source = available[service_id]
+
+        # Always use Qdrant's verified name.
+        service_name = str(
+            source.get("service_name")
+            or ""
+        ).strip()
+
+        if not service_name:
+            continue
+
+        reason = str(
+            candidate.get("reason")
+            or ""
+        ).strip()
+
+        if len(reason) > 220:
+            reason = (
+                reason[:217].rstrip()
+                + "..."
+            )
+
+        validated.append(
+            {
+                "service_id": service_id,
+                "service_name": service_name,
+                "reason": reason,
+            }
+        )
+
+        seen_ids.add(service_id)
+
+        if len(validated) == 3:
+            break
+
+    if not validated:
+        return {
+            "answer": (
+                "I could not find a verified SWAAGAT service "
+                "that directly matches this requirement in "
+                "the available guidance."
+            ),
+            "short_status": None,
+            "answer_type": "service_discovery",
+            "confidence": 0.0,
+            "needs_clarification": False,
+            "clarification_question": None,
+            "candidate_services": [],
+        }
+
+    if len(validated) == 1:
+        answer = (
+            "The matching SWAAGAT service is "
+            f"**{validated[0]['service_name']}**."
+        )
+    else:
+        lines = [
+            "These SWAAGAT services may match your requirement:"
+        ]
+
+        for index, candidate in enumerate(
+            validated,
+            start=1,
+        ):
+            lines.append(
+                f"{index}. **{candidate['service_name']}**"
+            )
+
+        answer = "\n".join(lines)
+
+    try:
+        confidence = float(
+            data.get("confidence")
+            or 0.8
+        )
+    except (TypeError, ValueError):
+        confidence = 0.8
+
+    return {
+        "answer": answer,
+        "short_status": None,
+        "answer_type": "service_discovery",
+        "confidence": max(
+            0.0,
+            min(1.0, confidence),
+        ),
+        "needs_clarification": False,
+        "clarification_question": None,
+        "candidate_services": validated,
+    }
+
+
+def answer_from_context(request_data) -> dict:
     context = _inject_rag_chunks(
-        context=context,
+        context=dict(
+            request_data.context or {}
+        ),
         data_scope=request_data.data_scope,
         message=request_data.message,
     )
 
-    payload = {
-        "message": request_data.message,
-        "data_scope": request_data.data_scope,
-        "context": context,
-    }
-
-    logger.info(
-        "Answer Request Payload:\n%s",
-        json.dumps(
-            payload,
-            indent=4,
-            ensure_ascii=False,
-            default=str,
-        ),
+    is_discovery = (
+        request_data.data_scope
+        == "SERVICE_DISCOVERY"
     )
 
-    system_prompt = (
-        APPLICATION_STUCK_EXPLANATION_PROMPT
-        if request_data.data_scope
-        == "APPLICATION_DATA"
-        else CHAT_ANSWER_PROMPT
-    )
+    if is_discovery:
+        ai_plan = context.get("_ai_plan") or {}
+        retrieval = (
+            context.get("rag_retrieval")
+            or {}
+        )
+
+        raw_message = str(
+            request_data.message or ""
+        ).strip()
+
+        resolved_question = str(
+            ai_plan.get("resolved_question")
+            or raw_message
+        ).strip()
+
+        is_new_request = bool(
+            retrieval.get(
+                "is_new_independent_request"
+            )
+        )
+
+        message_kind = str(
+            ai_plan.get("message_kind")
+            or ""
+        ).strip().casefold()
+
+        clarification_already_asked = (
+            message_kind == "follow_up"
+            and not is_new_request
+        )
+
+        payload = {
+            "current_message": raw_message,
+            "resolved_request": resolved_question,
+            "is_new_independent_request": (
+                is_new_request
+            ),
+            "clarification_already_asked": (
+                clarification_already_asked
+            ),
+            "candidates": context.get(
+                "rag_chunks",
+                [],
+            ),
+        }
+
+        system_prompt = (
+            SERVICE_DISCOVERY_PROMPT
+        )
+        max_tokens = 500
+
+        logger.info(
+            (
+                "Discovery answer request | "
+                "current_message=%s | "
+                "resolved_request=%s | "
+                "new_request=%s | "
+                "clarification_already_asked=%s | "
+                "candidate_ids=%s"
+            ),
+            raw_message,
+            resolved_question,
+            is_new_request,
+            clarification_already_asked,
+            [
+                item.get("service_id")
+                for item in payload["candidates"]
+            ],
+        )
+    else:
+        payload = {
+            "message": request_data.message,
+            "data_scope": request_data.data_scope,
+            "context": context,
+        }
+
+        system_prompt = (
+            APPLICATION_STUCK_EXPLANATION_PROMPT
+            if request_data.data_scope
+            == "APPLICATION_DATA"
+            else CHAT_ANSWER_PROMPT
+        )
+        max_tokens = 1000
+
+        logger.info(
+            "Answer request | scope=%s",
+            request_data.data_scope,
+        )
 
     messages = [
         {
@@ -416,20 +808,16 @@ def answer_from_context(
     ]
 
     try:
-        raw_content = (
-            generate_openrouter_answer(
-                messages=messages,
-                temperature=0.1,
-                max_tokens=1000,
-            )
+        raw_content = generate_openrouter_answer(
+            messages=messages,
+            temperature=0,
+            max_tokens=max_tokens,
         )
-
     except OpenRouterRateLimitError:
         logger.warning(
             "Final answer rate limited by OpenRouter"
         )
         raise
-
     except OpenRouterError as exception:
         logger.error(
             (
@@ -455,10 +843,7 @@ def answer_from_context(
         )
 
     try:
-        data = json.loads(
-            text
-        )
-
+        data = json.loads(text)
     except json.JSONDecodeError as exception:
         logger.error(
             (
@@ -467,17 +852,27 @@ def answer_from_context(
             ),
             text,
         )
-
         raise RuntimeError(
             "Answer model returned invalid JSON."
         ) from exception
 
     if not isinstance(data, dict):
         raise RuntimeError(
-            (
-                "Answer model response must "
-                "be a JSON object."
-            )
+            "Answer model response must be a JSON object."
+        )
+
+    if is_discovery:
+        return _normalize_discovery_result(
+            data=data,
+            chunks=context.get(
+                "rag_chunks",
+                [],
+            ),
+            allow_clarification=(
+                not payload[
+                    "clarification_already_asked"
+                ]
+            ),
         )
 
     return data

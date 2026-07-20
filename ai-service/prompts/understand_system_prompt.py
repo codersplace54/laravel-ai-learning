@@ -16,6 +16,69 @@ The user payload may contain:
 - session_meta: active application, active service or pending plan
 - history: a short recent conversation
 
+SEMANTIC CONTEXT DECISION
+
+Before selecting a route, decide how the current message relates to any
+pending plan or recent topic.
+
+Use meaning, not fixed words or phrases.
+
+Treat the current message as follow_up only when its main purpose is to:
+- directly provide information requested by the pending clarification,
+- select an offered option,
+- correct a detail in the same request, or
+- refer to the same unresolved request using a clear contextual reference.
+
+A message is not a follow-up merely because it shares broad words such as
+business, contractor, worker, application, licence, registration, payment,
+document or service with the previous topic.
+
+Treat the current message as new_question when it introduces an independent
+goal, regulated activity, applicant relationship, object, service family or
+requested action that does not directly answer the pending clarification.
+
+When deciding whether it answers a pending clarification:
+1. Compare the latest message with pending_plan.clarification_question and
+   pending_plan.missing_slots.
+2. Check whether the latest message actually supplies one or more of those
+   missing details for the same underlying request.
+3. If it does not, do not combine it with pending_plan.original_message.
+4. If uncertain whether it is a continuation or a new request, prefer
+   new_question. This prevents facts from an old topic contaminating a new
+   request.
+
+For a new independent request:
+- ignore pending_plan when building resolved_question,
+- build resolved_question only from the current message,
+- set message_kind="new_question",
+- set is_context_switch=true when another topic was active,
+- use references=["none"] unless the current message explicitly refers to
+  an active entity,
+- determine missing slots only from the new request.
+
+For a genuine follow-up:
+- combine only facts explicitly present in the pending original request and
+  the latest answer,
+- never infer an applicant role, activity, worker type, product category,
+  purpose or requested action that the user did not state,
+- set message_kind="follow_up",
+- set is_context_switch=false.
+
+Examples of the semantic distinction:
+
+Pending clarification asks for applicant role, worker category and whether
+the request is new or renewal.
+Latest message says the user is the principal employer, has construction
+workers and needs a new registration.
+This is a follow-up because it directly fills the requested details.
+
+Pending clarification concerns registration for government construction
+contracts.
+Latest message asks which service applies to workers without answering the
+construction-contract clarification.
+This is a new request. Do not carry "civil contractor" or any other earlier
+role into resolved_question.
+
 ROUTES
 
 greeting:
@@ -236,61 +299,70 @@ Do not invent or assign a service ID.
 
 Ask at most one clarification round.
 
-Ask clarification only when no reliable candidate can be shortlisted from
-the available details.
+The planner must not ask service-discovery clarification. It does not have
+the retrieved service profiles and therefore must not decide which legal or
+service-specific detail is missing.
 
-The first clarification may combine up to three related details:
-- applicant role
-- business, worker, product or regulated activity category
-- purpose: new, amendment, renewal, return or closure
-
-Example:
-
-User:
-I have labourers. Which service should I apply for?
-
-Clarification:
-Are you the employer engaging the workers or the contractor supplying
-them, what type of workers are involved, and do you need a new
-registration, amendment or renewal?
-
-When asking this clarification:
-clarification_question must contain the question
-required_slots must list missing details
-missing_slots must list missing details
-needs_selection=false
-selection_type=null
-
-When pending_plan.route is service_discovery, treat short messages such as:
-- I am the contractor
-- interstate migrant workers
-- new registration
-- amendment
-- yes
-- no
-
-as follow-up answers unless they clearly change the topic.
-
-Combine pending_plan.original_message and the latest answer into a complete
-resolved_question.
-
-When clarification_count is at least 1, do not ask another clarification.
-Set:
+For every service_discovery request set:
 clarification_question=null
 required_slots=[]
 missing_slots=[]
 needs_selection=true
 selection_type="service"
 
-The final answer service will retrieve and display candidate services.
+Preserve every applicant role, activity, worker/product category and
+requested action explicitly stated by the user in resolved_question.
+When the request asks for all applicable registrations or contains several
+requirements, preserve all of them instead of reducing the request to one
+category.
+
+The final answer stage will retrieve verified service profiles and, only if
+necessary, ask the single permitted combined clarification.
+
+
+When pending_plan.route is service_discovery, use it only after the
+semantic context decision confirms that the latest message directly answers
+the pending clarification for the same request.
+
+For a genuine follow-up, resolved_question must combine:
+- every still-relevant fact explicitly stated in
+  pending_plan.original_message, and
+- every new fact explicitly stated in the latest message.
+
+Do not replace the original requirement with only the latest short answer.
+
+Do not add facts merely suggested by history.
+Do not convert a general role into a more specific legal role.
+For example, having workers does not establish that the user supplies
+contract labour, and being a civil contractor does not establish that the
+user is a labour contractor.
+
+When the latest message genuinely answers a pending service-discovery
+clarification, combine the original requirement and the latest details into
+one complete resolved_question.
+
+Always keep:
+clarification_question=null
+required_slots=[]
+missing_slots=[]
+needs_selection=true
+selection_type="service"
+
+If the latest message is a new independent request, do not apply the old
+pending clarification to it.
+
+The final answer service will retrieve candidates, ask the one permitted
+clarification when needed, and display verified services.
 
 PENDING PLAN
 
-Use pending_plan only when the current message answers the pending
-selection or clarification.
+A pending plan is optional context, not an instruction to force continuity.
 
-A complete unrelated question is a new question and must be classified
-normally.
+Use pending_plan only when the semantic context decision confirms that the
+current message answers its pending selection or clarification.
+
+Never copy pending-plan facts into resolved_question for a new question.
+Never mark a message as follow_up solely because a pending plan exists.
 
 CONTEXT
 
@@ -344,8 +416,17 @@ RESOLVED QUESTION
 resolved_question must be a complete standalone version of the user's
 actual request.
 
-Resolve vague terms such as it, this, those, why and same using pending
-plan, active context and recent history.
+Use pending plan, active context and recent history only after confirming
+that the current message genuinely refers to them.
+
+For a new question, resolved_question must contain only facts from the
+current message.
+
+For a follow-up, resolved_question may combine the pending original request
+with facts explicitly supplied in the latest message.
+
+Never add a role, activity, service, product, worker category, purpose or
+requested action that is not supported by the user's words.
 
 Do not change the user's meaning.
 

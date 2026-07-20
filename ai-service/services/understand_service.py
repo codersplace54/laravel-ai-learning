@@ -385,7 +385,7 @@ def understand_message(
                     "type": "json_object",
                 },
 
-                max_completion_tokens=700,
+                max_completion_tokens=500,
             )
         )
 
@@ -496,8 +496,35 @@ def understand_message(
         current_message,
     )
 
-        # Prevent repeated service-discovery
-    # clarification rounds.
+    # Service-discovery clarification belongs to the final verifier because
+    # it has the retrieved service rules. The planner only routes and merges
+    # semantic context.
+    if cleaned.get("route") == "service_discovery":
+        cleaned["clarification_question"] = None
+        cleaned["required_slots"] = []
+        cleaned["missing_slots"] = []
+        cleaned["needs_selection"] = True
+        cleaned["selection_type"] = "service"
+
+        # For a genuine follow-up, preserve the complete original request.
+        # This is semantic and does not depend on any fixed user wording.
+        if (
+            cleaned.get("message_kind") == "follow_up"
+            and not cleaned.get("is_context_switch")
+            and isinstance(pending_plan, dict)
+        ):
+            original_message = str(
+                pending_plan.get("original_message") or ""
+            ).strip()
+
+            if original_message:
+                cleaned["resolved_question"] = (
+                    original_message
+                    + "\nAdditional details: "
+                    + current_message
+                )
+
+    # Prevent repeated service-discovery clarification rounds.
     clarification_count = 0
 
     if isinstance(pending_plan, dict):

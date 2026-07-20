@@ -134,6 +134,15 @@ class ChatAnswerService
             'scope' => $data['scope'] ?? 'all_records',
 
             'metric' => $data['metric'] ?? null,
+
+            // Preserve service-discovery fields returned by FastAPI.
+            'needs_clarification' => (bool) (
+                $data['needs_clarification'] ?? false
+            ),
+            'clarification_question' => $data['clarification_question'] ?? null,
+            'candidate_services' => is_array($data['candidate_services'] ?? null)
+                ? $data['candidate_services']
+                : [],
         ];
     }
 
@@ -151,9 +160,12 @@ class ChatAnswerService
             'confidence'   => 0.0,
             'reason'       => $reason,
             'answer_mode'       => 'fact',
-            'resolved_question' => $message ?? '',
+            'resolved_question' => '',
             'scope'             => 'all_records',
             'metric'            => null,
+            'needs_clarification' => false,
+            'clarification_question' => null,
+            'candidate_services' => [],
         ];
     }
 }

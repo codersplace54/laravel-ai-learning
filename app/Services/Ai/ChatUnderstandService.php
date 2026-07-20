@@ -60,10 +60,6 @@ class ChatUnderstandService
 
     private function extract_payload(array $json): array
     {
-        // Supports both:
-        // 1. direct FastAPI response: { route: "...", query_focus: "..." }
-        // 2. wrapped response: { status: true, data: { route: "..."} }
-
         if (isset($json['data']) && is_array($json['data'])) {
             return $json['data'];
         }
