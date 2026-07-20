@@ -17,6 +17,8 @@ from services.vector_service import (
 
 logger = logging.getLogger(__name__)
 
+CHAT_ANSWER_VERSION = "semantic-scope-compact-discovery-v1"
+
 
 SERVICE_SECTION_BY_FOCUS = {
     "service_info": "overview",
@@ -94,125 +96,40 @@ Return only valid JSON:
 
 
 SERVICE_DISCOVERY_PROMPT = """
-You verify SWAAGAT service-discovery matches.
+You validate which retrieved SWAAGAT services directly match a lawful
+Tripura government-service requirement.
 
-INPUT:
-- current_message: the user's exact latest message
-- resolved_request: a planner-generated combined request
-- is_new_independent_request: whether the latest message starts a fresh topic
+Input:
+- current_message: the exact latest user message
+- resolved_request: the complete semantic request
 - clarification_already_asked: whether one clarification was already asked
-  for this same request
-- candidates: verified SWAAGAT service guidance retrieved from Qdrant
+- candidates: verified service profiles retrieved from Qdrant
 
-SOURCE-OF-TRUTH RULES:
-1. current_message is authoritative.
-2. resolved_request is only a helper.
-3. If is_new_independent_request is true, do not inherit any role, activity,
-   service, purpose or requested action from earlier conversation.
-4. Do not trust a role, activity or requested action that appears only in
-   resolved_request unless current_message is clearly a direct answer to a
-   clarification for the same request.
-5. "I have workers/labourers" does not prove that the user is a contractor,
-   labour supplier or principal employer.
-6. "Contractor" alone does not prove labour-contractor activity.
-
-MATCHING RULES:
-A candidate is valid only when its guidance explicitly covers the same:
-- regulated activity or business purpose,
-- applicant role,
-- requested action such as new, amendment, renewal, return or closure,
-- jurisdiction or special qualifier when relevant.
-
-Generic words such as contractor, business, shop, construction, workers,
-food, licence, registration, approval, waste or renewal are not enough.
-
-Treat "consider this service when", "do not recommend", "only when",
-"confirm", "mandatory clarification" and recommendation restrictions as
-hard rules.
-
-A related or additional compliance cannot replace the permission the user
-actually requested.
-
-Never use general legal knowledge to fill a missing condition.
-Use only candidate Service IDs internally.
-Never invent a Service ID or service name.
-Never mention a Service ID or internal identifier in the user-facing answer.
-Preserve the verified service name exactly as supplied in candidates.
-
-CLARIFICATION:
-- If key facts are missing and clarification_already_asked is false, ask one
-  combined clarification question covering no more than:
-  applicant role, regulated activity/category and requested action.
-- When clarification is needed, return no candidate services.
+Rules:
+- Use only facts in current_message and resolved_request.
+- Match applicant role, regulated activity, requested action, jurisdiction
+  and any worker/product/category qualifier.
+- Shared generic words are not enough.
+- Obey every candidate restriction, including "consider when",
+  "do not recommend", "only when", "confirm" and mandatory clarification.
+- A related compliance cannot replace the permission actually requested.
+- Use only service_id values present in candidates.
+- Return all directly applicable services when the user asks for all,
+  limited to three.
+- If essential facts are missing and clarification_already_asked is false,
+  ask one combined clarification and return no service IDs.
 - If clarification_already_asked is true, never ask another question.
-- Recommend at most three candidates.
-- If no candidate directly matches, return an empty candidate_services list.
+- If no candidate directly matches, return an empty service_ids array.
+- Do not return service names, reasons, markdown or an answer paragraph.
 
-Return only valid JSON:
+Return only compact JSON:
 {
-  "answer": "brief answer or clarification question",
-  "short_status": null,
-  "answer_type": "service_discovery",
-  "confidence": 0.0,
   "needs_clarification": false,
   "clarification_question": null,
-  "candidate_services": [
-    {
-      "service_id": 37,
-      "service_name": "exact verified service name",
-      "reason": "brief evidence tied to the exact request"
-    }
-  ]
+  "service_ids": [19, 23],
+  "confidence": 0.9
 }
 """
-
-
-_NEW_REQUEST_PREFIXES = (
-    "one more question",
-    "another question",
-    "new question",
-    "a different question",
-    "different question",
-    "separate question",
-    "separately",
-    "forget that",
-    "ignore that",
-    "moving on",
-    "next question",
-)
-
-
-def _is_new_request_signal(message: str) -> bool:
-    normalized = re.sub(
-        r"\s+",
-        " ",
-        str(message or "").strip().casefold(),
-    )
-
-    return any(
-        normalized.startswith(prefix)
-        for prefix in _NEW_REQUEST_PREFIXES
-    )
-
-
-def _clean_new_request_prefix(message: str) -> str:
-    text = str(message or "").strip()
-
-    for prefix in _NEW_REQUEST_PREFIXES:
-        pattern = rf"^\s*{re.escape(prefix)}\s*[-:,.]?\s*"
-
-        cleaned = re.sub(
-            pattern,
-            "",
-            text,
-            count=1,
-            flags=re.IGNORECASE,
-        ).strip()
-
-        if cleaned != text:
-            return cleaned or text
-
-    return text
 
 
 def _clean_service_name(value: object) -> str:
@@ -341,7 +258,7 @@ def _prepare_discovery_chunks(raw_chunks: list) -> list:
 
             seen.add(normalized)
 
-            remaining = 1400 - total_length
+            remaining = 1000 - total_length
 
             if remaining <= 0:
                 break
@@ -381,7 +298,7 @@ def _inject_rag_chunks(
     data_scope: str,
     message: str,
 ) -> dict:
-    """Attach only the verified knowledge needed for the current answer."""
+    """Attach only verified knowledge required for the current answer."""
 
     db_data = context.get("db_data") or {}
     ai_plan = context.get("_ai_plan") or {}
@@ -393,16 +310,6 @@ def _inject_rag_chunks(
     ).strip()
 
     if data_scope == "SERVICE_DISCOVERY":
-        is_new_request = _is_new_request_signal(
-            message
-        )
-
-        retrieval_question = (
-            _clean_new_request_prefix(message)
-            if is_new_request
-            else resolved_question
-        )
-
         filters = ai_plan.get("filters")
 
         if not isinstance(filters, dict):
@@ -414,7 +321,7 @@ def _inject_rag_chunks(
         )
 
         raw_chunks = search_service_discovery_chunks(
-            question=retrieval_question,
+            question=resolved_question,
             category=category,
             limit=20,
         )
@@ -423,13 +330,25 @@ def _inject_rag_chunks(
             raw_chunks
         )
 
+        message_kind = str(
+            ai_plan.get("message_kind")
+            or "new_question"
+        ).strip().casefold()
+
+        is_context_switch = bool(
+            ai_plan.get("is_context_switch")
+        )
+
         context["rag_chunks"] = chunks
         context["rag_retrieval"] = {
             "route": "service_discovery",
-            "raw_message": str(message or "").strip(),
+            "raw_message": str(
+                message or ""
+            ).strip(),
             "resolved_question": resolved_question,
-            "retrieval_question": retrieval_question,
-            "is_new_independent_request": is_new_request,
+            "retrieval_question": resolved_question,
+            "message_kind": message_kind,
+            "is_context_switch": is_context_switch,
             "category": category,
             "raw_chunks_found": len(raw_chunks),
             "chunks_found": len(chunks),
@@ -441,13 +360,15 @@ def _inject_rag_chunks(
 
         logger.info(
             (
-                "Service discovery RAG | "
-                "new_request=%s | "
-                "retrieval_question=%s | "
-                "raw=%d | unique=%d | services=%s"
+                "Service discovery RAG | version=%s | "
+                "message_kind=%s | context_switch=%s | "
+                "retrieval_question=%s | raw=%d | "
+                "unique=%d | services=%s"
             ),
-            is_new_request,
-            retrieval_question,
+            CHAT_ANSWER_VERSION,
+            message_kind,
+            is_context_switch,
+            resolved_question,
             len(raw_chunks),
             len(chunks),
             [
@@ -529,16 +450,12 @@ def _normalize_discovery_result(
     chunks: list,
     allow_clarification: bool,
 ) -> dict:
-    """
-    Validate model output.
-
-    Service IDs stay available internally but are never included in the
-    user-facing answer.
-    """
+    """Validate compact service IDs and build the visible answer."""
 
     available = {
         int(chunk["service_id"]): chunk
         for chunk in chunks
+        if chunk.get("service_id") is not None
     }
 
     needs_clarification = bool(
@@ -547,7 +464,6 @@ def _normalize_discovery_result(
 
     clarification_question = str(
         data.get("clarification_question")
-        or data.get("answer")
         or ""
     ).strip()
 
@@ -556,36 +472,29 @@ def _normalize_discovery_result(
         and allow_clarification
         and clarification_question
     ):
+        question = clarification_question[:500]
+
         return {
-            "answer": clarification_question[:500],
+            "answer": question,
             "short_status": None,
             "answer_type": "service_discovery",
             "confidence": 0.0,
             "needs_clarification": True,
-            "clarification_question": (
-                clarification_question[:500]
-            ),
+            "clarification_question": question,
             "candidate_services": [],
         }
 
-    raw_candidates = data.get(
-        "candidate_services"
-    )
+    raw_service_ids = data.get("service_ids")
 
-    if not isinstance(raw_candidates, list):
-        raw_candidates = []
+    if not isinstance(raw_service_ids, list):
+        raw_service_ids = []
 
     validated = []
     seen_ids = set()
 
-    for candidate in raw_candidates:
-        if not isinstance(candidate, dict):
-            continue
-
+    for raw_service_id in raw_service_ids:
         try:
-            service_id = int(
-                candidate.get("service_id")
-            )
+            service_id = int(raw_service_id)
         except (TypeError, ValueError):
             continue
 
@@ -597,7 +506,6 @@ def _normalize_discovery_result(
 
         source = available[service_id]
 
-        # Always use Qdrant's verified name.
         service_name = str(
             source.get("service_name")
             or ""
@@ -606,22 +514,11 @@ def _normalize_discovery_result(
         if not service_name:
             continue
 
-        reason = str(
-            candidate.get("reason")
-            or ""
-        ).strip()
-
-        if len(reason) > 220:
-            reason = (
-                reason[:217].rstrip()
-                + "..."
-            )
-
         validated.append(
             {
                 "service_id": service_id,
                 "service_name": service_name,
-                "reason": reason,
+                "reason": "",
             }
         )
 
@@ -652,7 +549,7 @@ def _normalize_discovery_result(
         )
     else:
         lines = [
-            "These SWAAGAT services may match your requirement:"
+            "These SWAAGAT services match the requirements you described:"
         ]
 
         for index, candidate in enumerate(
@@ -703,10 +600,6 @@ def answer_from_context(request_data) -> dict:
 
     if is_discovery:
         ai_plan = context.get("_ai_plan") or {}
-        retrieval = (
-            context.get("rag_retrieval")
-            or {}
-        )
 
         raw_message = str(
             request_data.message or ""
@@ -717,58 +610,63 @@ def answer_from_context(request_data) -> dict:
             or raw_message
         ).strip()
 
-        is_new_request = bool(
-            retrieval.get(
-                "is_new_independent_request"
-            )
-        )
-
         message_kind = str(
             ai_plan.get("message_kind")
-            or ""
+            or "new_question"
         ).strip().casefold()
 
-        clarification_already_asked = (
-            message_kind == "follow_up"
-            and not is_new_request
-        )
+        clarification_already_asked = bool(
+            ai_plan.get(
+                "clarification_already_asked"
+            )
+        ) or message_kind == "follow_up"
+
+        candidates = [
+            {
+                "service_id": chunk.get(
+                    "service_id"
+                ),
+                "service_name": chunk.get(
+                    "service_name"
+                ),
+                "guidance": chunk.get(
+                    "guidance"
+                ),
+            }
+            for chunk in context.get(
+                "rag_chunks",
+                [],
+            )
+        ]
 
         payload = {
             "current_message": raw_message,
             "resolved_request": resolved_question,
-            "is_new_independent_request": (
-                is_new_request
-            ),
             "clarification_already_asked": (
                 clarification_already_asked
             ),
-            "candidates": context.get(
-                "rag_chunks",
-                [],
-            ),
+            "candidates": candidates,
         }
 
-        system_prompt = (
-            SERVICE_DISCOVERY_PROMPT
-        )
-        max_tokens = 500
+        system_prompt = SERVICE_DISCOVERY_PROMPT
+        max_tokens = 300
 
         logger.info(
             (
                 "Discovery answer request | "
                 "current_message=%s | "
                 "resolved_request=%s | "
-                "new_request=%s | "
+                "message_kind=%s | "
                 "clarification_already_asked=%s | "
                 "candidate_ids=%s"
             ),
             raw_message,
             resolved_question,
-            is_new_request,
+            message_kind,
             clarification_already_asked,
             [
                 item.get("service_id")
-                for item in payload["candidates"]
+                for item in candidates
             ],
         )
     else:

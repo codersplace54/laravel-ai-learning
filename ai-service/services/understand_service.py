@@ -10,9 +10,15 @@ from services.groq_service import groq_client
 
 logger = logging.getLogger(__name__)
 
+ROUTING_VERSION = "semantic-scope-v1"
+
 ALLOWED_ROUTES = [
     "greeting",
+    "smalltalk",
     "capabilities",
+    "portal_info",
+    "out_of_scope",
+    "unsafe_request",
     "account",
     "application_single",
     "application_collection",
@@ -35,8 +41,11 @@ ALLOWED_FAMILIES = [
     "notifications",
     "grievance_support",
     "account",
+    "portal_information",
     "general_knowledge",
     "smalltalk_or_help",
+    "out_of_scope",
+    "unsafe_request",
     "unknown",
 ]
 
@@ -351,7 +360,8 @@ def understand_message(
 
     try:
         logger.info(
-            "Understand Message Request: %s",
+            "Understand Message Request | version=%s | payload=%s",
+            ROUTING_VERSION,
             json.dumps(
                 request_payload,
                 default=str,
@@ -385,7 +395,7 @@ def understand_message(
                     "type": "json_object",
                 },
 
-                max_completion_tokens=500,
+                max_completion_tokens=320,
             )
         )
 
@@ -564,7 +574,8 @@ def understand_message(
         )
 
     logger.info(
-        "Parsed Understanding: %s",
+        "Parsed Understanding | version=%s | result=%s",
+        ROUTING_VERSION,
         json.dumps(
             cleaned,
             ensure_ascii=False,
@@ -604,6 +615,7 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
         "previous_result",
         "active_application",
         "active_service",
+        "none",
     }
 
     scope = safe_string(data.get("scope")) or "all_records"
@@ -629,6 +641,24 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
 
     if kind == "greeting" and route == "unknown":
         route = "greeting"
+
+    # Keep route and semantic family consistent. This prevents clear
+    # out-of-scope or conversational messages from falling into service
+    # selection merely because a pending service exists.
+    family_route_map = {
+        "portal_information": "portal_info",
+        "out_of_scope": "out_of_scope",
+        "unsafe_request": "unsafe_request",
+    }
+
+    if family in family_route_map:
+        route = family_route_map[family]
+
+    if route == "unknown" and family == "general_knowledge":
+        route = "out_of_scope"
+
+    if route == "unknown" and family == "smalltalk_or_help":
+        route = "smalltalk"
 
     entities = clean_entities(data.get("entities"))
     references = clean_references(data.get("references"))
@@ -691,9 +721,38 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
             required_slots = ["service"]
             missing_slots = ["service"]
 
-    # Greeting/capability/exit should never require private data.
-    if route in ["greeting", "capabilities", "exit", "unknown"]:
+    # Non-transactional routes must never inherit application/service
+    # selection or private-data requirements from an older pending plan.
+    non_transactional_routes = {
+        "greeting",
+        "smalltalk",
+        "capabilities",
+        "portal_info",
+        "out_of_scope",
+        "unsafe_request",
+        "exit",
+        "unknown",
+    }
+
+    if route in non_transactional_routes:
         needs_private_data = False
+        needs_selection = False
+        selection_type = None
+        required_slots = []
+        missing_slots = []
+        references = ["none"]
+        scope = "none"
+
+        if route in {
+            "greeting",
+            "smalltalk",
+            "capabilities",
+            "out_of_scope",
+            "unsafe_request",
+            "exit",
+            "unknown",
+        }:
+            data["needs_static_knowledge"] = False
 
     return {
         "language": language,

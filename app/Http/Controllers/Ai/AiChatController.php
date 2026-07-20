@@ -58,7 +58,42 @@ class AiChatController extends Controller
 
         $understanding = $this->safe_understand($message, $session_meta, $history);
         $plan = $this->make_plan($understanding, $session);
-        Log::channel('ai_chat')->info('AI Plan: ' . json_encode($plan, JSON_PRETTY_PRINT));
+
+        Log::channel('ai_chat')->info(
+            'AI Plan: ' . json_encode($plan, JSON_PRETTY_PRINT)
+        );
+
+        /*
+         * Keep a pending plan only when the semantic planner confirms that
+         * the latest message continues or corrects that same pending request.
+         * Any independent question must not inherit an old clarification or
+         * selection flow.
+         */
+        $continues_pending = in_array(
+            $plan['message_kind'] ?? '',
+            ['follow_up', 'correction'],
+            true
+        ) && !($plan['is_context_switch'] ?? false);
+
+        $never_uses_pending = in_array(
+            $plan['route'] ?? '',
+            [
+                'greeting',
+                'smalltalk',
+                'capabilities',
+                'portal_info',
+                'out_of_scope',
+                'unsafe_request',
+                'exit',
+                'unknown',
+            ],
+            true
+        );
+
+        if ($never_uses_pending || !$continues_pending) {
+            $this->clear_pending($session);
+        }
+
         if ($plan['route'] === 'exit') {
             return $this->handle_exit($session);
         }
@@ -67,20 +102,27 @@ class AiChatController extends Controller
             return $this->answer_greeting($session);
         }
 
-        if ($plan['route'] === 'capabilities') {
-            if ($plan['query_focus'] === 'out_of_scope') {
-                return $this->reply(
-                    $session,
-                    "Sorry, I'm not able to answer this question. I can help with queries related to SWAAGAT applications, payments, certificates, documents, and services.",
-                    'out_of_scope',
-                    [
-                        'Show my applications',
-                        'What is my application status?',
-                    ]
-                );
-            }
+        if ($plan['route'] === 'smalltalk') {
+            return $this->answer_smalltalk($session);
+        }
 
+        if ($plan['route'] === 'capabilities') {
             return $this->answer_capabilities($session);
+        }
+
+        if ($plan['route'] === 'portal_info') {
+            return $this->answer_portal_info(
+                $session,
+                $plan
+            );
+        }
+
+        if ($plan['route'] === 'out_of_scope') {
+            return $this->answer_out_of_scope($session);
+        }
+
+        if ($plan['route'] === 'unsafe_request') {
+            return $this->answer_unsafe_request($session);
         }
 
         if ($plan['route'] === 'clarification') {
@@ -294,8 +336,12 @@ class AiChatController extends Controller
     ): string {
         $direct = [
             'greeting' => 'greeting',
+            'smalltalk' => 'smalltalk',
             'capabilities' => 'capabilities',
             'help' => 'capabilities',
+            'portal_info' => 'portal_info',
+            'out_of_scope' => 'out_of_scope',
+            'unsafe_request' => 'unsafe_request',
             'exit' => 'exit',
             'clarification' => 'clarification',
             'account' => 'account',
@@ -348,10 +394,23 @@ class AiChatController extends Controller
             return 'greeting';
         }
 
+        $family_routes = [
+            'portal_information' => 'portal_info',
+            'out_of_scope' => 'out_of_scope',
+            'unsafe_request' => 'unsafe_request',
+        ];
+
+        if (isset($family_routes[$family])) {
+            return $family_routes[$family];
+        }
+
         if ($family === 'smalltalk_or_help') {
-            return $this->bool_from_focus($focus, ['account', 'username', 'email', 'mobile'])
-                ? 'account'
-                : 'capabilities';
+            return $this->bool_from_focus(
+                $focus,
+                ['capability', 'help']
+            )
+                ? 'capabilities'
+                : 'smalltalk';
         }
 
         if ($family === 'service_discovery') {
@@ -359,28 +418,51 @@ class AiChatController extends Controller
         }
 
         if (in_array($family, [
-            'documents',
+            'service_information',
             'eligibility',
-            'general_knowledge',
         ], true)) {
             return 'service';
         }
 
-        if (in_array($family, ['application_lifecycle', 'payment', 'certificate', 'renewal', 'notifications', 'grievance_support'], true)) {
+        if ($family === 'documents') {
+            if (in_array('active_application', $refs, true)) {
+                return 'application_single';
+            }
+
+            return 'service';
+        }
+
+        if ($family === 'general_knowledge') {
+            return 'out_of_scope';
+        }
+
+        if (in_array($family, [
+            'application_lifecycle',
+            'payment',
+            'certificate',
+            'renewal',
+            'notifications',
+            'grievance_support',
+        ], true)) {
             if ($this->looks_like_collection_focus($focus)) {
                 return 'application_collection';
+            }
+
+            if (in_array('active_service', $refs, true)) {
+                return 'service';
             }
 
             return 'application_single';
         }
 
-        $pending = $this->get_meta($session, 'pending_plan');
-
-        if (is_array($pending) && in_array('pending_plan', $refs, true)) {
-            return $pending['route'] ?? 'clarification';
-        }
-
-        return 'clarification';
+        /*
+         * A clear but unsupported request must not be forced into an old
+         * application or service context. The semantic planner uses the
+         * clarification route when a likely SWAAGAT request is ambiguous.
+         */
+        return $raw_route === 'unknown'
+            ? 'out_of_scope'
+            : 'clarification';
     }
 
     private function looks_like_collection_focus(string $focus): bool
@@ -1347,6 +1429,76 @@ class AiChatController extends Controller
     // SIMPLE ANSWERS
     // ---------------------------------------------------------------------
 
+    private function answer_smalltalk(AiChatSession $session)
+    {
+        return $this->reply(
+            $session,
+            'I am here and ready to help. I can assist with SWAAGAT applications and Tripura government services.',
+            'smalltalk',
+            [
+                'Show my applications',
+                'Help me find the correct service',
+            ]
+        );
+    }
+
+    private function answer_portal_info(
+        AiChatSession $session,
+        array $plan
+    ) {
+        $focus = strtolower(
+            trim((string) ($plan['query_focus'] ?? ''))
+        );
+
+        if ($focus === 'service_catalog') {
+            return $this->reply(
+                $session,
+                'SWAAGAT provides access to multiple Tripura government services across areas such as business registrations, labour, factories, urban development, land, utilities, tourism and other departmental approvals. Tell me what activity you want to start or what permission you need, and I will search for the matching service.',
+                'portal_info',
+                [
+                    'I am opening a shop. What should I apply for?',
+                    'I am starting a factory. Which approvals are required?',
+                ]
+            );
+        }
+
+        return $this->reply(
+            $session,
+            'SWAAGAT is a portal for Tripura government services. Whether a person can apply depends on the selected service, its eligibility rules, and whether the business, property or activity falls within the relevant Tripura jurisdiction.',
+            'portal_info',
+            [
+                'Which services does SWAAGAT provide?',
+                'Help me find the correct service',
+            ]
+        );
+    }
+
+    private function answer_out_of_scope(AiChatSession $session)
+    {
+        return $this->reply(
+            $session,
+            'That request is outside the scope of the SWAAGAT assistant. I can help with SWAAGAT applications, payments, certificates, documents, and Tripura government services.',
+            'out_of_scope',
+            [
+                'Show my applications',
+                'Help me find the correct service',
+            ]
+        );
+    }
+
+    private function answer_unsafe_request(AiChatSession $session)
+    {
+        return $this->reply(
+            $session,
+            'I cannot help find or facilitate services for illegal activities. I can assist only with lawful SWAAGAT applications and Tripura government services.',
+            'unsafe_request',
+            [
+                'Which lawful business registrations are available?',
+                'Help me find the correct service',
+            ]
+        );
+    }
+
     private function answer_greeting(AiChatSession $session)
     {
         return $this->reply($session, 'Hello! I am SWAAGAT AI Assistant. I can help you with your applications and service information. What would you like to know?', 'greeting', [
@@ -1376,25 +1528,16 @@ class AiChatController extends Controller
         ]);
     }
 
-    private function handle_unknown(AiChatSession $session, string $message, array $plan)
-    {
-        if ($session->active_application_id) {
-            $plan['query_focus'] = $plan['query_focus'] ?? 'application_follow_up';
-            $plan['references'] = ['active_application'];
-            $plan['message_kind'] = 'follow_up';
-
-            return $this->answer_with_application($session, (int) $session->active_application_id, $message, $plan);
-        }
-
-        if ($session->active_service_id) {
-            $plan['query_focus'] = $plan['query_focus'] ?? 'service_follow_up';
-            $plan['references'] = ['active_service'];
-            $plan['message_kind'] = 'follow_up';
-
-            return $this->answer_with_service($session, (int) $session->active_service_id, $message, $plan);
-        }
-
-        return $this->ask_clarification($session, 'Please tell me if this is about your application or about a service.');
+    private function handle_unknown(
+        AiChatSession $session,
+        string $message,
+        array $plan
+    ) {
+        /*
+         * Unknown must never silently reuse an active application or service.
+         * Explicit active-entity references are routed before reaching here.
+         */
+        return $this->answer_out_of_scope($session);
     }
 
     private function handle_exit(AiChatSession $session)
