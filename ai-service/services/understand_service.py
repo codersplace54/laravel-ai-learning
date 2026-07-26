@@ -76,6 +76,20 @@ ALLOWED_REFERENCES = [
     "none",
 ]
 
+ALLOWED_DISCOVERY_CATEGORIES = [
+    "business-registration-tax-services",
+    "electrical-power-services",
+    "excise-services",
+    "factories-boilers-services",
+    "labour-services",
+    "land-water-infrastructure-services",
+    "legal-metrology-services",
+    "other-regulated-business-services",
+    "pollution-waste-services",
+    "tourism-services",
+    "urban-development-services",
+]
+
 IGNORED_ASSISTANT_MESSAGES = [
     "temporarily busy",
     "temporarily unable to connect",
@@ -676,6 +690,46 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
     if not isinstance(filters, dict):
         filters = {}
 
+    raw_discovery_categories = filters.get(
+        "discovery_categories"
+    )
+
+    if not isinstance(
+        raw_discovery_categories,
+        list,
+    ):
+        raw_discovery_categories = []
+
+    discovery_categories = []
+
+    for raw_category in raw_discovery_categories:
+        category = safe_string(
+            raw_category
+        ).lower()
+
+        if (
+            category in ALLOWED_DISCOVERY_CATEGORIES
+            and category not in discovery_categories
+        ):
+            discovery_categories.append(
+                category
+            )
+
+        if len(discovery_categories) == 4:
+            break
+
+    filters = dict(filters)
+
+    if discovery_categories:
+        filters["discovery_categories"] = (
+            discovery_categories
+        )
+    else:
+        filters.pop(
+            "discovery_categories",
+            None,
+        )
+
     confidence = safe_float(data.get("confidence"), 0.7)
     confidence = max(0.0, min(1.0, confidence))
 
@@ -720,6 +774,23 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
             selection_type = "service"
             required_slots = ["service"]
             missing_slots = ["service"]
+
+    # Service discovery is a fresh search problem, not a question about an
+    # already selected service. Remove stale active-service references and
+    # keep the retrieval contract consistent.
+    if route == "service_discovery":
+        query_focus = "service_recommendation"
+        answer_mode = "recommendation"
+        scope = "all_records"
+        references = ["none"]
+        entities = []
+        required_slots = []
+        missing_slots = []
+        needs_selection = True
+        selection_type = "service"
+        clarification_question = None
+        needs_private_data = False
+        data["needs_static_knowledge"] = True
 
     # Non-transactional routes must never inherit application/service
     # selection or private-data requirements from an older pending plan.

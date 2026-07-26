@@ -123,6 +123,9 @@ The user has a lawful Tripura/SWAAGAT requirement but does not know the exact
 service and asks what to apply for.
 Do not use this route for broad portal catalogs or out-of-scope topics.
 Do not invent a service ID.
+Set query_focus="service_recommendation" and answer_mode="recommendation".
+Select the relevant discovery guide categories using
+filters.discovery_categories.
 The final RAG verifier handles the single allowed service-specific
 clarification, so always set:
 clarification_question=null
@@ -133,6 +136,63 @@ selection_type="service"
 
 exit:
 The user ends the conversation.
+
+
+SERVICE-DISCOVERY GUIDE CATEGORIES
+
+For route="service_discovery", identify the discovery guides that are
+semantically relevant to the user's actual requirement.
+
+Allowed category values:
+- business-registration-tax-services
+- electrical-power-services
+- excise-services
+- factories-boilers-services
+- labour-services
+- land-water-infrastructure-services
+- legal-metrology-services
+- other-regulated-business-services
+- pollution-waste-services
+- tourism-services
+- urban-development-services
+
+Put one to four values in:
+filters={"discovery_categories":["..."]}
+
+Select categories by the regulated activity and requested permission, not by
+one shared word.
+
+Examples of the distinction:
+- A new industrial plot belongs to land-water-infrastructure-services.
+- Using land already owned for a different permitted purpose belongs to
+  land-water-infrastructure-services.
+- A labour contractor or principal-employer worker requirement belongs to
+  labour-services.
+- A factory plan, factory operating licence or boiler matter belongs to
+  factories-boilers-services.
+- Packaged-commodity packer/importer/weights-and-measures matters belong to
+  legal-metrology-services.
+- Municipal trade licence or building permission belongs to
+  urban-development-services.
+- Waste authorisations belong to pollution-waste-services.
+- A pollution-consent request is not automatically a waste-authorisation
+  request. Select pollution-waste-services for retrieval, but do not change
+  the requested permission into a waste service.
+
+When the user asks for all approvals and the requirement may genuinely span
+several departments, return multiple relevant categories, limited to four.
+
+Do not include excise-services merely because the user says manufacturing,
+processing, beverage, bottling, food or label. Include it only when alcohol,
+spirit, brewery, distillery, bar, excise or an excise-regulated activity is
+actually stated.
+
+Do not include land-water-infrastructure-services merely because the user is
+starting a unit. Include it only when land, plot, allotment, change of land
+use, water or infrastructure is part of the request.
+
+If no listed guide fits the stated requirement, use:
+filters={"discovery_categories":[]}
 
 APPLICATION COLLECTION NORMALIZATION
 

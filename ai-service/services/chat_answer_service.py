@@ -17,7 +17,7 @@ from services.vector_service import (
 
 logger = logging.getLogger(__name__)
 
-CHAT_ANSWER_VERSION = "semantic-scope-compact-discovery-v1"
+CHAT_ANSWER_VERSION = "category-scoped-discovery-v2"
 
 
 SERVICE_SECTION_BY_FOCUS = {
@@ -109,17 +109,30 @@ Rules:
 - Use only facts in current_message and resolved_request.
 - Match applicant role, regulated activity, requested action, jurisdiction
   and any worker/product/category qualifier.
+- Never ask for a fact already explicitly stated in either input.
 - Shared generic words are not enough.
 - Obey every candidate restriction, including "consider when",
   "do not recommend", "only when", "confirm" and mandatory clarification.
 - A related compliance cannot replace the permission actually requested.
+- A waste authorisation cannot replace pollution consent.
+- A municipal trade licence cannot replace a pharmacy/drug licence.
+- A factory licence cannot replace land allotment or change in land use.
 - Use only service_id values present in candidates.
 - Return all directly applicable services when the user asks for all,
   limited to three.
+- Ask clarification only when at least two retrieved candidates are genuinely
+  plausible and one missing fact is necessary to distinguish them.
+- Do not ask the user to choose among candidates that are unrelated to the
+  stated activity.
 - If essential facts are missing and clarification_already_asked is false,
   ask one combined clarification and return no service IDs.
 - If clarification_already_asked is true, never ask another question.
-- If no candidate directly matches, return an empty service_ids array.
+  When two jurisdiction/action variants remain plausible because the user
+  does not know the distinction, return both verified service IDs instead of
+  returning no match.
+- If the requested permission type is not represented by any candidate,
+  return an empty service_ids array without redirecting the user to a
+  different compliance.
 - Do not return service names, reasons, markdown or an answer paragraph.
 
 Return only compact JSON:
@@ -315,16 +328,53 @@ def _inject_rag_chunks(
         if not isinstance(filters, dict):
             filters = {}
 
-        category = (
-            context.get("category")
-            or filters.get("discovery_category")
+        raw_categories = filters.get(
+            "discovery_categories"
         )
 
-        raw_chunks = search_service_discovery_chunks(
-            question=resolved_question,
-            category=category,
-            limit=20,
-        )
+        if not isinstance(raw_categories, list):
+            raw_categories = []
+
+        categories = []
+
+        for raw_category in raw_categories:
+            category = str(
+                raw_category or ""
+            ).strip()
+
+            if (
+                category
+                and category not in categories
+            ):
+                categories.append(category)
+
+            if len(categories) == 4:
+                break
+
+        raw_chunks = []
+
+        if categories:
+            # Search each semantically selected guide separately. This
+            # prevents unrelated departments from occupying the global top
+            # results and hiding the correct service.
+            per_category_limit = 12
+
+            for category in categories:
+                raw_chunks.extend(
+                    search_service_discovery_chunks(
+                        question=resolved_question,
+                        category=category,
+                        limit=per_category_limit,
+                    )
+                )
+        else:
+            # Safe fallback for older planners or requirements that do not
+            # map to one configured discovery guide.
+            raw_chunks = search_service_discovery_chunks(
+                question=resolved_question,
+                category=None,
+                limit=20,
+            )
 
         chunks = _prepare_discovery_chunks(
             raw_chunks
@@ -349,7 +399,7 @@ def _inject_rag_chunks(
             "retrieval_question": resolved_question,
             "message_kind": message_kind,
             "is_context_switch": is_context_switch,
-            "category": category,
+            "categories": categories,
             "raw_chunks_found": len(raw_chunks),
             "chunks_found": len(chunks),
             "service_ids": [
@@ -363,13 +413,14 @@ def _inject_rag_chunks(
                 "Service discovery RAG | version=%s | "
                 "message_kind=%s | context_switch=%s | "
                 "retrieval_question=%s | raw=%d | "
-                "unique=%d | services=%s"
+                "categories=%s | unique=%d | services=%s"
             ),
             CHAT_ANSWER_VERSION,
             message_kind,
             is_context_switch,
             resolved_question,
             len(raw_chunks),
+            categories,
             len(chunks),
             [
                 {
@@ -530,9 +581,11 @@ def _normalize_discovery_result(
     if not validated:
         return {
             "answer": (
-                "I could not find a verified SWAAGAT service "
-                "that directly matches this requirement in "
-                "the available guidance."
+                "I could not find a directly matching SWAAGAT service in "
+                "the service guides currently available to this chatbot. "
+                "This does not mean the permission is unnecessary; it means "
+                "the required service is not represented by the retrieved "
+                "SWAAGAT guidance."
             ),
             "short_status": None,
             "answer_type": "service_discovery",
