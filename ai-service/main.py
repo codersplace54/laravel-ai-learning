@@ -24,7 +24,7 @@ from services.vector_service import (
 )
 
 import logging 
-
+# add logs
 os.makedirs("logs", exist_ok=True)
 
 logging.basicConfig(

@@ -1758,6 +1758,6 @@ class AiChatController extends Controller
 
     private function get_user_id(): int
     {
-        return Auth::id() ?: 13909;
+        return Auth::id() ?: 1758;
     }
 }
