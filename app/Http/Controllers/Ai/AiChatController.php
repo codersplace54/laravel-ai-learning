@@ -90,6 +90,7 @@ class AiChatController extends Controller
             true
         );
 
+        //clear pending
         if ($never_uses_pending || !$continues_pending) {
             $this->clear_pending($session);
         }
