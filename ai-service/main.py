@@ -45,18 +45,10 @@ app = FastAPI(
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RAG_SERVICES_DIR = os.path.join(BASE_DIR, "rag-documents", "services")
-RAG_DISCOVERY_DIR = os.path.join(
-    BASE_DIR,
-    "rag-documents",
-    "discovery",
-)
+RAG_DISCOVERY_DIR = os.path.join(BASE_DIR,"rag-documents","discovery")
 
 os.makedirs(RAG_SERVICES_DIR, exist_ok=True)
-os.makedirs(
-    RAG_DISCOVERY_DIR,
-    exist_ok=True,
-)
-
+os.makedirs(RAG_DISCOVERY_DIR,exist_ok=True)
 
 @app.get("/")
 def home():
