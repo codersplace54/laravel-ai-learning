@@ -5,14 +5,14 @@ import re
 from prompts.application_chat_prompt import (
     APPLICATION_STUCK_EXPLANATION_PROMPT,
 )
-from services.openrouter_service import (
-    OpenRouterError,
-    OpenRouterRateLimitError,
-    generate_openrouter_answer,
-)
+
 from services.vector_service import (
     search_service_chunks,
     search_service_discovery_chunks,
+)
+
+from services.ollama_service import (
+    generate_ollama_answer,
 )
 
 logger = logging.getLogger(__name__)
@@ -759,22 +759,14 @@ def answer_from_context(request_data) -> dict:
     ]
 
     try:
-        raw_content = generate_openrouter_answer(
+        raw_content = generate_ollama_answer(
             messages=messages,
-            temperature=0,
-            max_tokens=max_tokens,
+            temperature=0.1,
+            max_tokens=1000,
         )
-    except OpenRouterRateLimitError:
-        logger.warning(
-            "Final answer rate limited by OpenRouter"
-        )
-        raise
-    except OpenRouterError as exception:
+    except Exception as exception:
         logger.error(
-            (
-                "Final answer OpenRouter "
-                "failure | error=%s"
-            ),
+            "Final answer Ollama failure | error=%s",
             str(exception),
         )
         raise

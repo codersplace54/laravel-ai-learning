@@ -2,11 +2,8 @@ import json
 import logging
 from typing import Any, Dict, List
 from prompts.understand_system_prompt import UNDERSTAND_SYSTEM_PROMPT
+from services.ollama_service import generate_ollama_answer
 from fastapi import HTTPException
-from groq import RateLimitError
-
-from config import GROQ_MODEL, GROQ_UNDERSTAND_MODEL
-from services.groq_service import groq_client
 
 logger = logging.getLogger(__name__)
 
@@ -349,7 +346,6 @@ def understand_message(
         has_pending_plan=has_pending_plan,
     )
 
-    # This is the only payload sent to Groq.
     request_payload = {
         "message": current_message,
     }
@@ -364,7 +360,6 @@ def understand_message(
             "history"
         ] = compact_chat_history
 
-    # Compact JSON removes unnecessary whitespace tokens.
     request_content = json.dumps(
         request_payload,
         default=str,
@@ -383,99 +378,30 @@ def understand_message(
             ),
         )
 
-        completion = (
-            groq_client
-            .chat
-            .completions
-            .create(
-                model=GROQ_UNDERSTAND_MODEL,
-
-                messages=[
-                    {
-                        "role": "system",
-                        "content":
-                            UNDERSTAND_SYSTEM_PROMPT,
-                    },
-                    {
-                        "role": "user",
-                        "content":
-                            request_content,
-                    },
-                ],
-
-                temperature=0,
-
-                response_format={
-                    "type": "json_object",
+        text = generate_ollama_answer(
+            messages=[
+                {
+                    "role": "system",
+                    "content": UNDERSTAND_SYSTEM_PROMPT,
                 },
-
-                max_completion_tokens=320,
-            )
+                {
+                    "role": "user",
+                    "content": request_content,
+                },
+            ],
+            temperature=0,
+            max_tokens=500,
         )
-
-    except RateLimitError as exception:
-        logger.warning(
-            "Understand AI rate limited: %s",
-            str(exception),
-        )
-
-        raise HTTPException(
-            status_code=429,
-            detail=(
-                "AI rate limit reached. "
-                "Please wait a moment and try again."
-            ),
-        ) from exception
 
     except Exception as exception:
         logger.exception(
-            "Understand AI request failed"
+            "Understand Ollama request failed"
         )
 
         raise HTTPException(
             status_code=503,
             detail="AI service unavailable.",
         ) from exception
-
-    usage = getattr(
-        completion,
-        "usage",
-        None,
-    )
-
-    logger.info(
-        (
-            "Understand token usage | "
-            "prompt_tokens=%s | "
-            "completion_tokens=%s | "
-            "total_tokens=%s"
-        ),
-        getattr(
-            usage,
-            "prompt_tokens",
-            None,
-        ),
-        getattr(
-            usage,
-            "completion_tokens",
-            None,
-        ),
-        getattr(
-            usage,
-            "total_tokens",
-            None,
-        ),
-    )
-
-    text = None
-
-    if completion.choices:
-        text = (
-            completion
-            .choices[0]
-            .message
-            .content
-        )
 
     text = str(
         text or ""
@@ -520,9 +446,6 @@ def understand_message(
         current_message,
     )
 
-    # Service-discovery clarification belongs to the final verifier because
-    # it has the retrieved service rules. The planner only routes and merges
-    # semantic context.
     if cleaned.get("route") == "service_discovery":
         cleaned["clarification_question"] = None
         cleaned["required_slots"] = []
@@ -530,15 +453,15 @@ def understand_message(
         cleaned["needs_selection"] = True
         cleaned["selection_type"] = "service"
 
-        # For a genuine follow-up, preserve the complete original request.
-        # This is semantic and does not depend on any fixed user wording.
         if (
             cleaned.get("message_kind") == "follow_up"
             and not cleaned.get("is_context_switch")
             and isinstance(pending_plan, dict)
         ):
             original_message = str(
-                pending_plan.get("original_message") or ""
+                pending_plan.get(
+                    "original_message"
+                ) or ""
             ).strip()
 
             if original_message:
@@ -548,7 +471,6 @@ def understand_message(
                     + current_message
                 )
 
-    # Prevent repeated service-discovery clarification rounds.
     clarification_count = 0
 
     if isinstance(pending_plan, dict):
@@ -566,26 +488,16 @@ def understand_message(
             clarification_count = 0
 
     if (
-        cleaned.get("route")
-        == "service_discovery"
-        and cleaned.get("message_kind")
-        == "follow_up"
+        cleaned.get("route") == "service_discovery"
+        and cleaned.get("message_kind") == "follow_up"
         and clarification_count >= 1
-        and not cleaned.get(
-            "is_context_switch"
-        )
+        and not cleaned.get("is_context_switch")
     ):
-        cleaned[
-            "clarification_question"
-        ] = None
-
+        cleaned["clarification_question"] = None
         cleaned["required_slots"] = []
         cleaned["missing_slots"] = []
-
         cleaned["needs_selection"] = True
-        cleaned["selection_type"] = (
-            "service"
-        )
+        cleaned["selection_type"] = "service"
 
     logger.info(
         "Parsed Understanding | version=%s | result=%s",
@@ -775,9 +687,6 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
             required_slots = ["service"]
             missing_slots = ["service"]
 
-    # Service discovery is a fresh search problem, not a question about an
-    # already selected service. Remove stale active-service references and
-    # keep the retrieval contract consistent.
     if route == "service_discovery":
         query_focus = "service_recommendation"
         answer_mode = "recommendation"
@@ -793,7 +702,6 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
         data["needs_static_knowledge"] = True
 
     # Non-transactional routes must never inherit application/service
-    # selection or private-data requirements from an older pending plan.
     non_transactional_routes = {
         "greeting",
         "smalltalk",

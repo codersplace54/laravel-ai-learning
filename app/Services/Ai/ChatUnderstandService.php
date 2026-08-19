@@ -135,7 +135,7 @@ class ChatUnderstandService
             'message_kind'           => $kind,
             'route'                  => $route,
             'query_focus'            => $data['query_focus'] ?? 'general',
-            'answer_mode' => $data['answer_mode'] ?? 'fact',
+            'answer_mode'            => $data['answer_mode'] ?? 'fact',
 
             'resolved_question' => $data['resolved_question']
                 ?? $data['user_goal']

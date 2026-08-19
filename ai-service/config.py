@@ -52,3 +52,14 @@ OPENROUTER_APP_NAME = os.getenv(
     "OPENROUTER_APP_NAME",
     "SWAAGAT AI",
 ).strip()
+
+# Ollama
+OLLAMA_BASE_URL = os.getenv(
+    "OLLAMA_BASE_URL",
+    "http://127.0.0.1:11434",
+).rstrip("/")
+
+OLLAMA_MODEL = os.getenv(
+    "OLLAMA_MODEL",
+    "qwen3:4b-instruct-2507-q4_K_M",
+).strip()
