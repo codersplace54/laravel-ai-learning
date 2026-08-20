@@ -2,8 +2,10 @@ import json
 import logging
 from typing import Any, Dict, List
 from prompts.understand_system_prompt import UNDERSTAND_SYSTEM_PROMPT
-from services.ollama_service import generate_ollama_answer
 from fastapi import HTTPException
+from services.llm_service import (generate_json_response,)
+
+from config import (LLM_UNDERSTAND_MODEL,)
 
 logger = logging.getLogger(__name__)
 
@@ -378,7 +380,8 @@ def understand_message(
             ),
         )
 
-        text = generate_ollama_answer(
+        data = generate_json_response(
+            model=LLM_UNDERSTAND_MODEL,
             messages=[
                 {
                     "role": "system",
@@ -389,8 +392,7 @@ def understand_message(
                     "content": request_content,
                 },
             ],
-            temperature=0,
-            max_tokens=500,
+            max_tokens=300,
         )
 
     except Exception as exception:
@@ -403,44 +405,14 @@ def understand_message(
             detail="AI service unavailable.",
         ) from exception
 
-    text = str(
-        text or ""
-    ).strip()
-
     logger.info(
         "Understand Message Response: %s",
-        text,
+        json.dumps(
+            data,
+            ensure_ascii=False,
+        ),
     )
-
-    if not text:
-        return fallback_understanding(
-            message=current_message,
-            reason="AI returned empty response",
-        )
-
-    try:
-        data = json.loads(text)
-
-    except Exception:
-        logger.warning(
-            "AI returned invalid JSON: %s",
-            text,
-        )
-
-        return fallback_understanding(
-            message=current_message,
-            reason=(
-                "AI returned invalid or "
-                "truncated JSON"
-            ),
-        )
-
-    if not isinstance(data, dict):
-        return fallback_understanding(
-            message=current_message,
-            reason="AI JSON was not an object",
-        )
-
+    
     cleaned = clean_understanding(
         data,
         current_message,

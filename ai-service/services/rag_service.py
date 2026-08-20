@@ -3,7 +3,6 @@ import re
 
 from services.pdf_service import extract_text_from_pdf
 from services.vector_service import save_to_vector_db, save_service_chunks_to_vector_db, search_similar_chunks
-from services.llm_service import ask_llm_with_context
 
 logger = logging.getLogger(__name__)
 
@@ -140,14 +139,3 @@ def process_service_document(
         "total_chunks": save_result["total_chunks_saved"],
     }
 
-
-def answer_question(question: str):
-    """Legacy ask flow."""
-    chunks = search_similar_chunks(question)
-    answer = ask_llm_with_context(question=question, chunks=chunks)
-    return {
-        "question": question,
-        "answer": answer,
-        "chunks_used": len(chunks),
-        "matched_chunks": chunks,
-    }

@@ -63,3 +63,24 @@ OLLAMA_MODEL = os.getenv(
     "OLLAMA_MODEL",
     "qwen3:4b-instruct-2507-q4_K_M",
 ).strip()
+
+# LLM models
+LLM_API_KEY = os.getenv(
+    "LLM_API_KEY",
+    "",
+).strip()
+
+LLM_BASE_URL = os.getenv(
+    "LLM_BASE_URL",
+    "https://generativelanguage.googleapis.com/v1beta/openai",
+).rstrip("/")
+
+LLM_UNDERSTAND_MODEL = os.getenv(
+    "LLM_UNDERSTAND_MODEL",
+    "gemini-3.5-flash-lite",
+).strip()
+
+LLM_ANSWER_MODEL = os.getenv(
+    "LLM_ANSWER_MODEL",
+    "gemini-3.5-flash-lite",
+).strip()

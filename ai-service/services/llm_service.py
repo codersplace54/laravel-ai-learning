@@ -1,38 +1,110 @@
-from groq import Groq
-from config import GROQ_API_KEY,GROQ_MODEL
+import json
+import logging
 
-client = Groq(api_key=GROQ_API_KEY)
+import httpx
 
-def ask_llm_with_context(question: str, chunks: list) -> str:
-    """
-    Sends question + related document chunks to AI.
-    """
+from config import (
+    LLM_API_KEY,
+    LLM_BASE_URL,
+)
 
-    context = "\n\n".join(chunks)
 
-    prompt = f"""
-You are a helpful assistant.
+logger = logging.getLogger(__name__)
 
-Answer the user's question using only the context below.
 
-If the answer is not available in the context, say:
-"I could not find this information in the uploaded document."
+def generate_json_response(
+    messages: list,
+    model: str,
+    max_tokens: int = 1000,
+) -> dict:
 
-Context:
-{context}
+    if not LLM_API_KEY:
+        raise RuntimeError(
+            "LLM_API_KEY is not configured."
+        )
 
-Question:
-{question}
-"""
-
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
+    response = httpx.post(
+        LLM_BASE_URL + "/chat/completions",
+        headers={
+            "Authorization": "Bearer " + LLM_API_KEY,
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "response_format": {
+                "type": "json_object",
+            },
+        },
+        timeout=120,
     )
 
-    return response.choices[0].message.content
+    if response.status_code != 200:
+        logger.error(
+            "LLM request failed | status=%s | response=%s",
+            response.status_code,
+            response.text[:2000],
+        )
+
+        response.raise_for_status()
+
+    result = response.json()
+
+    choices = result.get("choices") or []
+
+    if not choices:
+        raise RuntimeError(
+            "LLM returned no response."
+        )
+
+    content = str(
+        choices[0]
+        .get("message", {})
+        .get("content", "")
+        or ""
+    ).strip()
+
+    if not content:
+        raise RuntimeError(
+            "LLM returned empty content."
+        )
+
+    if content.startswith("```"):
+        content = content.strip("`")
+
+        if content.startswith("json"):
+            content = content[4:].strip()
+
+    try:
+        data = json.loads(content)
+
+    except json.JSONDecodeError as exception:
+        logger.error(
+            "LLM returned invalid JSON | response=%s",
+            content,
+        )
+
+        raise RuntimeError(
+            "LLM returned invalid JSON."
+        ) from exception
+
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            "LLM response must be a JSON object."
+        )
+
+    usage = result.get("usage") or {}
+
+    logger.info(
+        (
+            "LLM response | model=%s | "
+            "prompt_tokens=%s | "
+            "completion_tokens=%s"
+        ),
+        result.get("model", model),
+        usage.get("prompt_tokens"),
+        usage.get("completion_tokens"),
+    )
+
+    return data

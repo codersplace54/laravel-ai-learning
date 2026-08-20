@@ -11,8 +11,12 @@ from services.vector_service import (
     search_service_discovery_chunks,
 )
 
-from services.ollama_service import (
-    generate_ollama_answer,
+from services.llm_service import (
+    generate_json_response,
+)
+
+from config import (
+    LLM_ANSWER_MODEL,
 )
 
 logger = logging.getLogger(__name__)
@@ -759,51 +763,19 @@ def answer_from_context(request_data) -> dict:
     ]
 
     try:
-        raw_content = generate_ollama_answer(
+        data = generate_json_response(
+            model=LLM_ANSWER_MODEL,
             messages=messages,
-            temperature=0.1,
-            max_tokens=1000,
+            max_tokens=max_tokens,
         )
+
     except Exception as exception:
         logger.error(
-            "Final answer Ollama failure | error=%s",
+            "Final answer LLM failure | error=%s",
             str(exception),
         )
         raise
-
-    text = str(
-        raw_content or ""
-    ).strip()
-
-    logger.info(
-        "Answer Model Response: %s",
-        text,
-    )
-
-    if not text:
-        raise RuntimeError(
-            "OpenRouter returned an empty answer."
-        )
-
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exception:
-        logger.error(
-            (
-                "Answer model returned invalid "
-                "JSON | response=%s"
-            ),
-            text,
-        )
-        raise RuntimeError(
-            "Answer model returned invalid JSON."
-        ) from exception
-
-    if not isinstance(data, dict):
-        raise RuntimeError(
-            "Answer model response must be a JSON object."
-        )
-
+    
     if is_discovery:
         return _normalize_discovery_result(
             data=data,
