@@ -28,26 +28,6 @@ ALLOWED_ROUTES = [
     "unknown",
 ]
 
-ALLOWED_FAMILIES = [
-    "application_lifecycle",
-    "payment",
-    "certificate",
-    "documents",
-    "service_discovery",
-    "service_information",
-    "eligibility",
-    "renewal",
-    "notifications",
-    "grievance_support",
-    "account",
-    "portal_information",
-    "general_knowledge",
-    "smalltalk_or_help",
-    "out_of_scope",
-    "unsafe_request",
-    "unknown",
-]
-
 ALLOWED_KINDS = [
     "new_question",
     "follow_up",
@@ -485,7 +465,6 @@ def understand_message(
 
 def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
     route = clean_enum(data.get("route"), ALLOWED_ROUTES, "unknown")
-    family = clean_enum(data.get("capability_family"), ALLOWED_FAMILIES, "unknown")
     kind = clean_enum(data.get("message_kind"), ALLOWED_KINDS, "unclear")
 
     query_focus = safe_string(data.get("query_focus")) or "general"
@@ -540,24 +519,6 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
     if kind == "greeting" and route == "unknown":
         route = "greeting"
 
-    # Keep route and semantic family consistent. This prevents clear
-    # out-of-scope or conversational messages from falling into service
-    # selection merely because a pending service exists.
-    family_route_map = {
-        "portal_information": "portal_info",
-        "out_of_scope": "out_of_scope",
-        "unsafe_request": "unsafe_request",
-    }
-
-    if family in family_route_map:
-        route = family_route_map[family]
-
-    if route == "unknown" and family == "general_knowledge":
-        route = "out_of_scope"
-
-    if route == "unknown" and family == "smalltalk_or_help":
-        route = "smalltalk"
-
     entities = clean_entities(data.get("entities"))
     references = clean_references(data.get("references"))
 
@@ -603,6 +564,14 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
             break
 
     filters = dict(filters)
+
+    if (
+        "status" in filters
+        and "status_group" not in filters
+    ):
+        filters["status_group"] = filters.pop(
+            "status"
+        )
 
     if discovery_categories:
         filters["discovery_categories"] = (
@@ -714,7 +683,6 @@ def clean_understanding(data: Dict[str, Any], message: str) -> Dict[str, Any]:
         "resolved_question": resolved_question,
         "scope": scope,
         "metric": metric,
-        "capability_family": family,
         "user_goal": user_goal,
         "needs_private_data": needs_private_data,
         "needs_static_knowledge": bool(data.get("needs_static_knowledge", False)),
@@ -744,7 +712,6 @@ def fallback_understanding(message: str, reason: str = "fallback") -> Dict[str, 
         "resolved_question": message,
         "scope": "all_records",
         "metric": None,
-        "capability_family": "unknown",
         "user_goal": "clarify user question",
         "needs_private_data": False,
         "needs_static_knowledge": False,

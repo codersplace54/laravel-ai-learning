@@ -228,12 +228,6 @@ greeting, smalltalk, capabilities, portal_info, out_of_scope, unsafe_request,
 account, application_single, application_collection, service,
 service_discovery, clarification, exit, unknown
 
-Allowed capability_family values:
-application_lifecycle, payment, certificate, documents, service_discovery,
-service_information, eligibility, renewal, notifications,
-grievance_support, account, portal_information, general_knowledge,
-smalltalk_or_help, out_of_scope, unsafe_request, unknown
-
 Allowed message_kind values:
 new_question, follow_up, correction, exit, greeting, unclear
 
@@ -257,7 +251,6 @@ Return exactly:
   "resolved_question": "",
   "scope": "none",
   "metric": null,
-  "capability_family": "unknown",
   "user_goal": "",
   "needs_private_data": false,
   "needs_static_knowledge": false,

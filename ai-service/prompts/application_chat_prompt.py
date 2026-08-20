@@ -220,4 +220,12 @@ Return ONLY valid JSON:
   "answer_type": "application_status | application_dates | application_history | application_department | application_rejection | application_documents | application_payment | payment_breakdown | application_certificate | validity_renewal | application_verification | application_action | application_notification | application_general",
   "confidence": 0.85
 }
+
+LANGUAGE RULE:
+- Use context._ai_plan.language as the response language.
+- language = "en": reply only in English.
+- language = "hi": reply in simple Hindi/Hinglish.
+- language = "mixed": reply in simple Hinglish.
+- Do not change language because of examples, application data, remarks,
+  previous assistant messages or selected application text.
 """
