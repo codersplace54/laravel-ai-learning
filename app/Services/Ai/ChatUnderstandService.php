@@ -106,15 +106,10 @@ class ChatUnderstandService
         ];
 
         $route = $data['route'] ?? 'unknown';
-        $family = $data['capability_family'] ?? 'unknown';
         $kind = $data['message_kind'] ?? 'unclear';
 
         if (!in_array($route, $allowed_routes, true)) {
             $route = 'unknown';
-        }
-
-        if (!in_array($family, $allowed_families, true)) {
-            $family = 'unknown';
         }
 
         if (!in_array($kind, $allowed_kinds, true)) {
@@ -140,7 +135,6 @@ class ChatUnderstandService
             'resolved_question' => $data['resolved_question']
                 ?? $data['user_goal']
                 ?? '',
-            'capability_family'      => $family,
             'user_goal'              => $data['user_goal'] ?? '',
 
             'needs_private_data'     => (bool) ($data['needs_private_data'] ?? false),
@@ -185,7 +179,6 @@ class ChatUnderstandService
                 'resolved_question'      => '',
                 'scope'                  => 'active_service',
                 'metric'                 => null,
-                'capability_family'      => 'service_discovery',
                 'user_goal'              => '',
                 'needs_private_data'     => false,
                 'needs_static_knowledge' => true,
@@ -220,7 +213,6 @@ class ChatUnderstandService
                 'resolved_question'      => '',
                 'scope'                  => 'active_application',
                 'metric'                 => null,
-                'capability_family'      => 'application_lifecycle',
                 'user_goal'              => '',
                 'needs_private_data'     => true,
                 'needs_static_knowledge' => false,
@@ -247,7 +239,6 @@ class ChatUnderstandService
             'message_kind'           => 'unclear',
             'route'                  => 'clarification',
             'query_focus'            => 'clarification',
-            'capability_family'      => 'unknown',
             'user_goal'              => '',
             'answer_mode'            => 'fact',
             'resolved_question'      => '',

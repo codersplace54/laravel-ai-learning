@@ -26,10 +26,6 @@ class AiChatController extends Controller
         private ApplicationCollectionQueryService $application_collection_query_service,
     ) {}
 
-    // ---------------------------------------------------------------------
-    // CHAT
-    // ---------------------------------------------------------------------
-
     public function chat(Request $request)
     {
         $request->validate([
@@ -141,7 +137,7 @@ class AiChatController extends Controller
         ], true)) {
             $this->clear_pending($session);
         }
-        
+
         return match ($plan['route']) {
             'application_single' => $this->handle_application_single($session, $message, $plan),
             'application_collection' => $this->handle_application_collection($session, $message, $plan),
@@ -194,14 +190,12 @@ class AiChatController extends Controller
 
             Log::channel('ai_chat')->info('SWAAGAT understand request completed', [
                 'request_id' => $request_id,
-                'route' => $understanding['route'] ?? null,
-                'query_focus' => $understanding['query_focus'] ?? null,
-                'answer_mode' => $understanding['answer_mode'] ?? null,
+                'understanding' => $understanding,
             ]);
 
             return $understanding;
         } catch (Throwable $e) {
-            
+
             Log::channel('ai_chat')->error('SWAAGAT AI understand failed', [
                 'request_id' => $request_id,
                 'exception' => get_class($e),
@@ -212,15 +206,12 @@ class AiChatController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            /*
-         * Send the exception to Laravel's configured exception reporter too.
-         */
             report($e);
 
             /*
-         * Infrastructure fallback for basic greetings.
-         * This is not business-question keyword routing.
-         */
+            * Infrastructure fallback for basic greetings.
+            * This is not business question keyword routing.
+            */
             if (
                 preg_match(
                     '/^\s*(hi|hello|hey|good\s+morning|good\s+afternoon|good\s+evening)\b[!,.?\s]*$/i',
@@ -235,7 +226,6 @@ class AiChatController extends Controller
                     'scope' => 'all_records',
                     'metric' => null,
                     'message_kind' => 'greeting',
-                    'capability_family' => 'smalltalk_or_help',
                     'user_goal' => 'greet',
                     'needs_private_data' => false,
                     'needs_static_knowledge' => false,
@@ -249,9 +239,9 @@ class AiChatController extends Controller
             }
 
             /*
-         * Never return an unrelated application/service clarification
-         * when the actual problem is AI-service connectivity.
-         */
+            * Never return an unrelated application/service clarification
+            * when the actual problem is AI service connectivity.
+            */
             return [
                 'route' => 'clarification',
                 'query_focus' => 'ai_service_unavailable',
@@ -260,7 +250,6 @@ class AiChatController extends Controller
                 'scope' => 'all_records',
                 'metric' => null,
                 'message_kind' => 'unclear',
-                'capability_family' => 'unknown',
                 'user_goal' => 'understand service unavailable',
                 'needs_private_data' => false,
                 'needs_static_knowledge' => false,
@@ -278,13 +267,15 @@ class AiChatController extends Controller
     private function make_plan(array $u, AiChatSession $session): array
     {
         $raw_route = strtolower((string) ($u['route'] ?? $u['operation'] ?? ''));
-        $family = strtolower((string) ($u['capability_family'] ?? 'unknown'));
         $kind = strtolower((string) ($u['message_kind'] ?? 'new_question'));
         $focus = strtolower((string) ($u['query_focus'] ?? $u['operation'] ?? $u['user_goal'] ?? 'general'));
         $refs = $u['references'] ?? ['none'];
         $confidence = (float) ($u['confidence'] ?? 0.7);
 
-        $route = $this->normalize_route($raw_route, $family, $kind, $focus, $refs, $session);
+        $route = $this->normalize_route(
+            $raw_route,
+            $kind
+        );
 
         if (!empty($u['is_exit'])) {
             $route = 'exit';
@@ -307,7 +298,6 @@ class AiChatController extends Controller
             'metric' => $u['metric'] ?? null,
             'user_goal' => $u['user_goal'] ?? '',
             'message_kind' => $kind,
-            'capability_family' => $family,
             'references' => is_array($refs) ? $refs : ['none'],
             'entities' => is_array($u['entities'] ?? null) ? $u['entities'] : [],
             'filters' => is_array($u['filters'] ?? null) ? $u['filters'] : [],
@@ -329,168 +319,34 @@ class AiChatController extends Controller
 
     private function normalize_route(
         string $raw_route,
-        string $family,
-        string $kind,
-        string $focus,
-        array $refs,
-        AiChatSession $session
+        string $kind
     ): string {
-        $direct = [
-            'greeting' => 'greeting',
-            'smalltalk' => 'smalltalk',
-            'capabilities' => 'capabilities',
-            'help' => 'capabilities',
-            'portal_info' => 'portal_info',
-            'out_of_scope' => 'out_of_scope',
-            'unsafe_request' => 'unsafe_request',
-            'exit' => 'exit',
-            'clarification' => 'clarification',
-            'account' => 'account',
-            'account_answer' => 'account',
-
-            'application_single' => 'application_single',
-            'application_single_answer' => 'application_single',
-            'application_detail' => 'application_single',
-            'application_detail_status' => 'application_single',
-            'application_status' => 'application_single',
-            'application_stuck_reason' => 'application_single',
-            'application_next_action' => 'application_single',
-            'payment_status' => 'application_single',
-            'certificate_status' => 'application_single',
-            'application_timeline' => 'application_single',
-            'application_history' => 'application_single',
-            'application_documents' => 'application_single',
-            'application_receipt' => 'application_single',
-            'application_verification' => 'application_single',
-            'application_correction' => 'application_single',
-            'application_cancel' => 'application_single',
-            'application_grievance' => 'application_single',
-
-            'application_collection' => 'application_collection',
-            'application_collection_answer' => 'application_collection',
-            'application_count' => 'application_collection',
-            'application_list' => 'application_collection',
-            'application_filter' => 'application_collection',
-            'latest_application' => 'application_collection',
-            'duplicate_applications' => 'application_collection',
-
-            'service_discovery' => 'service_discovery',
-            'service_recommendation' => 'service_discovery',
-            'service_selection_help' => 'service_discovery',
-            'service' => 'service',
-            'service_answer' => 'service',
-            'service_info' => 'service',
-            'documents_for_service' => 'service',
-            'service_documents' => 'service',
-            'service_processing_time' => 'service',
-            'service_eligibility' => 'service',
-            'service_fee' => 'service',
+        $valid_routes = [
+            'greeting',
+            'smalltalk',
+            'capabilities',
+            'portal_info',
+            'out_of_scope',
+            'unsafe_request',
+            'exit',
+            'clarification',
+            'account',
+            'application_single',
+            'application_collection',
+            'service_discovery',
+            'service',
         ];
-
-        if (isset($direct[$raw_route])) {
-            return $direct[$raw_route];
-        }
 
         if ($kind === 'greeting') {
             return 'greeting';
         }
 
-        $family_routes = [
-            'portal_information' => 'portal_info',
-            'out_of_scope' => 'out_of_scope',
-            'unsafe_request' => 'unsafe_request',
-        ];
-
-        if (isset($family_routes[$family])) {
-            return $family_routes[$family];
+        if (in_array($raw_route, $valid_routes, true)) {
+            return $raw_route;
         }
 
-        if ($family === 'smalltalk_or_help') {
-            return $this->bool_from_focus(
-                $focus,
-                ['capability', 'help']
-            )
-                ? 'capabilities'
-                : 'smalltalk';
-        }
-
-        if ($family === 'service_discovery') {
-            return 'service_discovery';
-        }
-
-        if (in_array($family, [
-            'service_information',
-            'eligibility',
-        ], true)) {
-            return 'service';
-        }
-
-        if ($family === 'documents') {
-            if (in_array('active_application', $refs, true)) {
-                return 'application_single';
-            }
-
-            return 'service';
-        }
-
-        if ($family === 'general_knowledge') {
-            return 'out_of_scope';
-        }
-
-        if (in_array($family, [
-            'application_lifecycle',
-            'payment',
-            'certificate',
-            'renewal',
-            'notifications',
-            'grievance_support',
-        ], true)) {
-            if ($this->looks_like_collection_focus($focus)) {
-                return 'application_collection';
-            }
-
-            if (in_array('active_service', $refs, true)) {
-                return 'service';
-            }
-
-            return 'application_single';
-        }
-
-        /*
-         * A clear but unsupported request must not be forced into an old
-         * application or service context. The semantic planner uses the
-         * clarification route when a likely SWAAGAT request is ambiguous.
-         */
-        return $raw_route === 'unknown'
-            ? 'out_of_scope'
-            : 'clarification';
+        return 'clarification';
     }
-
-    private function looks_like_collection_focus(string $focus): bool
-    {
-        return $this->bool_from_focus($focus, [
-            'count',
-            'total',
-            'list',
-            'all applications',
-            'filter',
-            'latest',
-            'duplicate',
-            'multiple applications',
-        ]);
-    }
-
-    private function bool_from_focus(string $text, array $needles): bool
-    {
-        foreach ($needles as $needle) {
-            if (str_contains($text, $needle)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     // ---------------------------------------------------------------------
     // APPLICATION SINGLE
     // ---------------------------------------------------------------------
@@ -510,10 +366,12 @@ class AiChatController extends Controller
             );
         }
 
+        // Why is my application pending? give selection options
         if (!$resolved['id']) {
             $this->set_pending_plan($session, [
                 'route' => 'application_single',
                 'query_focus' => $plan['query_focus'] ?? 'application_detail',
+                'answer_mode' => $plan['answer_mode'] ?? 'fact',
                 'original_message' => $message,
                 'selection_type' => 'application',
             ]);
@@ -862,12 +720,12 @@ class AiChatController extends Controller
         $services = empty($candidate_reasons)
             ? collect()
             : ServiceMaster::query()
-                ->whereIn('id', array_keys($candidate_reasons))
-                ->get([
-                    'id',
-                    'service_title_or_description',
-                ])
-                ->keyBy('id');
+            ->whereIn('id', array_keys($candidate_reasons))
+            ->get([
+                'id',
+                'service_title_or_description',
+            ])
+            ->keyBy('id');
 
         $options = [];
 
@@ -1195,7 +1053,7 @@ class AiChatController extends Controller
 
         return $this->reply($session, $ai['answer'], $ai['answer_type'] ?? 'account', [
             'Show my applications',
-            'Mera application number kya hai?',
+            'What is my application number?',
         ]);
     }
 

@@ -15,7 +15,6 @@ RAG (Qdrant) handles static knowledge: SOPs, FAQs, rules, process guides.
 - Load conversation history from `ai_chat_messages`
 - Load structured session state from `ai_chat_sessions.meta`
 - Call FastAPI `/chat/understand` with message + history + session meta
-- Route based on capability family returned
 - Fetch live DB data (applications, payments, certificates, documents)
 - Call FastAPI `/api/ai/application-chat` or `/api/ai/chat/answer` with verified context
 - Save assistant reply to `ai_chat_messages`
@@ -43,7 +42,7 @@ Laravel: build session_meta from ai_chat_sessions.meta
     │
     ▼
 FastAPI POST /chat/understand
-  ← returns: capability_family, message_kind, entities, references,
+  ← returns: message_kind, entities, references,
              required_slots, missing_slots, is_correction, is_exit, etc.
     │
     ▼
@@ -115,7 +114,6 @@ Table: `ai_chat_sessions.meta` (JSON column)
   "active_service_id": 45,
   "active_service_name": "Grant of Factory License",
   "pending_plan": {
-    "capability_family": "application_lifecycle",
     "user_goal": "check application progress",
     "original_message": "Any progress?",
     "required_slots": ["application"]
@@ -171,7 +169,6 @@ Live DB always has higher priority than RAG.
 
 FastAPI `/chat/understand` returns `confidence` (0.0–1.0).
 If confidence < 0.5 and `clarification_question` is set → Laravel asks clarification instead of routing.
-If capability_family is `unknown` → Laravel falls back to capabilities answer.
 
 ---
 
@@ -181,9 +178,9 @@ Every message is stored in `ai_chat_messages` with:
 - role (user / assistant)
 - message text
 - answer_type
-- metadata (extendable for logging capability_family, confidence, etc.)
+- metadata (extendable for logging, confidence, etc.)
 
-Future: add `capability_family`, `confidence`, `source` (live_db / rag / static) columns to `ai_chat_messages`.
+Future: add `confidence`, `source` (live_db / rag / static) columns to `ai_chat_messages`.
 
 ---
 
