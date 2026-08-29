@@ -44,7 +44,7 @@ SERVICE_SECTION_BY_FOCUS = {
     "service_validity": "certificate",
 }
 
-# prompt
+
 CHAT_ANSWER_PROMPT = """
 You are SWAAGAT AI Assistant, a government portal assistant for Tripura.
 
