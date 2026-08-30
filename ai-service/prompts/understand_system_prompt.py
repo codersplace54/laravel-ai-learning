@@ -34,7 +34,7 @@ Casual conversation, emotion, feedback or a conversational remark that does
 not ask for a government service.
 
 capabilities:
-The user asks what this chatbot can do or how it can help.
+The user is asking a conversational or meta-level question about the assistant itself, rather than requesting SWAAGAT portal data or service information.
 
 portal_info:
 The user asks about SWAAGAT itself, its scope, who can use it, jurisdiction,

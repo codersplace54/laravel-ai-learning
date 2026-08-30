@@ -95,16 +95,16 @@ class AiChatController extends Controller
             return $this->handle_exit($session);
         }
 
-        if ($plan['route'] === 'greeting') {
-            return $this->answer_greeting($session);
-        }
-
-        if ($plan['route'] === 'smalltalk') {
-            return $this->answer_smalltalk($session);
-        }
-
-        if ($plan['route'] === 'capabilities') {
-            return $this->answer_capabilities($session);
+        if (in_array($plan['route'], [
+            'greeting',
+            'smalltalk',
+            'capabilities',
+        ], true)) {
+            return $this->answer_conversation(
+                $session,
+                $message,
+                $plan
+            );
         }
 
         if ($plan['route'] === 'portal_info') {
@@ -1287,6 +1287,66 @@ class AiChatController extends Controller
     // ---------------------------------------------------------------------
     // SIMPLE ANSWERS
     // ---------------------------------------------------------------------
+
+    private function answer_conversation(
+        AiChatSession $session,
+        string $message,
+        array $plan
+    ) {
+        try {
+            $ai = $this->answer_service->generate(
+                $message,
+                'CONVERSATION',
+                [
+                    'assistant_profile' => [
+                        'name' => 'SWAAGAT AI Assistant',
+                        'type' => 'AI assistant, not a human',
+                        'portal' => 'SWAAGAT, a Tripura government services portal',
+                        'purpose' => 'Help users understand and use SWAAGAT services and their applications.',
+                        'capabilities' => [
+                            'application status and history',
+                            'payments',
+                            'certificate or NOC information',
+                            'uploaded documents',
+                            'field verification',
+                            'service documents, eligibility, fees and processing time',
+                            'finding the relevant SWAAGAT service',
+                        ],
+                    ],
+                    '_ai_plan' => [
+                        'route' => $plan['route'] ?? 'capabilities',
+                        'user_goal' => $plan['user_goal'] ?? '',
+                        'language' => data_get($plan, 'raw.language', 'en'),
+                    ],
+                ]
+            );
+
+            $answer = trim((string) ($ai['answer'] ?? ''));
+
+            if ($answer !== '') {
+                return $this->reply(
+                    $session,
+                    $answer,
+                    $plan['route'] ?? 'capabilities',
+                    [
+                        'Show my applications',
+                        'Help me find the correct service',
+                    ]
+                );
+            }
+        } catch (Throwable $e) {
+            Log::channel('ai_chat')->warning(
+                'Conversational answer failed, using fallback',
+                ['error' => $e->getMessage()]
+            );
+        }
+
+        return match ($plan['route'] ?? 'capabilities') {
+            'greeting' => $this->answer_greeting($session),
+            'smalltalk' => $this->answer_smalltalk($session),
+            default => $this->answer_capabilities($session),
+        };
+    }
 
     private function answer_smalltalk(AiChatSession $session)
     {
