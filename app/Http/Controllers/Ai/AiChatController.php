@@ -54,17 +54,25 @@ class AiChatController extends Controller
 
         $understanding = $this->safe_understand($message, $session_meta, $history);
         $plan = $this->make_plan($understanding, $session);
+        $route = $plan['route'] ?? 'clarification';
 
         Log::channel('ai_chat')->info(
             'AI Plan: ' . json_encode($plan, JSON_PRETTY_PRINT)
         );
 
+        Log::channel('ai_chat')->info('AI Route Selected', [
+            'route' => $route,
+            'message' => $message,
+            'message_kind' => $plan['message_kind'] ?? null,
+            'query_focus' => $plan['query_focus'] ?? null,
+        ]);
+
         /*
-         * Keep a pending plan only when the semantic planner confirms that
-         * the latest message continues or corrects that same pending request.
-         * Any independent question must not inherit an old clarification or
-         * selection flow.
-         */
+    * Keep a pending plan only when the semantic planner confirms that
+    * the latest message continues or corrects that same pending request.
+    * Any independent question must not inherit an old clarification or
+    * selection flow.
+    */
         $continues_pending = in_array(
             $plan['message_kind'] ?? '',
             ['follow_up', 'correction'],
@@ -72,7 +80,7 @@ class AiChatController extends Controller
         ) && !($plan['is_context_switch'] ?? false);
 
         $never_uses_pending = in_array(
-            $plan['route'] ?? '',
+            $route,
             [
                 'greeting',
                 'smalltalk',
@@ -86,16 +94,16 @@ class AiChatController extends Controller
             true
         );
 
-        //clear pending
+        // clear pending
         if ($never_uses_pending || !$continues_pending) {
             $this->clear_pending($session);
         }
 
-        if ($plan['route'] === 'exit') {
+        if ($route === 'exit') {
             return $this->handle_exit($session);
         }
 
-        if (in_array($plan['route'], [
+        if (in_array($route, [
             'greeting',
             'smalltalk',
             'capabilities',
@@ -107,29 +115,28 @@ class AiChatController extends Controller
             );
         }
 
-        if ($plan['route'] === 'portal_info') {
+        if ($route === 'portal_info') {
             return $this->answer_portal_info(
                 $session,
                 $plan
             );
         }
 
-        if ($plan['route'] === 'out_of_scope') {
+        if ($route === 'out_of_scope') {
             return $this->answer_out_of_scope($session);
         }
 
-        if ($plan['route'] === 'unsafe_request') {
+        if ($route === 'unsafe_request') {
             return $this->answer_unsafe_request($session);
         }
 
-        if ($plan['route'] === 'clarification') {
+        if ($route === 'clarification') {
             return $this->ask_clarification(
                 $session,
-                $plan['clarification_question'] ?: 'Please clarify if your question is about an application or a service.'
+                $plan['clarification_question']
+                    ?: 'Please tell me a little more about what you need help with.'
             );
         }
-
-        $route = $plan['route'] ?? null;
 
         if (in_array($route, [
             'application_collection',
@@ -138,7 +145,7 @@ class AiChatController extends Controller
             $this->clear_pending($session);
         }
 
-        return match ($plan['route']) {
+        return match ($route) {
             'application_single' => $this->handle_application_single($session, $message, $plan),
             'application_collection' => $this->handle_application_collection($session, $message, $plan),
             'service' => $this->handle_service($session, $message, $plan),
@@ -1289,37 +1296,37 @@ class AiChatController extends Controller
     // ---------------------------------------------------------------------
 
     private function answer_conversation(
-        AiChatSession $session,
-        string $message,
-        array $plan
-    ) {
-        try {
-            $ai = $this->answer_service->generate(
-                $message,
-                'CONVERSATION',
-                [
-                    'assistant_profile' => [
-                        'name' => 'SWAAGAT AI Assistant',
-                        'type' => 'AI assistant, not a human',
-                        'portal' => 'SWAAGAT, a Tripura government services portal',
-                        'purpose' => 'Help users understand and use SWAAGAT services and their applications.',
-                        'capabilities' => [
-                            'application status and history',
-                            'payments',
-                            'certificate or NOC information',
-                            'uploaded documents',
-                            'field verification',
-                            'service documents, eligibility, fees and processing time',
-                            'finding the relevant SWAAGAT service',
-                        ],
+    AiChatSession $session,
+    string $message,
+    array $plan
+) {
+    try {
+        $ai = $this->answer_service->generate(
+            $message,
+            'CONVERSATION',
+            [
+                'assistant_profile' => [
+                    'name' => 'SWAAGAT AI Assistant',
+                    'type' => 'AI assistant, not a human',
+                    'portal' => 'SWAAGAT, a Tripura government services portal',
+                    'purpose' => 'Help users understand and use SWAAGAT services and their applications.',
+                    'capabilities' => [
+                        'application status and history',
+                        'payments',
+                        'certificate or NOC information',
+                        'uploaded documents',
+                        'field verification',
+                        'service documents, eligibility, fees and processing time',
+                        'finding the relevant SWAAGAT service',
                     ],
-                    '_ai_plan' => [
-                        'route' => $plan['route'] ?? 'capabilities',
-                        'user_goal' => $plan['user_goal'] ?? '',
-                        'language' => data_get($plan, 'raw.language', 'en'),
-                    ],
-                ]
-            );
+                ],
+                '_ai_plan' => [
+                    'route' => $plan['route'] ?? 'capabilities',
+                    'user_goal' => $plan['user_goal'] ?? '',
+                    'language' => data_get($plan, 'raw.language', 'en'),
+                ],
+            ]
+        );
 
             $answer = trim((string) ($ai['answer'] ?? ''));
 
