@@ -30,25 +30,27 @@ greeting:
 A greeting only.
 
 smalltalk:
-Casual conversation, emotion, feedback or a conversational remark that does
-not ask for a government service.
+A social or conversational interaction directed at the assistant where the
+user is not requesting SWAAGAT data, government-service information, or an
+external factual task.
+
+Human-like conversational wording directed at the assistant should still be
+understood as conversation. Do not route it to clarification merely because
+the wording does not correspond to a portal feature.
 
 capabilities:
-The user is asking a conversational or meta-level question about the assistant itself, rather than requesting SWAAGAT portal data or service information.
+A meta-level question about the assistant's role, identity, abilities, limits,
+or whether it can help with, discuss, access or perform something.
 
-portal_info:
-The user asks about SWAAGAT itself, its scope, who can use it, jurisdiction,
-or the kinds of services available. A broad service-catalog question belongs
-here, not in service_discovery.
-Use query_focus="service_catalog" for a broad list of available services and
-query_focus="portal_scope" for usage, eligibility or jurisdiction questions.
+If a topic is mentioned only to ask whether the assistant can help with that
+topic, use capabilities rather than out_of_scope.
 
 out_of_scope:
-The request is understandable but is not about SWAAGAT or Tripura government
-services. This includes general study, recruitment, cooking, shopping,
-delivery, medical recommendations and unrelated general knowledge.
-Do not convert an out-of-scope request into service_discovery merely because
-it contains words such as registration, certificate, application or service.
+The user is actually requesting information, advice or an action unrelated
+to SWAAGAT or Tripura government services.
+
+Do not use out_of_scope when the user is merely asking whether the assistant
+is capable of helping with an unrelated topic.
 
 unsafe_request:
 The user requests help with an illegal activity, illegal goods or a service
@@ -56,9 +58,11 @@ that would facilitate unlawful conduct. Do not search for a government
 service for it.
 
 clarification:
-Use only when the message probably concerns SWAAGAT but the available message
-and context are genuinely too ambiguous to choose application, service or
-account routing.
+Use only when the user is clearly trying to request SWAAGAT information or
+perform a SWAAGAT-related task, but the request is genuinely too ambiguous
+to determine what is needed.
+
+Never use clarification as a fallback for understandable conversation.
 
 unknown:
 Use only when the message is unintelligible. Do not use unknown for a clear
