@@ -17,7 +17,7 @@ class ChatUnderstandService
                 ->connectTimeout(10)
                 ->withHeaders([
                     'Accept'      => 'application/json',
-                    'Content-Type'=> 'application/json',
+                    'Content-Type' => 'application/json',
                     'X-AI-SECRET' => config('ai.secret'),
                 ])
                 ->post($base_url . '/api/ai/chat/understand', [
@@ -48,7 +48,6 @@ class ChatUnderstandService
             $data = $this->extract_payload($json);
 
             return $this->normalize_understand($data);
-
         } catch (Throwable $e) {
             Log::channel('ai_chat')->warning('AI understand exception', [
                 'error' => $e->getMessage(),
@@ -71,13 +70,20 @@ class ChatUnderstandService
     {
         $allowed_routes = [
             'greeting',
+            'smalltalk',
             'capabilities',
+            'portal_info',
+            'out_of_scope',
+            'unsafe_request',
+            'exit',
+            'clarification',
+
             'account',
             'application_single',
             'application_collection',
             'service',
-            'clarification',
-            'exit',
+            'service_discovery',
+
             'unknown',
         ];
 
